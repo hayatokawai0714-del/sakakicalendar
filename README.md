@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+﻿# 出荷・予定管理アプリ（静的版）
 
-## Getting Started
+## アプリ概要
+HTML / CSS / JavaScript だけで動く、出荷・予定管理の試作アプリです。  
+サーバーは使わず、データは `localStorage` に保存します。GitHub Pages で公開できます。
 
-First, run the development server:
+主な機能:
+- 今日の予定一覧
+- 月間カレンダー（日曜始まり、今日強調、日付クリックで当日一覧）
+- 出荷 / 予定 / メモの追加・編集・削除
+- 出荷先マスタ管理（詳細項目保持）
+- 規格・単位のカスタマイズ（追加・編集・削除）
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## スポット出荷と定期出荷
+### スポット出荷
+- 単発の出荷予定
+- 指定した1日だけカレンダーに表示
+- `localStorage: sakaki_entries_v1` に `type:"shipment", shipmentType:"spot"` として保存
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 定期出荷
+- ルール（繰り返し条件）を登録すると、カレンダー表示時に当月分だけ自動展開して表示
+- `localStorage: sakaki_recurring_shipments_v1` に保存
+- カレンダー上では `出荷 定期` のラベルで表示
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+注意:
+- 定期出荷の「削除」は、その日の1件だけでなく **定期ルール自体の削除** です
+- `endDate` が空の場合は終了日なし
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 定期出荷の設定方法
+1. 「予定を追加 / 編集」→ 種別を `出荷`
+2. `出荷区分` を `定期` に変更
+3. 繰り返し種類を選択
+   - `毎週`（intervalWeeks=1）
+   - `隔週`（intervalWeeks=2 / startDate基準）
+   - `毎月指定日`（monthDays）
+4. 条件を入力して保存
 
-## Learn More
+### 対応している繰り返し条件
+- 毎週指定曜日（複数曜日可）
+- 隔週指定曜日（startDateを基準に隔週判定）
+- 毎月指定日（複数日可、31日が存在しない月は表示しない）
+- 期間指定（startDate〜endDate。endDate空欄は無期限）
 
-To learn more about Next.js, take a look at the following resources:
+## ファイル構成
+- `index.html`
+- `style.css`
+- `app.js`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 使い方
+1. `index.html` をブラウザで開く
+2. 出荷/予定/メモを保存
+3. カレンダーの日付をタップして当日一覧を確認
+4. 当日一覧の `編集` / `削除` で変更
+5. 出荷先・規格・単位は下部セクションで管理
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+補足:
+- カレンダーは1日あたり最大3件表示、超過分は `他◯件`
+- 長文は省略表示
+- 住所/電話などは出荷先マスタのデータとして保持し、カレンダーには表示しません
 
-## Deploy on Vercel
+## GitHub Pagesでの公開方法
+1. このリポジトリの `main` ブランチに `index.html / style.css / app.js` を配置
+2. GitHub リポジトリの `Settings` → `Pages` を開く
+3. `Build and deployment` の `Source` を `Deploy from a branch` に設定
+4. Branch を `main` / Folder を `/ (root)` に設定して保存
+5. 表示された公開URLにアクセス
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 今後のTODO
+- 複数人共有（認証 + API）
+- Googleスプレッドシート連携
+- FAX注文書画像アップロード
+- OCRによる入力補助
+- iPhoneホーム画面ウィジェット風表示
+- 定期出荷の例外日（祝日スキップ等）
+- 定期出荷の個別発生分だけ削除/変更（ルールは残す）
