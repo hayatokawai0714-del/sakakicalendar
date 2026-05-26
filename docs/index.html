@@ -1,0 +1,173 @@
+﻿<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>出荷・予定管理</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="card header">
+        <h1>出荷・予定管理</h1>
+        <p class="muted">シンプル試作版（ローカル保存）</p>
+      </header>
+
+      <section class="card">
+        <h2>今日の予定</h2>
+        <ul id="todayList" class="list"></ul>
+      </section>
+
+      <section class="card">
+        <div class="calendar-head">
+          <button id="prevMonthBtn" class="btn secondary">前月</button>
+          <h2 id="monthLabel"></h2>
+          <button id="nextMonthBtn" class="btn secondary">翌月</button>
+        </div>
+        <div id="weekdayRow" class="weekday-row"></div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </section>
+
+      <section class="card">
+        <h2 id="selectedDateLabel">日付を選択してください</h2>
+        <ul id="selectedDayList" class="list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>予定を追加 / 編集</h2>
+        <form id="entryForm" class="form">
+          <input type="hidden" id="entryId" />
+          <label>
+            種別
+            <select id="entryType" required>
+              <option value="shipment">出荷</option>
+              <option value="event">予定</option>
+              <option value="memo">メモ</option>
+            </select>
+          </label>
+
+          <div id="shipmentFields" class="type-fields">
+            <label>
+              出荷区分
+              <select id="shipmentKind">
+                <option value="spot">スポット</option>
+                <option value="recurring">定期</option>
+              </select>
+            </label>
+
+            <label id="spotDateRow">日付<input type="date" id="shipmentDate" /></label>
+
+            <div id="recurringFields" class="subcard hidden">
+              <div class="muted" style="margin: 0 0 8px;">定期出荷ルール</div>
+              <input type="hidden" id="recurringId" />
+              <label>
+                繰り返し種類
+                <select id="recurrenceType">
+                  <option value="weekly_1">毎週</option>
+                  <option value="weekly_2">隔週</option>
+                  <option value="monthlyByDate">毎月指定日</option>
+                </select>
+              </label>
+
+              <div id="weekdayPicker" class="weekday-picker">
+                <div class="muted" style="margin: 0 0 6px;">曜日（複数可）</div>
+                <div class="weekday-buttons" id="weekdayButtons"></div>
+              </div>
+
+              <div id="monthDayPicker" class="hidden">
+                <label>日付（カンマ区切り）<input type="text" id="monthDays" placeholder="例: 5,20,28" /></label>
+              </div>
+
+              <label>開始日<input type="date" id="startDate" /></label>
+              <label>終了日（空欄可）<input type="date" id="endDate" /></label>
+            </div>
+
+            <label>
+              出荷先
+              <select id="shipmentDestination"></select>
+            </label>
+            <label>
+              規格
+              <select id="shipmentStandard"></select>
+            </label>
+            <label>数量<input type="number" id="shipmentQuantity" min="0" step="0.01" /></label>
+            <label>
+              単位
+              <select id="shipmentUnit"></select>
+            </label>
+            <label>メモ<textarea id="shipmentMemo" rows="2"></textarea></label>
+          </div>
+
+          <div id="eventFields" class="type-fields hidden">
+            <label>日付<input type="date" id="eventDate" /></label>
+            <label>時刻<input type="time" id="eventTime" /></label>
+            <label>予定名<input type="text" id="eventTitle" /></label>
+            <label>メモ<textarea id="eventMemo" rows="2"></textarea></label>
+          </div>
+
+          <div id="memoFields" class="type-fields hidden">
+            <label>日付<input type="date" id="memoDate" /></label>
+            <label>メモ内容<textarea id="memoContent" rows="2"></textarea></label>
+            <label>
+              優先度
+              <select id="memoPriority">
+                <option value="high">高</option>
+                <option value="medium" selected>中</option>
+                <option value="low">低</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn">保存</button>
+            <button type="button" id="cancelEditBtn" class="btn secondary">編集キャンセル</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>出荷先マスタ</h2>
+        <form id="destinationForm" class="form compact">
+          <input type="hidden" id="destinationId" />
+          <label>出荷先名<input id="destinationName" type="text" required /></label>
+          <label>住所<input id="destinationAddress" type="text" /></label>
+          <label>電話<input id="destinationPhone" type="text" /></label>
+          <label>担当者<input id="destinationContact" type="text" /></label>
+          <label>メール<input id="destinationEmail" type="email" /></label>
+          <label>備考<textarea id="destinationNote" rows="2"></textarea></label>
+          <label class="inline"><input id="destinationActive" type="checkbox" checked />有効</label>
+          <div class="actions">
+            <button type="submit" class="btn">保存</button>
+            <button type="button" id="cancelDestinationEditBtn" class="btn secondary">編集キャンセル</button>
+          </div>
+        </form>
+        <ul id="destinationList" class="list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>規格・単位のカスタマイズ</h2>
+        <div class="master-grid">
+          <div>
+            <h3>規格</h3>
+            <form id="standardForm" class="inline-form">
+              <input id="standardInput" type="text" placeholder="規格名" />
+              <button class="btn" type="submit">追加</button>
+            </form>
+            <ul id="standardList" class="list"></ul>
+          </div>
+          <div>
+            <h3>単位</h3>
+            <form id="unitForm" class="inline-form">
+              <input id="unitInput" type="text" placeholder="単位名" />
+              <button class="btn" type="submit">追加</button>
+            </form>
+            <ul id="unitList" class="list"></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+

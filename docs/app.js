@@ -1,0 +1,829 @@
+﻿const STORAGE_KEYS = {
+  entries: "sakaki_entries_v1",
+  destinations: "sakaki_destinations_v1",
+  standards: "sakaki_standards_v1",
+  units: "sakaki_units_v1",
+  recurringShipments: "sakaki_recurring_shipments_v1",
+};
+
+const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
+const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
+
+const state = {
+  entries: [], // spot shipments + events + memos
+  recurringShipments: [],
+  destinations: [],
+  standards: [],
+  units: [],
+  currentMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  selectedDate: formatDate(new Date()),
+};
+
+init();
+
+function init() {
+  loadState();
+  bindEvents();
+  initWeekdayButtons();
+  renderAll();
+}
+
+function loadState() {
+  state.entries = readLS(STORAGE_KEYS.entries, []);
+  state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, []);
+  state.destinations = readLS(STORAGE_KEYS.destinations, []);
+  state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
+  state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
+
+  // Backward compatibility: existing shipments are spot shipments.
+  state.entries.forEach((e) => {
+    if (e && e.type === "shipment" && !e.shipmentType) e.shipmentType = "spot";
+  });
+}
+
+function saveState() {
+  writeLS(STORAGE_KEYS.entries, state.entries);
+  writeLS(STORAGE_KEYS.recurringShipments, state.recurringShipments);
+  writeLS(STORAGE_KEYS.destinations, state.destinations);
+  writeLS(STORAGE_KEYS.standards, state.standards);
+  writeLS(STORAGE_KEYS.units, state.units);
+}
+
+function bindEvents() {
+  document.getElementById("entryType").addEventListener("change", switchEntryTypeFields);
+  document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
+  document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
+
+  document.getElementById("entryForm").addEventListener("submit", submitEntryForm);
+  document.getElementById("cancelEditBtn").addEventListener("click", resetEntryForm);
+
+  document.getElementById("destinationForm").addEventListener("submit", submitDestinationForm);
+  document.getElementById("cancelDestinationEditBtn").addEventListener("click", resetDestinationForm);
+
+  document.getElementById("standardForm").addEventListener("submit", addStandard);
+  document.getElementById("unitForm").addEventListener("submit", addUnit);
+
+  document.getElementById("prevMonthBtn").addEventListener("click", () => {
+    state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("nextMonthBtn").addEventListener("click", () => {
+    state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() + 1, 1);
+    renderCalendar();
+  });
+}
+
+function renderAll() {
+  switchEntryTypeFields();
+  switchShipmentKindFields();
+  switchRecurrenceTypeFields();
+  fillMasterSelects();
+  renderToday();
+  renderCalendar();
+  renderSelectedDay();
+  renderDestinationList();
+  renderStandardList();
+  renderUnitList();
+}
+
+function getSpotShipments() {
+  return state.entries.filter((e) => e && e.type === "shipment" && (e.shipmentType || "spot") === "spot");
+}
+
+function getRecurringShipments() {
+  return state.recurringShipments;
+}
+
+function saveSpotShipment(spot) {
+  spot.type = "shipment";
+  spot.shipmentType = "spot";
+  upsertById(state.entries, spot);
+  saveState();
+}
+
+function saveRecurringShipment(rule) {
+  rule.shipmentType = "recurring";
+  upsertById(state.recurringShipments, rule);
+  saveState();
+}
+
+function renderToday() {
+  const today = formatDate(new Date());
+  const list = document.getElementById("todayList");
+  const items = entriesByDate(today);
+  renderEntryList(list, items, "今日の予定はありません");
+}
+
+function generateRecurringShipmentsForMonth(year, monthIndex) {
+  const start = new Date(year, monthIndex, 1);
+  const end = new Date(year, monthIndex + 1, 0);
+  const out = [];
+
+  getRecurringShipments().forEach((rule) => {
+    for (let d = 1; d <= end.getDate(); d += 1) {
+      const date = new Date(year, monthIndex, d);
+      if (!isWithinRuleRange(date, rule)) continue;
+
+      const dateKey = formatDate(date);
+      const matches = rule.recurrenceType === "weekly" ? matchesWeeklyRule(date, rule) : matchesMonthlyByDateRule(date, rule);
+      if (!matches) continue;
+
+      out.push({
+        id: createIdFrom(rule.id, dateKey),
+        type: "shipment",
+        shipmentType: "recurring",
+        date: dateKey,
+        destination: rule.destination,
+        standard: rule.standard,
+        quantity: rule.quantity,
+        unit: rule.unit,
+        memo: rule.memo,
+        updatedAt: rule.updatedAt,
+        _ruleId: rule.id,
+      });
+    }
+  });
+
+  return out;
+}
+
+function isWithinRuleRange(date, rule) {
+  const start = parseDate(rule.startDate);
+  if (!start) return false;
+  if (date < start) return false;
+  if (rule.endDate) {
+    const end = parseDate(rule.endDate);
+    if (end && date > end) return false;
+  }
+  return true;
+}
+
+function matchesWeeklyRule(date, rule) {
+  if (!Array.isArray(rule.weekdays) || rule.weekdays.length === 0) return false;
+  const weekday = date.getDay();
+  if (!rule.weekdays.includes(weekday)) return false;
+
+  const interval = Number(rule.intervalWeeks || 1);
+  const start = parseDate(rule.startDate);
+  if (!start) return false;
+
+  // Normalize to midnight.
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diffDays = Math.floor((stripTime(date).getTime() - stripTime(start).getTime()) / dayMs);
+  if (diffDays < 0) return false;
+
+  const diffWeeks = Math.floor(diffDays / 7);
+  return diffWeeks % interval === 0;
+}
+
+function matchesMonthlyByDateRule(date, rule) {
+  if (rule.recurrenceType !== "monthlyByDate") return false;
+  if (!Array.isArray(rule.monthDays) || rule.monthDays.length === 0) return false;
+  const day = date.getDate();
+  return rule.monthDays.includes(day);
+}
+
+function renderCalendar() {
+  document.getElementById("monthLabel").textContent = `${state.currentMonth.getFullYear()}年${state.currentMonth.getMonth() + 1}月`;
+
+  const weekdayRow = document.getElementById("weekdayRow");
+  weekdayRow.innerHTML = "";
+  ["日", "月", "火", "水", "木", "金", "土"].forEach((d) => {
+    const el = document.createElement("div");
+    el.textContent = d;
+    weekdayRow.appendChild(el);
+  });
+
+  const grid = document.getElementById("calendarGrid");
+  grid.innerHTML = "";
+
+  const year = state.currentMonth.getFullYear();
+  const month = state.currentMonth.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(first);
+  start.setDate(start.getDate() - first.getDay());
+
+  const today = formatDate(new Date());
+  const generated = generateRecurringShipmentsForMonth(year, month);
+
+  for (let i = 0; i < 42; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    const dateKey = formatDate(day);
+
+    const dayEntries = entriesByDate(dateKey, { generatedRecurring: generated });
+
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "day-cell";
+    if (day.getMonth() !== month) cell.classList.add("outside");
+    if (dateKey === today) cell.classList.add("today");
+    if (dateKey === state.selectedDate) cell.classList.add("selected");
+
+    const num = document.createElement("div");
+    num.className = "day-num";
+    num.textContent = String(day.getDate());
+    cell.appendChild(num);
+
+    dayEntries.slice(0, 3).forEach((entry) => {
+      const chip = document.createElement("div");
+      chip.className = "entry-chip";
+      chip.innerHTML =
+        entry.type === "shipment"
+          ? `${calendarChipText(entry)}`
+          : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
+      cell.appendChild(chip);
+    });
+
+    if (dayEntries.length > 3) {
+      const more = document.createElement("div");
+      more.className = "entry-chip";
+      more.textContent = `他${dayEntries.length - 3}件`;
+      cell.appendChild(more);
+    }
+
+    cell.addEventListener("click", () => {
+      state.selectedDate = dateKey;
+      renderCalendar();
+      renderSelectedDay();
+    });
+
+    grid.appendChild(cell);
+  }
+}
+
+function renderSelectedDay() {
+  const label = document.getElementById("selectedDateLabel");
+  const list = document.getElementById("selectedDayList");
+  label.textContent = state.selectedDate;
+
+  const year = state.currentMonth.getFullYear();
+  const month = state.currentMonth.getMonth();
+  const generated = generateRecurringShipmentsForMonth(year, month);
+
+  const items = entriesByDate(state.selectedDate, { generatedRecurring: generated });
+  renderEntryList(list, items, "この日の予定はありません");
+}
+
+function renderEntryList(ul, entries, emptyText) {
+  ul.innerHTML = "";
+  if (!entries.length) {
+    const li = document.createElement("li");
+    li.textContent = emptyText;
+    ul.appendChild(li);
+    return;
+  }
+
+  entries
+    .slice()
+    .sort((a, b) => (a.time || "").localeCompare(b.time || "") || a.updatedAt.localeCompare(b.updatedAt))
+    .forEach((entry) => {
+      const li = document.createElement("li");
+      const text = document.createElement("div");
+      text.className = "one-line";
+      text.textContent = `${chipTag(entry)}  ${entrySummary(entry)}`;
+
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "text-btn";
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", () => setEntryToForm(entry));
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "text-btn";
+      delBtn.textContent = "削除";
+      delBtn.addEventListener("click", () => {
+        if (!confirm("削除しますか？")) return;
+
+        if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+          // Delete the rule.
+          state.recurringShipments = state.recurringShipments.filter((r) => r.id !== entry._ruleId);
+        } else {
+          state.entries = state.entries.filter((x) => x.id !== entry.id);
+        }
+
+        saveState();
+        resetEntryForm();
+        renderAll();
+      });
+
+      actions.append(editBtn, delBtn);
+      li.append(text, actions);
+      ul.appendChild(li);
+    });
+}
+
+function chipTag(entry) {
+  // Calendar/list labels: keep them short so the cell text can show meaningful content.
+  if (entry.type === "shipment") return entry.shipmentType === "recurring" ? "定期" : "スポット";
+  if (entry.type === "event") return "予定";
+  return "メモ";
+}
+
+function calendarChipText(entry) {
+  // Calendar cells should stay compact: show destination + quantity/unit for shipments.
+  if (entry.type === "shipment") return `${entry.destination}${entry.quantity}${entry.unit}`;
+  return entrySummary(entry);
+}
+
+function switchEntryTypeFields() {
+  const type = document.getElementById("entryType").value;
+  document.getElementById("shipmentFields").classList.toggle("hidden", type !== "shipment");
+  document.getElementById("eventFields").classList.toggle("hidden", type !== "event");
+  document.getElementById("memoFields").classList.toggle("hidden", type !== "memo");
+}
+
+function switchShipmentKindFields() {
+  const kind = document.getElementById("shipmentKind").value;
+  document.getElementById("spotDateRow").classList.toggle("hidden", kind !== "spot");
+  document.getElementById("recurringFields").classList.toggle("hidden", kind !== "recurring");
+}
+
+function switchRecurrenceTypeFields() {
+  const value = document.getElementById("recurrenceType").value;
+  const monthly = value === "monthlyByDate";
+  document.getElementById("weekdayPicker").classList.toggle("hidden", monthly);
+  document.getElementById("monthDayPicker").classList.toggle("hidden", !monthly);
+}
+
+function initWeekdayButtons() {
+  const container = document.getElementById("weekdayButtons");
+  container.innerHTML = "";
+  const labels = ["日", "月", "火", "水", "木", "金", "土"];
+  labels.forEach((label, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "weekday-btn";
+    btn.textContent = label;
+    btn.dataset.value = String(i);
+    btn.addEventListener("click", () => {
+      btn.classList.toggle("on");
+    });
+    container.appendChild(btn);
+  });
+}
+
+function getSelectedWeekdays() {
+  return Array.from(document.querySelectorAll("#weekdayButtons .weekday-btn.on")).map((b) => Number(b.dataset.value));
+}
+
+function setSelectedWeekdays(weekdays) {
+  document.querySelectorAll("#weekdayButtons .weekday-btn").forEach((b) => {
+    const v = Number(b.dataset.value);
+    b.classList.toggle("on", Array.isArray(weekdays) && weekdays.includes(v));
+  });
+}
+
+function submitEntryForm(e) {
+  e.preventDefault();
+  const type = document.getElementById("entryType").value;
+
+  if (type === "shipment") {
+    const kind = document.getElementById("shipmentKind").value;
+    if (kind === "spot") {
+      const entry = {
+        id: document.getElementById("entryId").value || createId(),
+        type: "shipment",
+        shipmentType: "spot",
+        date: requiredValue("shipmentDate", "出荷の日付"),
+        destination: requiredValue("shipmentDestination", "出荷先"),
+        standard: requiredValue("shipmentStandard", "規格"),
+        quantity: Number(document.getElementById("shipmentQuantity").value || 0),
+        unit: requiredValue("shipmentUnit", "単位"),
+        memo: document.getElementById("shipmentMemo").value.trim(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveSpotShipment(entry);
+      state.selectedDate = entry.date;
+      resetEntryForm();
+      renderAll();
+      return;
+    }
+
+    const recurrenceRaw = document.getElementById("recurrenceType").value;
+    const intervalWeeks = recurrenceRaw === "weekly_2" ? 2 : 1;
+    const recurrenceType = recurrenceRaw === "monthlyByDate" ? "monthlyByDate" : "weekly";
+
+    const rule = {
+      id: document.getElementById("recurringId").value || createId(),
+      shipmentType: "recurring",
+      destination: requiredValue("shipmentDestination", "出荷先"),
+      standard: requiredValue("shipmentStandard", "規格"),
+      quantity: Number(document.getElementById("shipmentQuantity").value || 0),
+      unit: requiredValue("shipmentUnit", "単位"),
+      memo: document.getElementById("shipmentMemo").value.trim(),
+      recurrenceType,
+      startDate: requiredValue("startDate", "開始日"),
+      endDate: document.getElementById("endDate").value,
+      weekdays: recurrenceType === "weekly" ? getSelectedWeekdays() : [],
+      intervalWeeks,
+      monthDays: recurrenceType === "monthlyByDate" ? parseMonthDays(document.getElementById("monthDays").value) : [],
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (recurrenceType === "weekly" && rule.weekdays.length === 0) throw new Error("曜日を1つ以上選択してください");
+    if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上入力してください");
+
+    saveRecurringShipment(rule);
+    state.selectedDate = rule.startDate;
+    resetEntryForm();
+    renderAll();
+    return;
+  }
+
+  if (type === "event") {
+    const entry = {
+      id: document.getElementById("entryId").value || createId(),
+      type: "event",
+      date: requiredValue("eventDate", "予定の日付"),
+      time: document.getElementById("eventTime").value,
+      title: requiredValue("eventTitle", "予定名"),
+      memo: document.getElementById("eventMemo").value.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    upsertById(state.entries, entry);
+    saveState();
+    state.selectedDate = entry.date;
+    resetEntryForm();
+    renderAll();
+    return;
+  }
+
+  const entry = {
+    id: document.getElementById("entryId").value || createId(),
+    type: "memo",
+    date: requiredValue("memoDate", "メモの日付"),
+    content: requiredValue("memoContent", "メモ内容"),
+    priority: document.getElementById("memoPriority").value,
+    updatedAt: new Date().toISOString(),
+  };
+
+  upsertById(state.entries, entry);
+  saveState();
+  state.selectedDate = entry.date;
+  resetEntryForm();
+  renderAll();
+}
+
+function setEntryToForm(entry) {
+  resetEntryForm();
+
+  if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+    const rule = state.recurringShipments.find((r) => r.id === entry._ruleId) || state.recurringShipments.find((r) => r.id === entry.id);
+    if (!rule) return;
+
+    document.getElementById("entryType").value = "shipment";
+    switchEntryTypeFields();
+
+    document.getElementById("shipmentKind").value = "recurring";
+    switchShipmentKindFields();
+
+    document.getElementById("recurringId").value = rule.id;
+    document.getElementById("shipmentDestination").value = rule.destination;
+    document.getElementById("shipmentStandard").value = rule.standard;
+    document.getElementById("shipmentQuantity").value = String(rule.quantity ?? 0);
+    document.getElementById("shipmentUnit").value = rule.unit;
+    document.getElementById("shipmentMemo").value = rule.memo || "";
+
+    if (rule.recurrenceType === "monthlyByDate") {
+      document.getElementById("recurrenceType").value = "monthlyByDate";
+      document.getElementById("monthDays").value = (rule.monthDays || []).join(",");
+    } else {
+      document.getElementById("recurrenceType").value = rule.intervalWeeks === 2 ? "weekly_2" : "weekly_1";
+      setSelectedWeekdays(rule.weekdays || []);
+    }
+    switchRecurrenceTypeFields();
+
+    document.getElementById("startDate").value = rule.startDate || "";
+    document.getElementById("endDate").value = rule.endDate || "";
+    return;
+  }
+
+  if (entry.type === "shipment") {
+    document.getElementById("entryId").value = entry.id;
+    document.getElementById("entryType").value = "shipment";
+    switchEntryTypeFields();
+
+    document.getElementById("shipmentKind").value = "spot";
+    switchShipmentKindFields();
+
+    document.getElementById("shipmentDate").value = entry.date;
+    document.getElementById("shipmentDestination").value = entry.destination;
+    document.getElementById("shipmentStandard").value = entry.standard;
+    document.getElementById("shipmentQuantity").value = String(entry.quantity ?? 0);
+    document.getElementById("shipmentUnit").value = entry.unit;
+    document.getElementById("shipmentMemo").value = entry.memo || "";
+    return;
+  }
+
+  if (entry.type === "event") {
+    document.getElementById("entryId").value = entry.id;
+    document.getElementById("entryType").value = "event";
+    switchEntryTypeFields();
+
+    document.getElementById("eventDate").value = entry.date;
+    document.getElementById("eventTime").value = entry.time || "";
+    document.getElementById("eventTitle").value = entry.title || "";
+    document.getElementById("eventMemo").value = entry.memo || "";
+    return;
+  }
+
+  document.getElementById("entryId").value = entry.id;
+  document.getElementById("entryType").value = "memo";
+  switchEntryTypeFields();
+
+  document.getElementById("memoDate").value = entry.date;
+  document.getElementById("memoContent").value = entry.content || "";
+  document.getElementById("memoPriority").value = entry.priority || "medium";
+}
+
+function resetEntryForm() {
+  document.getElementById("entryForm").reset();
+  document.getElementById("entryId").value = "";
+  document.getElementById("recurringId").value = "";
+  document.getElementById("shipmentKind").value = "spot";
+  document.getElementById("entryType").value = "shipment";
+
+  document.getElementById("shipmentDate").value = state.selectedDate;
+  document.getElementById("eventDate").value = state.selectedDate;
+  document.getElementById("memoDate").value = state.selectedDate;
+  document.getElementById("startDate").value = state.selectedDate;
+  document.getElementById("endDate").value = "";
+
+  document.getElementById("recurrenceType").value = "weekly_1";
+  setSelectedWeekdays([new Date(state.selectedDate).getDay()]);
+  document.getElementById("monthDays").value = "";
+
+  switchEntryTypeFields();
+  switchShipmentKindFields();
+  switchRecurrenceTypeFields();
+}
+
+function submitDestinationForm(e) {
+  e.preventDefault();
+  const id = document.getElementById("destinationId").value || createId();
+  const dest = {
+    id,
+    name: requiredValue("destinationName", "出荷先名"),
+    address: document.getElementById("destinationAddress").value.trim(),
+    phone: document.getElementById("destinationPhone").value.trim(),
+    contactPerson: document.getElementById("destinationContact").value.trim(),
+    email: document.getElementById("destinationEmail").value.trim(),
+    note: document.getElementById("destinationNote").value.trim(),
+    active: document.getElementById("destinationActive").checked,
+  };
+
+  upsertById(state.destinations, dest);
+  saveState();
+  resetDestinationForm();
+  fillMasterSelects();
+  renderDestinationList();
+}
+
+function renderDestinationList() {
+  const ul = document.getElementById("destinationList");
+  ul.innerHTML = "";
+  if (!state.destinations.length) {
+    const li = document.createElement("li");
+    li.textContent = "出荷先は未登録です";
+    ul.appendChild(li);
+    return;
+  }
+
+  state.destinations.forEach((d) => {
+    const li = document.createElement("li");
+    const name = document.createElement("div");
+    name.className = "one-line";
+    name.textContent = `${d.name} ${d.active ? "" : "(無効)"}`;
+
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "text-btn";
+    editBtn.textContent = "編集";
+    editBtn.addEventListener("click", () => setDestinationToForm(d));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "text-btn";
+    delBtn.textContent = "削除";
+    delBtn.addEventListener("click", () => {
+      if (!confirm("削除しますか？")) return;
+      state.destinations = state.destinations.filter((x) => x.id !== d.id);
+      saveState();
+      fillMasterSelects();
+      renderDestinationList();
+    });
+
+    actions.append(editBtn, delBtn);
+    li.append(name, actions);
+    ul.appendChild(li);
+  });
+}
+
+function setDestinationToForm(d) {
+  document.getElementById("destinationId").value = d.id;
+  document.getElementById("destinationName").value = d.name || "";
+  document.getElementById("destinationAddress").value = d.address || "";
+  document.getElementById("destinationPhone").value = d.phone || "";
+  document.getElementById("destinationContact").value = d.contactPerson || "";
+  document.getElementById("destinationEmail").value = d.email || "";
+  document.getElementById("destinationNote").value = d.note || "";
+  document.getElementById("destinationActive").checked = Boolean(d.active);
+}
+
+function resetDestinationForm() {
+  document.getElementById("destinationForm").reset();
+  document.getElementById("destinationId").value = "";
+  document.getElementById("destinationActive").checked = true;
+}
+
+function addStandard(e) {
+  e.preventDefault();
+  const input = document.getElementById("standardInput");
+  const value = input.value.trim();
+  if (!value) return;
+  if (!state.standards.includes(value)) state.standards.push(value);
+  input.value = "";
+  saveState();
+  fillMasterSelects();
+  renderStandardList();
+}
+
+function addUnit(e) {
+  e.preventDefault();
+  const input = document.getElementById("unitInput");
+  const value = input.value.trim();
+  if (!value) return;
+  if (!state.units.includes(value)) state.units.push(value);
+  input.value = "";
+  saveState();
+  fillMasterSelects();
+  renderUnitList();
+}
+
+function renderStandardList() {
+  const ul = document.getElementById("standardList");
+  ul.innerHTML = "";
+  state.standards.forEach((s) => ul.appendChild(masterRow(s, "standard")));
+}
+
+function renderUnitList() {
+  const ul = document.getElementById("unitList");
+  ul.innerHTML = "";
+  state.units.forEach((u) => ul.appendChild(masterRow(u, "unit")));
+}
+
+function masterRow(value, category) {
+  const li = document.createElement("li");
+  const text = document.createElement("div");
+  text.className = "one-line";
+  text.textContent = value;
+
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "text-btn";
+  editBtn.textContent = "編集";
+  editBtn.addEventListener("click", () => {
+    const next = prompt("新しい値", value);
+    if (!next || !next.trim()) return;
+    const arr = category === "standard" ? state.standards : state.units;
+    const idx = arr.indexOf(value);
+    if (idx >= 0) arr[idx] = next.trim();
+    saveState();
+    fillMasterSelects();
+    renderStandardList();
+    renderUnitList();
+  });
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "text-btn";
+  delBtn.textContent = "削除";
+  delBtn.addEventListener("click", () => {
+    const arr = category === "standard" ? state.standards : state.units;
+    if (arr.length <= 1) {
+      alert("最低1件は残してください");
+      return;
+    }
+    if (!confirm("削除しますか？")) return;
+    if (category === "standard") state.standards = state.standards.filter((x) => x !== value);
+    if (category === "unit") state.units = state.units.filter((x) => x !== value);
+    saveState();
+    fillMasterSelects();
+    renderStandardList();
+    renderUnitList();
+  });
+
+  actions.append(editBtn, delBtn);
+  li.append(text, actions);
+  return li;
+}
+
+function fillMasterSelects() {
+  fillSelect("shipmentDestination", state.destinations.filter((d) => d.active).map((d) => d.name), "出荷先を選択");
+  fillSelect("shipmentStandard", state.standards, "規格を選択");
+  fillSelect("shipmentUnit", state.units, "単位を選択");
+}
+
+function fillSelect(id, items, placeholder) {
+  const select = document.getElementById(id);
+  const prev = select.value;
+  select.innerHTML = "";
+  if (!items.length) {
+    const opt = new Option(`${placeholder}（未登録）`, "");
+    select.appendChild(opt);
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  items.forEach((v) => select.appendChild(new Option(v, v)));
+  if (items.includes(prev)) select.value = prev;
+}
+
+function entriesByDate(date, opts = {}) {
+  const base = state.entries.filter((x) => x.date === date);
+  const generated = (opts.generatedRecurring || []).filter((x) => x.date === date);
+  return [...base, ...generated];
+}
+
+function entrySummary(entry) {
+  if (entry.type === "shipment") return `${entry.destination} ${entry.standard} ${entry.quantity}${entry.unit}`;
+  if (entry.type === "event") return `${entry.title}${entry.time ? ` ${entry.time}` : ""}`;
+  return entry.content;
+}
+
+function upsertById(arr, item) {
+  const idx = arr.findIndex((x) => x.id === item.id);
+  if (idx >= 0) arr[idx] = item;
+  else arr.push(item);
+}
+
+function requiredValue(id, label) {
+  const v = document.getElementById(id).value.trim();
+  if (!v) throw new Error(`${label}を入力してください`);
+  return v;
+}
+
+function parseMonthDays(raw) {
+  const days = raw
+    .split(",")
+    .map((x) => Number(x.trim()))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 31);
+  return Array.from(new Set(days)).sort((a, b) => a - b);
+}
+
+function createId() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createIdFrom(ruleId, dateKey) {
+  return `${ruleId}__${dateKey}`;
+}
+
+function stripTime(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function parseDate(yyyyMMdd) {
+  if (!yyyyMMdd) return null;
+  const [y, m, d] = yyyyMMdd.split("-").map((x) => Number(x));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function formatDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function readLS(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLS(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+window.addEventListener("error", (e) => {
+  if (e.error instanceof Error) alert(e.error.message);
+});
+
+// TODO: 複数人共有 (サーバー/API + 認証)
+// TODO: Googleスプレッドシート連携
+// TODO: FAX注文書画像アップロード
+// TODO: OCRで入力補助
+// TODO: iPhoneホーム画面ウィジェット風表示
+// TODO: 定期出荷の自動生成
