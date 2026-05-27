@@ -129,6 +129,40 @@ function setStatus(message, kind) {
   el.textContent = message;
 }
 
+function payloadPreview_(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  const keys = [
+    "id",
+    "name",
+    "active",
+    "updatedAt",
+    "updatedBy",
+    "date",
+    "title",
+    "content",
+    "destinationId",
+    "destinationName",
+  ];
+  const out = {};
+  keys.forEach((k) => {
+    if (k in payload) out[k] = payload[k];
+  });
+  return out;
+}
+
+function formatErrorForUi(actionLabel, err, payload) {
+  const msg = err instanceof Error ? err.message : String(err);
+  const dbg = err && typeof err === "object" && err._debug ? err._debug : null;
+  if (!dbg) return `${actionLabel}: ${msg}`;
+  return [
+    `${actionLabel}: ${msg}`,
+    `action=${dbg.action}`,
+    `status=${dbg.status}`,
+    `error=${msg}`,
+    `payload=${JSON.stringify(dbg.payloadPreview || payloadPreview_(payload))}`,
+  ].join(" / ");
+}
+
 function setBusy(isBusy, message) {
   state.isBusy = isBusy;
   const entrySubmit = document.querySelector("#entryForm button[type='submit']");
@@ -174,19 +208,55 @@ async function testApiConnection() {
 async function apiGet(action) {
   const url = new URL(state.apiUrl);
   url.searchParams.set("action", action);
-  const res = await fetch(url.toString(), { method: "GET" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  return await apiRequest_("GET", action, url.toString(), null);
 }
 
 async function apiPost(action, payload) {
-  const res = await fetch(state.apiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, payload }),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  return await apiRequest_("POST", action, state.apiUrl, payload);
+}
+
+async function apiRequest_(method, action, url, payload) {
+  const opts =
+    method === "GET"
+      ? { method: "GET" }
+      : {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, payload }),
+        };
+
+  const res = await fetch(url, opts);
+  const status = res.status;
+  const text = await res.text();
+
+  // GAS may return HTML on auth errors; keep raw text for debugging.
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok) {
+    const msg = json && json.error ? String(json.error) : (text || "").slice(0, 300);
+    const err = new Error(`HTTP ${status}: ${msg}`);
+    err._debug = { action, method, status, url, payloadPreview: payloadPreview_(payload), bodyPreview: (text || "").slice(0, 500) };
+    throw err;
+  }
+
+  if (json && typeof json === "object" && json.ok === false) {
+    const err = new Error(String(json.error || "API error"));
+    err._debug = { action, method, status, url, payloadPreview: payloadPreview_(payload), bodyPreview: (text || "").slice(0, 500) };
+    throw err;
+  }
+
+  if (!json || typeof json !== "object") {
+    const err = new Error("Non-JSON response from API");
+    err._debug = { action, method, status, url, payloadPreview: payloadPreview_(payload), bodyPreview: (text || "").slice(0, 500) };
+    throw err;
+  }
+
+  return json;
 }
 
 async function loadAllDataFromApi() {
@@ -917,7 +987,7 @@ async function submitDestinationForm(e) {
     fillMasterSelects();
     renderDestinationList();
   } catch (err) {
-    setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    setStatus(formatErrorForUi("出荷先の保存に失敗しました", err, dest), "err");
   } finally {
     setBusy(false, "");
   }
@@ -975,7 +1045,7 @@ async function deleteDestination(d) {
     fillMasterSelects();
     renderDestinationList();
   } catch (err) {
-    setStatus(`削除に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    setStatus(formatErrorForUi("出荷先の削除に失敗しました", err, { id: d && d.id }), "err");
   } finally {
     setBusy(false, "");
   }

@@ -46,7 +46,11 @@ function doGet(e) {
     }
     return jsonOutput_({ ok: true, ...wrapGetResult_(action, result) });
   } catch (err) {
-    return jsonOutput_({ ok: false, error: String(err && err.message ? err.message : err) });
+    return jsonOutput_({
+      ok: false,
+      action: action,
+      error: String(err && err.message ? err.message : err),
+    });
   }
 }
 
@@ -102,7 +106,10 @@ function doPost(e) {
 
     return jsonOutput_({ ok: true, result: out });
   } catch (err) {
-    return jsonOutput_({ ok: false, error: String(err && err.message ? err.message : err) });
+    return jsonOutput_({
+      ok: false,
+      error: String(err && err.message ? err.message : err),
+    });
   }
 }
 
@@ -244,4 +251,3 @@ function jsonOutput_(obj) {
   // If your environment blocks it, consider using an IFrame proxy or same-origin hosting.
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
-
