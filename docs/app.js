@@ -535,6 +535,13 @@ function renderCalendar() {
       } catch {}
     }
 
+    const eventMatches = state.entries.filter((x) => x && x.type === "event" && normalizeDateKey(x.date) === dateKey);
+    if (eventMatches.length > 0 || dateKey === today) {
+      try {
+        console.log("[sakaki] cell events match", { dateKey, count: eventMatches.length });
+      } catch {}
+    }
+
     const dayEntries = entriesByDate(dateKey, { generatedRecurring: generated });
 
     const cell = document.createElement("button");
@@ -1219,14 +1226,15 @@ function fillSelect(id, items, placeholder) {
 }
 
 function entriesByDate(date, opts = {}) {
-  const base = state.entries.filter((x) => x.date === date);
-  const generated = (opts.generatedRecurring || []).filter((x) => x.date === date);
+  const key = normalizeDateKey(date);
+  const base = state.entries.filter((x) => normalizeDateKey(x.date) === key);
+  const generated = (opts.generatedRecurring || []).filter((x) => normalizeDateKey(x.date) === key);
   // Debug: helps diagnose date-format mismatches where events are "saved but not shown".
-  if (date === formatDate(new Date())) {
+  if (key === formatDate(new Date())) {
     try {
       const eventsToday = base.filter((x) => x.type === "event").length;
       console.log("[sakaki] entriesByDate(today)", {
-        today: date,
+        today: key,
         eventsToday,
         baseTotal: base.length,
         generatedRecurring: generated.length,
@@ -1279,6 +1287,17 @@ function parseJsonArray(value) {
     .split(",")
     .map((x) => Number(x.trim()))
     .filter((n) => Number.isFinite(n));
+}
+
+function normalizeDateKey(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  // Accept "YYYY-MM-DD", "YYYY/MM/DD", and ISO strings like "YYYY-MM-DDTHH:mm:ss.sssZ".
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const slash = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if (slash) return `${slash[1]}-${slash[2]}-${slash[3]}`;
+  return s;
 }
 
 function createId() {
