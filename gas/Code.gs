@@ -197,7 +197,18 @@ function getSheetData_(sheetName) {
     let empty = true;
     for (let c = 0; c < headers.length; c++) {
       const key = headers[c];
-      const v = row[c];
+      let v = row[c];
+      // Normalize Dates so the frontend can reliably compare by YYYY-MM-DD strings.
+      // Sheets often auto-convert "2026-05-27" into a Date cell.
+      if (v instanceof Date) {
+        if (key === "date" || key === "startDate" || key === "endDate") {
+          v = Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd");
+        } else if (key === "time") {
+          v = Utilities.formatDate(v, "Asia/Tokyo", "HH:mm");
+        } else if (key === "updatedAt") {
+          v = v.toISOString();
+        }
+      }
       if (v !== "" && v !== null && v !== undefined) empty = false;
       obj[key] = v;
     }

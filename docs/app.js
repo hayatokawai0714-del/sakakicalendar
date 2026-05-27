@@ -313,6 +313,18 @@ async function loadAllDataFromApi() {
       })),
     ];
 
+    // Debug: help diagnose "saved but not shown" cases (date format / filtering).
+    try {
+      console.log("[sakaki] api getAll loaded", {
+        shipments: shipments.length,
+        recurring: recurring.length,
+        events: events.length,
+        memos: memos.length,
+        today: formatDate(new Date()),
+        sampleEventDate: events[0] ? String(events[0].date) : "",
+      });
+    } catch {}
+
     state.recurringShipments = recurring.map((r) => ({
       id: String(r.id),
       shipmentType: "recurring",
@@ -1197,6 +1209,18 @@ function fillSelect(id, items, placeholder) {
 function entriesByDate(date, opts = {}) {
   const base = state.entries.filter((x) => x.date === date);
   const generated = (opts.generatedRecurring || []).filter((x) => x.date === date);
+  // Debug: helps diagnose date-format mismatches where events are "saved but not shown".
+  if (date === formatDate(new Date())) {
+    try {
+      const eventsToday = base.filter((x) => x.type === "event").length;
+      console.log("[sakaki] entriesByDate(today)", {
+        today: date,
+        eventsToday,
+        baseTotal: base.length,
+        generatedRecurring: generated.length,
+      });
+    } catch {}
+  }
   return [...base, ...generated];
 }
 
