@@ -468,11 +468,11 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
 }
 
 function isWithinRuleRange(date, rule) {
-  const start = parseDate(rule.startDate);
+  const start = parseDate(normalizeDateKey(rule.startDate));
   if (!start) return false;
   if (date < start) return false;
   if (rule.endDate) {
-    const end = parseDate(rule.endDate);
+    const end = parseDate(normalizeDateKey(rule.endDate));
     if (end && date > end) return false;
   }
   return true;
