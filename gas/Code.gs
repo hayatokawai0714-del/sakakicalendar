@@ -3,7 +3,8 @@
 // 2) Deploy as Web app
 // 3) Use the Web app URL as API_URL in docs/app.js (sync settings)
 
-const SPREADSHEET_ID = "PUT_YOUR_SPREADSHEET_ID_HERE";
+// NOTE: This repo sample is now set to the user's sheet id for the current deployment.
+const SPREADSHEET_ID = "1AIv_8LDY4zSWNYil-C4Ftuz5lYciISfdLR_X5oXeM4Y";
 
 const SHEET_NAMES = {
   shipments: "shipments",

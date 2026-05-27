@@ -451,11 +451,18 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
         unit: rule.unit,
         memo: rule.memo,
         updatedAt: rule.updatedAt,
-        updatedBy: rule.updatedBy || "未設定",
+        updatedBy: rule.updatedBy || currentUpdatedBy(),
         _ruleId: rule.id,
       });
     }
   });
+
+  // Debug (requested)
+  try {
+    console.log("recurring rules count", getRecurringShipments().length);
+    console.log("generated recurring entries count", out.length);
+    console.log("render month", { year, month: monthIndex + 1 });
+  } catch {}
 
   return out;
 }
@@ -472,12 +479,13 @@ function isWithinRuleRange(date, rule) {
 }
 
 function matchesWeeklyRule(date, rule) {
-  if (!Array.isArray(rule.weekdays) || rule.weekdays.length === 0) return false;
+  const weekdays = parseNumberList(rule.weekdays);
+  if (!weekdays.length) return false;
   const weekday = date.getDay();
-  if (!rule.weekdays.includes(weekday)) return false;
+  if (!weekdays.includes(weekday)) return false;
 
   const interval = Number(rule.intervalWeeks || 1);
-  const start = parseDate(rule.startDate);
+  const start = parseDate(normalizeDateKey(rule.startDate));
   if (!start) return false;
 
   const dayMs = 24 * 60 * 60 * 1000;
@@ -490,9 +498,10 @@ function matchesWeeklyRule(date, rule) {
 
 function matchesMonthlyByDateRule(date, rule) {
   if (rule.recurrenceType !== "monthlyByDate") return false;
-  if (!Array.isArray(rule.monthDays) || rule.monthDays.length === 0) return false;
+  const monthDays = parseNumberList(rule.monthDays);
+  if (!monthDays.length) return false;
   const day = date.getDate();
-  return rule.monthDays.includes(day);
+  return monthDays.includes(day);
 }
 
 function renderCalendar() {
@@ -543,6 +552,12 @@ function renderCalendar() {
     }
 
     const dayEntries = entriesByDate(dateKey, { generatedRecurring: generated });
+
+    // Debug (requested): how many events match this cell dateKey
+    try {
+      const eventCountForCell = state.entries.filter((x) => x && x.type === "event" && normalizeDateKey(x.date) === dateKey).length;
+      if (eventCountForCell > 0 || dateKey === "2026-05-27") console.log("[sakaki] cell events", { dateKey, eventCountForCell });
+    } catch {}
 
     const cell = document.createElement("button");
     cell.type = "button";
@@ -1250,7 +1265,10 @@ function entrySummary(entry) {
     return `${dest} ${entry.standard} ${entry.quantity}${entry.unit}`;
   }
   // Show time first like "14:00 テスト予定"
-  if (entry.type === "event") return `${entry.time ? `${entry.time} ` : ""}${entry.title}`;
+  if (entry.type === "event") {
+    const t = normalizeTimeText(entry.time);
+    return `${t ? `${t} ` : ""}${entry.title}`;
+  }
   return entry.content;
 }
 
@@ -1298,6 +1316,41 @@ function normalizeDateKey(value) {
   const slash = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
   if (slash) return `${slash[1]}-${slash[2]}-${slash[3]}`;
   return s;
+}
+
+function normalizeTimeText(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  // "14:00:00" -> "14:00"
+  const hm = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (hm) return `${hm[1].padStart(2, "0")}:${hm[2]}`;
+
+  // Sheets time cells can come back as ISO (1899-12-30...Z). Normalize to HH:mm.
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+  return s;
+}
+
+function parseNumberList(value) {
+  if (Array.isArray(value)) return value.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  const s = String(value || "").trim();
+  if (!s) return [];
+  // JSON array "[2,4]"
+  if (s.startsWith("[") && s.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+    } catch {}
+  }
+  // CSV "5,20" or single "2"
+  return s
+    .split(",")
+    .map((x) => Number(String(x).trim()))
+    .filter((n) => Number.isFinite(n));
 }
 
 function createId() {
