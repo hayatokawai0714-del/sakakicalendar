@@ -518,10 +518,22 @@ function renderCalendar() {
   const today = formatDate(new Date());
   const generated = generateRecurringShipmentsForMonth(year, month);
 
+  // Debug (requested): confirm event entries and date keys used for comparison.
+  try {
+    const eventsCount = state.entries.filter((x) => x && x.type === "event").length;
+    console.log("events count", eventsCount);
+    console.log("today", today);
+  } catch {}
+
   for (let i = 0; i < 42; i += 1) {
     const day = new Date(start);
     day.setDate(start.getDate() + i);
     const dateKey = formatDate(day);
+    if (dateKey === today) {
+      try {
+        console.log("calendar date", dateKey);
+      } catch {}
+    }
 
     const dayEntries = entriesByDate(dateKey, { generatedRecurring: generated });
 
@@ -540,7 +552,7 @@ function renderCalendar() {
     dayEntries.slice(0, 3).forEach((entry) => {
       const chip = document.createElement("div");
       chip.className = "entry-chip";
-      chip.innerHTML = entry.type === "shipment" ? `${calendarChipText(entry)}` : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
+      chip.innerHTML = entry.type === "shipment" ? calendarChipText(entry) : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
       cell.appendChild(chip);
     });
 
@@ -1229,7 +1241,8 @@ function entrySummary(entry) {
     const dest = entry.destinationName || entry.destination || "";
     return `${dest} ${entry.standard} ${entry.quantity}${entry.unit}`;
   }
-  if (entry.type === "event") return `${entry.title}${entry.time ? ` ${entry.time}` : ""}`;
+  // Show time first like "14:00 テスト予定"
+  if (entry.type === "event") return `${entry.time ? `${entry.time} ` : ""}${entry.title}`;
   return entry.content;
 }
 
