@@ -212,7 +212,12 @@ async function apiGet(action) {
 }
 
 async function apiPost(action, payload) {
-  return await apiRequest_("POST", action, state.apiUrl, payload);
+  // GAS Web app POST from GitHub Pages often hits CORS issues.
+  // Use GET with an encoded JSON payload for write actions.
+  const url = new URL(state.apiUrl);
+  url.searchParams.set("action", action);
+  url.searchParams.set("payload", encodeURIComponent(JSON.stringify(payload || {})));
+  return await apiRequest_("GET", action, url.toString(), payload || {});
 }
 
 async function apiRequest_(method, action, url, payload) {

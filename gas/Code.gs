@@ -18,6 +18,13 @@ function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action) : "getAll";
   try {
     ensureHeaders_();
+
+    // For GitHub Pages compatibility, allow write actions via GET with an encoded JSON payload.
+    // Frontend sends: ?action=saveDestination&payload=encodeURIComponent(JSON.stringify(payload))
+    // Note: This is not ideal for large payloads. Consider Firebase/Supabase later.
+    const payloadStr = e && e.parameter && e.parameter.payload ? String(e.parameter.payload) : "";
+    const payload = payloadStr ? JSON.parse(decodeURIComponent(payloadStr)) : {};
+
     let result;
     switch (action) {
       case "getAll":
@@ -41,6 +48,45 @@ function doGet(e) {
       case "getUnits":
         result = getSheetData_(SHEET_NAMES.settings_units);
         break;
+
+      // Write actions via GET (workaround for CORS issues with POST fetch)
+      case "saveShipment":
+        result = saveRow_(SHEET_NAMES.shipments, payload);
+        break;
+      case "deleteShipment":
+        result = deleteRow_(SHEET_NAMES.shipments, payload.id);
+        break;
+      case "saveRecurringShipment":
+        result = saveRow_(SHEET_NAMES.recurring_shipments, payload);
+        break;
+      case "deleteRecurringShipment":
+        result = deleteRow_(SHEET_NAMES.recurring_shipments, payload.id);
+        break;
+      case "saveEvent":
+        result = saveRow_(SHEET_NAMES.events, payload);
+        break;
+      case "deleteEvent":
+        result = deleteRow_(SHEET_NAMES.events, payload.id);
+        break;
+      case "saveMemo":
+        result = saveRow_(SHEET_NAMES.memos, payload);
+        break;
+      case "deleteMemo":
+        result = deleteRow_(SHEET_NAMES.memos, payload.id);
+        break;
+      case "saveDestination":
+        result = saveRow_(SHEET_NAMES.destinations, payload);
+        break;
+      case "deleteDestination":
+        result = deleteRow_(SHEET_NAMES.destinations, payload.id);
+        break;
+      case "saveUnit":
+        result = saveRow_(SHEET_NAMES.settings_units, payload);
+        break;
+      case "deleteUnit":
+        result = deleteRow_(SHEET_NAMES.settings_units, payload.id);
+        break;
+
       default:
         throw new Error("Unknown action: " + action);
     }
