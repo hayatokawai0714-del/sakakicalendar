@@ -19,6 +19,24 @@
       </section>
 
       <section class="card">
+        <h2>同期設定</h2>
+        <p class="muted">未設定の場合はこの端末のlocalStorageに保存します。</p>
+        <form id="syncForm" class="form compact">
+          <label>API URL（GAS WebアプリURL）
+            <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+          </label>
+          <label>更新者名（updatedBy）
+            <input id="updatedByInput" type="text" placeholder="未設定" />
+          </label>
+          <div class="actions">
+            <button type="submit" class="btn">保存</button>
+            <button type="button" id="syncTestBtn" class="btn secondary">接続テスト</button>
+          </div>
+        </form>
+        <div id="statusBar" class="status hidden" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="card">
         <div class="calendar-head">
           <button id="prevMonthBtn" class="btn secondary">前月</button>
           <h2 id="monthLabel"></h2>

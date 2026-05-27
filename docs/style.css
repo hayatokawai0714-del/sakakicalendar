@@ -38,6 +38,17 @@ body {
   background: #fff;
 }
 
+.status {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: #fafafa;
+}
+.status.ok { border-color: #b7e4c7; background: #f2fbf5; }
+.status.err { border-color: #ffccd5; background: #fff5f6; }
+
 h1, h2, h3 { margin: 0 0 10px; }
 h1 { font-size: 22px; }
 h2 { font-size: 18px; }
