@@ -381,3 +381,10 @@ button:disabled,
   .admin-card { opacity: 1; }
 }
 
+
+.subline {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6b7280;
+}
+

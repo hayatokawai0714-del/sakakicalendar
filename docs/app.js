@@ -742,9 +742,21 @@ function renderEntryList(ul, entries, emptyText) {
     .sort((a, b) => (a.time || "").localeCompare(b.time || "") || String(a.updatedAt).localeCompare(String(b.updatedAt)))
     .forEach((entry) => {
       const li = document.createElement("li");
-      const text = document.createElement("div");
-      text.className = "one-line";
-      text.textContent = `${chipTag(entry)}  ${entrySummary(entry)}`;
+      const textWrap = document.createElement("div");
+
+      const title = document.createElement("div");
+      title.className = "one-line";
+      title.textContent = `${chipTag(entry)}  ${entrySummary(entry)}`;
+      textWrap.appendChild(title);
+
+      // Detail lists (today/selected day) should show shipment memo if present.
+      const memoText = entry && entry.type === "shipment" ? String(entry.memo || "").trim() : "";
+      if (memoText) {
+        const memo = document.createElement("div");
+        memo.className = "subline one-line";
+        memo.textContent = `メモ：${memoText}`;
+        textWrap.appendChild(memo);
+      }
 
       const actions = document.createElement("div");
       actions.className = "row-actions";
@@ -762,7 +774,7 @@ function renderEntryList(ul, entries, emptyText) {
       delBtn.addEventListener("click", () => void deleteEntry(entry));
 
       actions.append(editBtn, delBtn);
-      li.append(text, actions);
+      li.append(textWrap, actions);
       ul.appendChild(li);
     });
 }
