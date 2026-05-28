@@ -402,7 +402,8 @@ button:disabled,
 
 
 
-/* Today highlight */\r\n.day-num.is-today {
+/* Today highlight */
+.day-num.is-today {
   width: 22px;
   height: 22px;
   display: inline-flex;
@@ -413,6 +414,7 @@ button:disabled,
   color: #ffffff;
   font-weight: 700;
 }
+
 
 
 
