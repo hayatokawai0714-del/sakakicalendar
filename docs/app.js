@@ -83,8 +83,52 @@ function bindEvents() {
     state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() + 1, 1);
     renderCalendar();
   });
+  bindAdminPanels();
 }
 
+function bindAdminPanels() {
+  const buttons = Array.from(document.querySelectorAll(".admin-btn[data-panel]"));
+  const backdrops = Array.from(document.querySelectorAll(".sheet-backdrop[data-sheet-backdrop]"));
+
+  function closeAll() {
+    backdrops.forEach((b) => b.classList.add("hidden"));
+    buttons.forEach((btn) => btn.classList.remove("active"));
+  }
+
+  function openPanel(name) {
+    closeAll();
+    const btn = buttons.find((b) => b.dataset.panel === name);
+    const backdrop = backdrops.find((b) => b.dataset.sheetBackdrop === name);
+    if (btn) btn.classList.add("active");
+    if (backdrop) backdrop.classList.remove("hidden");
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.panel;
+      const backdrop = backdrops.find((b) => b.dataset.sheetBackdrop === name);
+      const isOpen = backdrop && !backdrop.classList.contains("hidden");
+      if (isOpen) closeAll();
+      else openPanel(name);
+    });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAll();
+  });
+
+  backdrops.forEach((b) => {
+    b.addEventListener("click", (e) => {
+      if (e.target === b) closeAll();
+    });
+  });
+
+  Array.from(document.querySelectorAll("[data-sheet-close]"))
+    .forEach((btn) => btn.addEventListener("click", closeAll));
+
+  // Expose for other handlers if needed.
+  state._closeAdminPanels = closeAll;
+}
 async function bootData() {
   setSyncInputs();
   if (!isApiEnabled()) return;
@@ -1495,5 +1539,7 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
+
 
 

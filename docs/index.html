@@ -11,29 +11,13 @@
       <section class="card">
         <h2>今日の予定</h2>
         <ul id="todayList" class="list"></ul>
-      </section>
 
-      <details class="card accordion" id="syncDetails">
-        <summary class="accordion-summary">
-          <span>同期設定</span>
-        </summary>
-        <div class="accordion-body">
-          <p class="muted">未設定の場合はこの端末のlocalStorageに保存します。</p>
-          <form id="syncForm" class="form compact">
-            <label>API URL（GAS WebアプリURL）
-              <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
-            </label>
-            <label>更新者名（updatedBy）
-              <input id="updatedByInput" type="text" placeholder="未設定" />
-            </label>
-            <div class="actions">
-              <button type="submit" class="btn">保存</button>
-              <button type="button" id="syncTestBtn" class="btn secondary">接続テスト</button>
-            </div>
-          </form>
-          <div id="statusBar" class="status hidden" role="status" aria-live="polite"></div>
+        <div class="admin-bar" aria-label="管理メニュー">
+          <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
+          <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先</button>
+          <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格</button>
         </div>
-      </details>
+      </section>
 
       <section class="card">
         <div class="calendar-head">
@@ -142,58 +126,88 @@
         </form>
       </section>
 
-      <details class="card accordion" id="destinationDetails">
-        <summary class="accordion-summary">
-          <span>出荷先マスタ</span>
-        </summary>
-        <div class="accordion-body">
-          <form id="destinationForm" class="form compact">
-            <input type="hidden" id="destinationId" />
-            <label>出荷先名<input id="destinationName" type="text" required /></label>
-            <label>住所<input id="destinationAddress" type="text" /></label>
-            <label>電話<input id="destinationPhone" type="text" /></label>
-            <label>担当者<input id="destinationContact" type="text" /></label>
-            <label>メール<input id="destinationEmail" type="email" /></label>
-            <label>備考<textarea id="destinationNote" rows="2"></textarea></label>
-            <label class="inline"><input id="destinationActive" type="checkbox" checked />有効</label>
-            <div class="actions">
-              <button type="submit" class="btn">保存</button>
-              <button type="button" id="cancelDestinationEditBtn" class="btn secondary">編集キャンセル</button>
-            </div>
-          </form>
-          <ul id="destinationList" class="list"></ul>
-        </div>
-      </details>
+      <!-- Panels (bottom-sheet style) -->
+      <div class="sheet-backdrop hidden" data-sheet-backdrop="sync">
+        <section class="sheet" role="dialog" aria-modal="true" aria-label="同期設定">
+          <header class="sheet-header">
+            <h3>同期</h3>
+            <button type="button" class="icon-btn" data-sheet-close="sync" aria-label="閉じる">閉じる</button>
+          </header>
+          <div class="sheet-body">
+            <p class="muted">未設定の場合はこの端末のlocalStorageに保存します。</p>
+            <form id="syncForm" class="form compact">
+              <label>API URL（GAS WebアプリURL）
+                <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+              </label>
+              <label>更新者名（updatedBy）
+                <input id="updatedByInput" type="text" placeholder="未設定" />
+              </label>
+              <div class="actions">
+                <button type="submit" class="btn">保存</button>
+                <button type="button" id="syncTestBtn" class="btn secondary">接続テスト</button>
+              </div>
+            </form>
+            <div id="statusBar" class="status hidden" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+      </div>
 
-      <details class="card accordion" id="unitSettingsDetails">
-        <summary class="accordion-summary">
-          <span>規格・単位設定</span>
-        </summary>
-        <div class="accordion-body">
-          <div class="master-grid">
-            <div>
-              <h3>規格</h3>
-              <form id="standardForm" class="inline-form">
-                <input id="standardInput" type="text" placeholder="規格名" />
-                <button class="btn" type="submit">追加</button>
-              </form>
-              <ul id="standardList" class="list"></ul>
-            </div>
-            <div>
-              <h3>単位</h3>
-              <form id="unitForm" class="inline-form">
-                <input id="unitInput" type="text" placeholder="単位名" />
-                <button class="btn" type="submit">追加</button>
-              </form>
-              <ul id="unitList" class="list"></ul>
+      <div class="sheet-backdrop hidden" data-sheet-backdrop="dest">
+        <section class="sheet" role="dialog" aria-modal="true" aria-label="出荷先マスタ">
+          <header class="sheet-header">
+            <h3>出荷先</h3>
+            <button type="button" class="icon-btn" data-sheet-close="dest" aria-label="閉じる">閉じる</button>
+          </header>
+          <div class="sheet-body">
+            <form id="destinationForm" class="form compact">
+              <input type="hidden" id="destinationId" />
+              <label>出荷先名<input id="destinationName" type="text" required /></label>
+              <label>住所<input id="destinationAddress" type="text" /></label>
+              <label>電話<input id="destinationPhone" type="text" /></label>
+              <label>担当者<input id="destinationContact" type="text" /></label>
+              <label>メール<input id="destinationEmail" type="email" /></label>
+              <label>備考<textarea id="destinationNote" rows="2"></textarea></label>
+              <label class="inline"><input id="destinationActive" type="checkbox" checked />有効</label>
+              <div class="actions">
+                <button type="submit" class="btn">保存</button>
+                <button type="button" id="cancelDestinationEditBtn" class="btn secondary">編集キャンセル</button>
+              </div>
+            </form>
+            <ul id="destinationList" class="list"></ul>
+          </div>
+        </section>
+      </div>
+
+      <div class="sheet-backdrop hidden" data-sheet-backdrop="units">
+        <section class="sheet" role="dialog" aria-modal="true" aria-label="規格・単位設定">
+          <header class="sheet-header">
+            <h3>規格</h3>
+            <button type="button" class="icon-btn" data-sheet-close="units" aria-label="閉じる">閉じる</button>
+          </header>
+          <div class="sheet-body">
+            <div class="master-grid">
+              <div>
+                <h4>規格</h4>
+                <form id="standardForm" class="inline-form">
+                  <input id="standardInput" type="text" placeholder="規格名" />
+                  <button class="btn" type="submit">追加</button>
+                </form>
+                <ul id="standardList" class="list"></ul>
+              </div>
+              <div>
+                <h4>単位</h4>
+                <form id="unitForm" class="inline-form">
+                  <input id="unitInput" type="text" placeholder="単位名" />
+                  <button class="btn" type="submit">追加</button>
+                </form>
+                <ul id="unitList" class="list"></ul>
+              </div>
             </div>
           </div>
-        </div>
-      </details>
+        </section>
+      </div>
     </main>
 
     <script src="./app.js?v=2026-05-28"></script>
   </body>
 </html>
-
-

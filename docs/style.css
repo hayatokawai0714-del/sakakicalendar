@@ -283,3 +283,85 @@ button:disabled,
   .master-grid { grid-template-columns: 1fr; }
   .day-cell { min-height: 78px; }
 }
+
+
+/* Compact admin buttons + bottom-sheet panels */
+.admin-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-btn {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+}
+
+.admin-btn.active {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17,24,39,0.22);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  z-index: 60;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 720px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+  transform: translateY(8px);
+  animation: sheetIn 160ms ease-out forwards;
+}
+
+@keyframes sheetIn {
+  to { transform: translateY(0); }
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.sheet-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.sheet-body {
+  padding: 12px 14px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.icon-btn {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 13px;
+  color: #374151;
+}
+
