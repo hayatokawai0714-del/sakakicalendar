@@ -796,8 +796,8 @@ function renderEntryList(ul, entries, emptyText) {
       title.textContent = `${chipTag(entry)}  ${entrySummary(entry)}`;
       textWrap.appendChild(title);
 
-      // Detail lists (today/selected day) should show shipment memo if present.
-      const memoText = entry && entry.type === "shipment" ? String(entry.memo || "").trim() : "";
+      // Detail lists (today/selected day) should show memo if present.
+      const memoText = entry && (entry.type === "shipment" || entry.type === "event") ? String(entry.memo || "").trim() : "";
       if (memoText) {
         const memo = document.createElement("div");
         memo.className = "subline one-line";
