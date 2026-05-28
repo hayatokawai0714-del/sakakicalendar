@@ -421,7 +421,8 @@ function saveRecurringShipment(rule) {
 function renderToday() {
   const today = formatDate(new Date());
   const list = document.getElementById("todayList");
-  const items = entriesByDate(today);
+  const generated = generateRecurringShipmentsForMonth(new Date().getFullYear(), new Date().getMonth());
+  const items = entriesByDate(today, { generatedRecurring: generated });
   renderEntryList(list, items, "今日の予定はありません");
 }
 
@@ -605,6 +606,11 @@ function renderSelectedDay() {
   const generated = generateRecurringShipmentsForMonth(year, month);
 
   const items = entriesByDate(state.selectedDate, { generatedRecurring: generated });
+  try {
+    const sample = items.filter((x) => x && x.type === "shipment" && (x.shipmentType || "") === "recurring");
+    console.log("[sakaki] recurring entries for 2026-05-26", entriesByDate("2026-05-26", { generatedRecurring: generated }).filter((x) => x && x.type === "shipment" && x.shipmentType === "recurring"));
+    if (sample.length) console.log("[sakaki] selected day recurring count", sample.length);
+  } catch {}
   renderEntryList(list, items, "この日の予定はありません");
 }
 
@@ -689,7 +695,16 @@ function chipTag(entry) {
 }
 
 function calendarChipText(entry) {
-  if (entry.type === "shipment") return `${entry.destination || entry.destinationName || ""}${entry.quantity}${entry.unit}`;
+  if (entry.type === "shipment") {
+    const dest = entry.destinationName || entry.destination || "";
+    const qty = `${entry.quantity ?? ""}${entry.unit || ""}`;
+    if ((entry.shipmentType || "spot") === "recurring") {
+      // Requested: show recurring shipments clearly in calendar.
+      return `定期 ${dest} ${entry.standard || ""} ${qty}`.trim();
+    }
+    // Spot shipment: keep compact like "東洋農事 20kg"
+    return `${dest} ${qty}`.trim();
+  }
   return entrySummary(entry);
 }
 
