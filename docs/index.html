@@ -8,33 +8,32 @@
   </head>
   <body>
     <main class="container">
-      <header class="card header">
-        <h1>出荷・予定管理</h1>
-        <p class="muted">シンプル試作版（ローカル保存）</p>
-      </header>
-
       <section class="card">
         <h2>今日の予定</h2>
         <ul id="todayList" class="list"></ul>
       </section>
 
-      <section class="card">
-        <h2>同期設定</h2>
-        <p class="muted">未設定の場合はこの端末のlocalStorageに保存します。</p>
-        <form id="syncForm" class="form compact">
-          <label>API URL（GAS WebアプリURL）
-            <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
-          </label>
-          <label>更新者名（updatedBy）
-            <input id="updatedByInput" type="text" placeholder="未設定" />
-          </label>
-          <div class="actions">
-            <button type="submit" class="btn">保存</button>
-            <button type="button" id="syncTestBtn" class="btn secondary">接続テスト</button>
-          </div>
-        </form>
-        <div id="statusBar" class="status hidden" role="status" aria-live="polite"></div>
-      </section>
+      <details class="card accordion" id="syncDetails">
+        <summary class="accordion-summary">
+          <span>同期設定</span>
+        </summary>
+        <div class="accordion-body">
+          <p class="muted">未設定の場合はこの端末のlocalStorageに保存します。</p>
+          <form id="syncForm" class="form compact">
+            <label>API URL（GAS WebアプリURL）
+              <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+            </label>
+            <label>更新者名（updatedBy）
+              <input id="updatedByInput" type="text" placeholder="未設定" />
+            </label>
+            <div class="actions">
+              <button type="submit" class="btn">保存</button>
+              <button type="button" id="syncTestBtn" class="btn secondary">接続テスト</button>
+            </div>
+          </form>
+          <div id="statusBar" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+      </details>
 
       <section class="card">
         <div class="calendar-head">
@@ -143,46 +142,54 @@
         </form>
       </section>
 
-      <section class="card">
-        <h2>出荷先マスタ</h2>
-        <form id="destinationForm" class="form compact">
-          <input type="hidden" id="destinationId" />
-          <label>出荷先名<input id="destinationName" type="text" required /></label>
-          <label>住所<input id="destinationAddress" type="text" /></label>
-          <label>電話<input id="destinationPhone" type="text" /></label>
-          <label>担当者<input id="destinationContact" type="text" /></label>
-          <label>メール<input id="destinationEmail" type="email" /></label>
-          <label>備考<textarea id="destinationNote" rows="2"></textarea></label>
-          <label class="inline"><input id="destinationActive" type="checkbox" checked />有効</label>
-          <div class="actions">
-            <button type="submit" class="btn">保存</button>
-            <button type="button" id="cancelDestinationEditBtn" class="btn secondary">編集キャンセル</button>
-          </div>
-        </form>
-        <ul id="destinationList" class="list"></ul>
-      </section>
+      <details class="card accordion" id="destinationDetails">
+        <summary class="accordion-summary">
+          <span>出荷先マスタ</span>
+        </summary>
+        <div class="accordion-body">
+          <form id="destinationForm" class="form compact">
+            <input type="hidden" id="destinationId" />
+            <label>出荷先名<input id="destinationName" type="text" required /></label>
+            <label>住所<input id="destinationAddress" type="text" /></label>
+            <label>電話<input id="destinationPhone" type="text" /></label>
+            <label>担当者<input id="destinationContact" type="text" /></label>
+            <label>メール<input id="destinationEmail" type="email" /></label>
+            <label>備考<textarea id="destinationNote" rows="2"></textarea></label>
+            <label class="inline"><input id="destinationActive" type="checkbox" checked />有効</label>
+            <div class="actions">
+              <button type="submit" class="btn">保存</button>
+              <button type="button" id="cancelDestinationEditBtn" class="btn secondary">編集キャンセル</button>
+            </div>
+          </form>
+          <ul id="destinationList" class="list"></ul>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2>規格・単位のカスタマイズ</h2>
-        <div class="master-grid">
-          <div>
-            <h3>規格</h3>
-            <form id="standardForm" class="inline-form">
-              <input id="standardInput" type="text" placeholder="規格名" />
-              <button class="btn" type="submit">追加</button>
-            </form>
-            <ul id="standardList" class="list"></ul>
-          </div>
-          <div>
-            <h3>単位</h3>
-            <form id="unitForm" class="inline-form">
-              <input id="unitInput" type="text" placeholder="単位名" />
-              <button class="btn" type="submit">追加</button>
-            </form>
-            <ul id="unitList" class="list"></ul>
+      <details class="card accordion" id="unitSettingsDetails">
+        <summary class="accordion-summary">
+          <span>規格・単位設定</span>
+        </summary>
+        <div class="accordion-body">
+          <div class="master-grid">
+            <div>
+              <h3>規格</h3>
+              <form id="standardForm" class="inline-form">
+                <input id="standardInput" type="text" placeholder="規格名" />
+                <button class="btn" type="submit">追加</button>
+              </form>
+              <ul id="standardList" class="list"></ul>
+            </div>
+            <div>
+              <h3>単位</h3>
+              <form id="unitForm" class="inline-form">
+                <input id="unitInput" type="text" placeholder="単位名" />
+                <button class="btn" type="submit">追加</button>
+              </form>
+              <ul id="unitList" class="list"></ul>
+            </div>
           </div>
         </div>
-      </section>
+      </details>
     </main>
 
     <script src="./app.js"></script>
