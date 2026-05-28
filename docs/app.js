@@ -698,11 +698,7 @@ function calendarChipText(entry) {
   if (entry.type === "shipment") {
     const dest = entry.destinationName || entry.destination || "";
     const qty = `${entry.quantity ?? ""}${entry.unit || ""}`;
-    if ((entry.shipmentType || "spot") === "recurring") {
-      // Requested: show recurring shipments clearly in calendar.
-      return `定期 ${dest} ${entry.standard || ""} ${qty}`.trim();
-    }
-    // Spot shipment: keep compact like "東洋農事 20kg"
+    // Spot/Recurring are displayed the same in the calendar (no label/spec).
     return `${dest} ${qty}`.trim();
   }
   return entrySummary(entry);
