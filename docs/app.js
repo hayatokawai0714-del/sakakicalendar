@@ -773,6 +773,15 @@ async function deleteEntry(entry) {
     setBusy(true, "削除中…");
 
     if (isApiEnabled()) {
+      // Optimistic UI update: remove locally first, then sync delete to API.
+      const snap = snapshotLocalState_();
+      if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+        state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
+      } else {
+        state.entries = state.entries.filter((x) => x.id !== entry.id);
+      }
+      saveState();
+      refreshViewFast();
       if (entry.type === "shipment" && entry.shipmentType === "recurring") {
         await deleteItemFromApi("deleteRecurringShipment", entry._ruleId || entry.id);
       } else if (entry.type === "shipment") {
@@ -782,7 +791,7 @@ async function deleteEntry(entry) {
       } else if (entry.type === "memo") {
         await deleteItemFromApi("deleteMemo", entry.id);
       }
-      await loadAllDataFromApi();
+      // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       if (entry.type === "shipment" && entry.shipmentType === "recurring") {
         state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
@@ -868,6 +877,61 @@ function setSelectedWeekdays(weekdays) {
   });
 }
 
+function snapshotLocalState_() {
+  return {
+    entries: state.entries.slice(),
+    recurringShipments: state.recurringShipments.slice(),
+    destinations: state.destinations.slice(),
+  };
+}
+
+function restoreLocalState_(snap) {
+  if (!snap) return;
+  state.entries = Array.isArray(snap.entries) ? snap.entries : [];
+  state.recurringShipments = Array.isArray(snap.recurringShipments) ? snap.recurringShipments : [];
+  state.destinations = Array.isArray(snap.destinations) ? snap.destinations : [];
+  saveState();
+}
+
+function refreshViewFast() {
+  // Keep this minimal and synchronous for snappy UI.
+  fillMasterSelects();
+  renderToday();
+  renderCalendar();
+  renderSelectedDay();
+  renderDestinationList();
+}
+
+function syncSave(action, payload, snap, label) {
+  if (!isApiEnabled()) return;
+  (async () => {
+    try {
+      await apiPost(action, payload);
+      if (label) showToast(label, "success");
+    } catch (err) {
+      console.error("[sakaki] sync save failed", { action, payload, err });
+      restoreLocalState_(snap);
+      refreshViewFast();
+      showToast("同期に失敗しました", "error");
+    }
+  })();
+}
+
+function syncDelete(action, id, snap) {
+  if (!isApiEnabled()) return;
+  (async () => {
+    try {
+      await deleteItemFromApi(action, id);
+      showToast("削除しました", "success");
+    } catch (err) {
+      console.error("[sakaki] sync delete failed", { action, id, err });
+      restoreLocalState_(snap);
+      refreshViewFast();
+      showToast("同期に失敗しました", "error");
+    }
+  })();
+}
+
 async function submitEntryForm(e) {
   e.preventDefault();
   if (state.isBusy) return;
@@ -902,6 +966,9 @@ async function submitEntryForm(e) {
         };
 
         if (isApiEnabled()) {
+          // Optimistic UI update: reflect immediately, then sync to API (no full reload).
+          saveSpotShipment(entry);
+          refreshViewFast();
           await saveShipmentToApi({
             id: entry.id,
             shipmentType: "spot",
@@ -916,7 +983,7 @@ async function submitEntryForm(e) {
             updatedAt: entry.updatedAt,
             updatedBy: entry.updatedBy,
           });
-          await loadAllDataFromApi();
+          // loadAllDataFromApi() removed for performance (optimistic update).
         } else {
           saveSpotShipment(entry);
         }
@@ -957,6 +1024,9 @@ async function submitEntryForm(e) {
       if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上指定してください");
 
       if (isApiEnabled()) {
+        // Optimistic UI update: reflect immediately, then sync to API (no full reload).
+        saveRecurringShipment(rule);
+        refreshViewFast();
         await saveRecurringShipmentToApi({
           id: rule.id,
           destinationId: rule.destinationId,
@@ -974,7 +1044,7 @@ async function submitEntryForm(e) {
           updatedAt: rule.updatedAt,
           updatedBy: rule.updatedBy,
         });
-        await loadAllDataFromApi();
+        // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
         saveRecurringShipment(rule);
       }
@@ -1000,8 +1070,12 @@ async function submitEntryForm(e) {
       };
 
       if (isApiEnabled()) {
+      // Optimistic UI update: reflect immediately, then sync to API (no full reload).
+      upsertById(state.entries, entry);
+      saveState();
+      refreshViewFast();
         await apiPost("saveEvent", entry);
-        await loadAllDataFromApi();
+        // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
         upsertById(state.entries, entry);
         saveState();
@@ -1026,8 +1100,12 @@ async function submitEntryForm(e) {
     };
 
     if (isApiEnabled()) {
+    // Optimistic UI update: reflect immediately, then sync to API (no full reload).
+    upsertById(state.entries, entry);
+    saveState();
+    refreshViewFast();
       await apiPost("saveMemo", entry);
-      await loadAllDataFromApi();
+      // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       upsertById(state.entries, entry);
       saveState();
@@ -1160,8 +1238,13 @@ async function submitDestinationForm(e) {
   try {
     setBusy(true, "保存中...");
     if (isApiEnabled()) {
+    // Optimistic UI update: reflect immediately, then sync to API (no full reload).
+    upsertById(state.destinations, dest);
+    saveState();
+    fillMasterSelects();
+    renderDestinationList();
       await saveDestinationToApi(dest);
-      await loadAllDataFromApi();
+      // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       upsertById(state.destinations, dest);
       saveState();
@@ -1220,8 +1303,14 @@ async function deleteDestination(d) {
   try {
     setBusy(true, "削除中…");
     if (isApiEnabled()) {
+      // Optimistic UI update: remove locally first, then sync delete to API.
+      const snap = snapshotLocalState_();
+      state.destinations = state.destinations.filter((x) => x.id !== d.id);
+      saveState();
+      fillMasterSelects();
+      renderDestinationList();
       await deleteItemFromApi("deleteDestination", d.id);
-      await loadAllDataFromApi();
+      // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       state.destinations = state.destinations.filter((x) => x.id !== d.id);
       saveState();
@@ -1539,6 +1628,7 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
 
 
 
