@@ -648,67 +648,83 @@ function renderCalendar() {
     console.log("today", today);
   } catch {}
 
-  for (let i = 0; i < 42; i += 1) {
-    const day = new Date(start);
-    day.setDate(start.getDate() + i);
-    const dateKey = formatDate(day);
-    if (dateKey === today) {
+  // Build by week; hide the trailing week when it contains only next-month days.
+  for (let week = 0; week < 6; week += 1) {
+    const weekStart = new Date(start);
+    weekStart.setDate(start.getDate() + week * 7);
+
+    const weekDays = [];
+    for (let j = 0; j < 7; j += 1) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + j);
+      weekDays.push(d);
+    }
+
+    const hasCurrentMonthDay = weekDays.some((d) => d.getMonth() === month);
+    if (!hasCurrentMonthDay) {
+      // Month-start week includes current month, so the only remaining no-current-month week is trailing next-month-only.
+      break;
+    }
+
+    weekDays.forEach((day) => {
+      const dateKey = formatDate(day);
+      if (dateKey === today) {
+        try {
+          console.log("calendar date", dateKey);
+        } catch {}
+      }
+
+      const eventMatches = state.entries.filter((x) => x && x.type === "event" && normalizeDateKey(x.date) === dateKey);
+      if (eventMatches.length > 0 || dateKey === today) {
+        try {
+          console.log("[sakaki] cell events match", { dateKey, count: eventMatches.length });
+        } catch {}
+      }
+
+      const dayEntries = entriesByDate(dateKey, { generatedRecurring: generated });
+
+      // Debug (requested): how many events match this cell dateKey
       try {
-        console.log("calendar date", dateKey);
+        const eventCountForCell = state.entries.filter((x) => x && x.type === "event" && normalizeDateKey(x.date) === dateKey).length;
+        if (eventCountForCell > 0 || dateKey === "2026-05-27") console.log("[sakaki] cell events", { dateKey, eventCountForCell });
       } catch {}
-    }
 
-    const eventMatches = state.entries.filter((x) => x && x.type === "event" && normalizeDateKey(x.date) === dateKey);
-    if (eventMatches.length > 0 || dateKey === today) {
-      try {
-        console.log("[sakaki] cell events match", { dateKey, count: eventMatches.length });
-      } catch {}
-    }
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "day-cell";
+      if (day.getMonth() !== month) cell.classList.add("outside");
+      if (dateKey === today) cell.classList.add("today");
+      if (dateKey === state.selectedDate) cell.classList.add("selected");
 
-    const dayEntries = entriesByDate(dateKey, { generatedRecurring: generated });
+      const num = document.createElement("div");
+      num.className = "day-num";
+      num.textContent = String(day.getDate());
+      cell.appendChild(num);
 
-    // Debug (requested): how many events match this cell dateKey
-    try {
-      const eventCountForCell = state.entries.filter((x) => x && x.type === "event" && normalizeDateKey(x.date) === dateKey).length;
-      if (eventCountForCell > 0 || dateKey === "2026-05-27") console.log("[sakaki] cell events", { dateKey, eventCountForCell });
-    } catch {}
+      dayEntries.slice(0, 3).forEach((entry) => {
+        const chip = document.createElement("div");
+        chip.className = "entry-chip";
+        chip.innerHTML = entry.type === "shipment" ? calendarChipText(entry) : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
+        cell.appendChild(chip);
+      });
 
-    const cell = document.createElement("button");
-    cell.type = "button";
-    cell.className = "day-cell";
-    if (day.getMonth() !== month) cell.classList.add("outside");
-    if (dateKey === today) cell.classList.add("today");
-    if (dateKey === state.selectedDate) cell.classList.add("selected");
+      if (dayEntries.length > 3) {
+        const more = document.createElement("div");
+        more.className = "entry-chip";
+        more.textContent = `他${dayEntries.length - 3}件`;
+        cell.appendChild(more);
+      }
 
-    const num = document.createElement("div");
-    num.className = "day-num";
-    num.textContent = String(day.getDate());
-    cell.appendChild(num);
+      cell.addEventListener("click", () => {
+        state.selectedDate = dateKey;
+        setFormDate(dateKey);
+        renderCalendar();
+        renderSelectedDay();
+      });
 
-    dayEntries.slice(0, 3).forEach((entry) => {
-      const chip = document.createElement("div");
-      chip.className = "entry-chip";
-      chip.innerHTML = entry.type === "shipment" ? calendarChipText(entry) : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
-      cell.appendChild(chip);
+      grid.appendChild(cell);
     });
-
-    if (dayEntries.length > 3) {
-      const more = document.createElement("div");
-      more.className = "entry-chip";
-      more.textContent = `他${dayEntries.length - 3}件`;
-      cell.appendChild(more);
-    }
-
-    cell.addEventListener("click", () => {
-      state.selectedDate = dateKey;
-      setFormDate(dateKey);
-      renderCalendar();
-      renderSelectedDay();
-    });
-
-    grid.appendChild(cell);
-  }
-}
+  }}
 
 function renderSelectedDay() {
   const label = document.getElementById("selectedDateLabel");
@@ -1640,6 +1656,9 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
+
+
 
 
 
