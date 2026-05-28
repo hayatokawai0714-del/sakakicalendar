@@ -698,6 +698,7 @@ function renderCalendar() {
 
       const num = document.createElement("div");
       num.className = "day-num";
+      if (dateKey === today && day.getMonth() === month) num.classList.add("is-today");
       num.textContent = String(day.getDate());
       cell.appendChild(num);
 
