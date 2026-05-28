@@ -11,12 +11,6 @@
       <section class="card">
         <h2>今日の予定</h2>
         <ul id="todayList" class="list"></ul>
-
-        <div class="admin-bar" aria-label="管理メニュー">
-          <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
-          <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先</button>
-          <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格</button>
-        </div>
       </section>
 
       <section class="card">
@@ -125,7 +119,13 @@
           </div>
         </form>
       </section>
-
+      <section class="card admin-card" aria-label="管理メニュー">
+        <div class="admin-bar admin-bar--bottom">
+          <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
+          <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先</button>
+          <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格</button>
+        </div>
+      </section>
       <!-- Panels (bottom-sheet style) -->
       <div class="sheet-backdrop hidden" data-sheet-backdrop="sync">
         <section class="sheet" role="dialog" aria-modal="true" aria-label="同期設定">
@@ -211,3 +211,4 @@
     <script src="./app.js?v=2026-05-28"></script>
   </body>
 </html>
+
