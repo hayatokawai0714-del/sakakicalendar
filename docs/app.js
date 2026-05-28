@@ -60,7 +60,7 @@ function saveState() {
 
 function bindEvents() {
   document.getElementById("syncForm").addEventListener("submit", saveSyncSettings);
-  document.getElementById("syncTestBtn").addEventListener("click", () => void testApiConnection());
+  document.getElementById("syncTestBtn").addEventListener("click", () => void testApiConnectionUi());
 
   document.getElementById("entryType").addEventListener("change", switchEntryTypeFields);
   document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
@@ -144,6 +144,70 @@ function setStatus(message, kind) {
   }
   el.className = `status ${kind || ""}`.trim();
   el.textContent = message;
+}
+
+function showToast(message, type = "info") {
+  if (!message) return;
+  let wrap = document.getElementById("toastWrap");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "toastWrap";
+    wrap.className = "toast-wrap";
+    document.body.appendChild(wrap);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`.trim();
+  toast.textContent = message;
+  wrap.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add("show"));
+
+  const ttl = type === "error" ? 2600 : 1800;
+  window.setTimeout(() => {
+    toast.classList.remove("show");
+    window.setTimeout(() => toast.remove(), 200);
+  }, ttl);
+}
+
+function setButtonLoading(button, loadingText) {
+  if (!button) return;
+  if (!button.dataset) return;
+  if (!button.dataset.origText) button.dataset.origText = button.textContent || "";
+  button.disabled = true;
+  if (loadingText) button.textContent = loadingText;
+}
+
+function resetButtonLoading(button) {
+  if (!button) return;
+  if (button.dataset && button.dataset.origText !== undefined) {
+    button.textContent = button.dataset.origText;
+    delete button.dataset.origText;
+  }
+  button.disabled = false;
+}
+
+async function testApiConnectionUi() {
+  const btn = document.getElementById("syncTestBtn");
+  if (!isApiEnabled()) {
+    setStatus("API URLが未設定です（localStorageモード）", "");
+    showToast("API URLが未設定です", "info");
+    return;
+  }
+  try {
+    setButtonLoading(btn, "確認中...");
+    setBusy(true, "接続テスト中…");
+    const data = await apiGet("getAll");
+    if (!data || typeof data !== "object") throw new Error("不正なレスポンス");
+    setStatus("接続できました", "ok");
+    showToast("接続できました", "success");
+  } catch (err) {
+    setStatus(`接続に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    showToast("接続に失敗しました", "error");
+  } finally {
+    setBusy(false, "");
+    resetButtonLoading(btn);
+  }
 }
 
 function payloadPreview_(payload) {
