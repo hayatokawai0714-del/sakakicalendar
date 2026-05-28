@@ -8,6 +8,9 @@
   updatedBy: "sakaki_updated_by_v1",
 };
 
+const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
+
+
 const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
 const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
 
@@ -58,12 +61,39 @@ function saveState() {
   writeLS(STORAGE_KEYS.units, state.units);
 }
 
+function getLastDestinationId() {
+  try {
+    return String(localStorage.getItem(LAST_DESTINATION_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function setLastDestinationId(destinationId) {
+  const id = String(destinationId || "").trim();
+  if (!id) return;
+  try {
+    localStorage.setItem(LAST_DESTINATION_KEY, id);
+  } catch {}
+}
+
+function applyLastDestinationToForm() {
+  const select = document.getElementById("shipmentDestination");
+  if (!select || select.disabled) return;
+  const last = getLastDestinationId();
+  if (!last) return;
+  const exists = Array.from(select.options).some((o) => String(o.value) === last);
+  if (exists) select.value = last;
+}
+
+
 function bindEvents() {
   document.getElementById("syncForm").addEventListener("submit", saveSyncSettings);
   document.getElementById("syncTestBtn").addEventListener("click", () => void testApiConnectionUi());
 
   document.getElementById("entryType").addEventListener("change", switchEntryTypeFields);
   document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
+  document.getElementById("shipmentDestination").addEventListener("change", (e) => setLastDestinationId(e.target.value));
   document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
 
   document.getElementById("entryForm").addEventListener("submit", (e) => void submitEntryForm(e));
@@ -975,6 +1005,7 @@ async function submitEntryForm(e) {
     if (type === "shipment") {
       const kind = document.getElementById("shipmentKind").value;
       const destId = String(document.getElementById("shipmentDestination").value || "");
+      setLastDestinationId(destId);
       const destName = destId ? state.destinations.find((d) => String(d.id) === destId)?.name || "" : "";
 
       if (kind === "spot") {
@@ -1460,6 +1491,7 @@ function masterRow(value, category) {
 
 function fillMasterSelects() {
   fillDestinationSelect("shipmentDestination", state.destinations.filter((d) => d.active));
+  applyLastDestinationToForm();
   fillSelect("shipmentStandard", state.standards, "規格を選択");
   fillSelect("shipmentUnit", state.units, "単位を選択");
 }
