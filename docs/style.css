@@ -126,7 +126,7 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   color: #111827;
 }
 .day-cell.outside { color: #aaa; background: #fafafa; }
-.day-cell.today { border-color: var(--accent); }
+.day-cell.today { border-color: var(--line); }
 .day-cell.selected { outline: 2px solid #222; }
 
 .entry-chip {
@@ -402,13 +402,7 @@ button:disabled,
 
 
 
-/* Today highlight (iPhone Calendar style) */
-.day-cell.today {
-  border-color: #9ca3af;
-  background: #fcfcfd;
-}
-
-.day-num.is-today {
+/* Today highlight */\r\n.day-num.is-today {
   width: 22px;
   height: 22px;
   display: inline-flex;
@@ -419,5 +413,6 @@ button:disabled,
   color: #ffffff;
   font-weight: 700;
 }
+
 
 
