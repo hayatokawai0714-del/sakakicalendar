@@ -409,13 +409,15 @@ button:disabled,
 }
 
 .day-num.is-today {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #111827;
+  background: #000000;
   color: #ffffff;
+  font-weight: 700;
 }
+
 
