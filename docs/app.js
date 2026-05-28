@@ -1596,7 +1596,15 @@ function parseJsonArray(value) {
 function normalizeDateKey(value) {
   const s = String(value || "").trim();
   if (!s) return "";
-  // Accept "YYYY-MM-DD", "YYYY/MM/DD", and ISO strings like "YYYY-MM-DDTHH:mm:ss.sssZ".
+
+  // If we got an ISO date-time (often from Sheets), convert to local date to avoid off-by-one (JST) issues.
+  // Example: "2026-06-02T15:00:00.000Z" should be treated as 2026-06-03 in Asia/Tokyo.
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return formatDate(d);
+  }
+
+  // Accept "YYYY-MM-DD", "YYYY/MM/DD" and ISO strings like "YYYY-MM-DDTHH:mm:ss.sssZ".
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const slash = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
