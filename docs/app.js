@@ -1,4 +1,4 @@
-const STORAGE_KEYS = {
+﻿const STORAGE_KEYS = {
   entries: "sakaki_entries_v1",
   destinations: "sakaki_destinations_v1",
   standards: "sakaki_standards_v1",
@@ -250,7 +250,7 @@ function setBusy(isBusy, message) {
   const syncSubmit = document.querySelector("#syncForm button[type='submit']");
   if (entrySubmit) entrySubmit.disabled = isBusy;
   if (syncSubmit) syncSubmit.disabled = isBusy;
-  if (isBusy) setStatus(message || "処理中…", "");
+  if (isBusy) setStatus(message || "蜃ｦ逅・ｸｭ窶ｦ", "");
 }
 
 function currentUpdatedBy() {
@@ -265,25 +265,13 @@ function saveSyncSettings(e) {
   state.updatedBy = updatedBy;
   localStorage.setItem(STORAGE_KEYS.apiUrl, apiUrl);
   localStorage.setItem(STORAGE_KEYS.updatedBy, updatedBy);
-  setStatus("設定を保存しました", "ok");
+  setStatus("險ｭ螳壹ｒ菫晏ｭ倥＠縺ｾ縺励◆", "ok");
   void bootData();
 }
 
 async function testApiConnection() {
-  if (!isApiEnabled()) {
-    setStatus("API URLが未設定です（localStorageモード）", "");
-    return;
-  }
-  try {
-    setBusy(true, "接続確認中…");
-    const data = await apiGet("getAll");
-    if (!data || typeof data !== "object") throw new Error("不正なレスポンス");
-    setStatus("接続できました", "ok");
-  } catch (err) {
-    setStatus(`接続に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
-  } finally {
-    setBusy(false, "");
-  }
+  // Backward compat: use the newer UI-aware connection test.
+  await testApiConnectionUi();
 }
 
 async function apiGet(action) {
@@ -347,7 +335,7 @@ async function apiRequest_(method, action, url, payload) {
 
 async function loadAllDataFromApi() {
   try {
-    setBusy(true, "読み込み中…");
+    setBusy(true, "隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ窶ｦ");
     const all = await apiGet("getAll");
     const shipments = Array.isArray(all.shipments) ? all.shipments : [];
     const recurring = Array.isArray(all.recurring_shipments) ? all.recurring_shipments : [];
@@ -504,7 +492,7 @@ function renderToday() {
   const list = document.getElementById("todayList");
   const generated = generateRecurringShipmentsForMonth(new Date().getFullYear(), new Date().getMonth());
   const items = entriesByDate(today, { generatedRecurring: generated });
-  renderEntryList(list, items, "今日の予定はありません");
+  renderEntryList(list, items, "莉頑律縺ｮ莠亥ｮ壹・縺ゅｊ縺ｾ縺帙ｓ");
 }
 
 function generateRecurringShipmentsForMonth(year, monthIndex) {
@@ -693,7 +681,7 @@ function renderSelectedDay() {
     console.log("[sakaki] recurring entries for 2026-05-26", entriesByDate("2026-05-26", { generatedRecurring: generated }).filter((x) => x && x.type === "shipment" && x.shipmentType === "recurring"));
     if (sample.length) console.log("[sakaki] selected day recurring count", sample.length);
   } catch {}
-  renderEntryList(list, items, "この日の予定はありません");
+  renderEntryList(list, items, "縺薙・譌･縺ｮ莠亥ｮ壹・縺ゅｊ縺ｾ縺帙ｓ");
 }
 
 function renderEntryList(ul, entries, emptyText) {
@@ -761,17 +749,19 @@ async function deleteEntry(entry) {
     }
 
     setStatus("削除しました", "ok");
+    showToast("削除しました", "success");
     resetEntryForm();
     renderAll();
   } catch (err) {
     setStatus(`削除に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    showToast("削除に失敗しました", "error");
   } finally {
     setBusy(false, "");
   }
 }
 
 function chipTag(entry) {
-  if (entry.type === "shipment") return "出荷";
+  if (entry.type === "shipment") return "蜃ｺ闕ｷ";
   if (entry.type === "event") return "予定";
   return "メモ";
 }
@@ -838,10 +828,12 @@ async function submitEntryForm(e) {
   e.preventDefault();
   if (state.isBusy) return;
 
+  const submitBtn = e.submitter || document.querySelector("#entryForm button[type='submit']");
   const type = document.getElementById("entryType").value;
 
   try {
-    setBusy(true, "保存中…");
+    setButtonLoading(submitBtn, "保存中...");
+    setBusy(true, "菫晏ｭ倅ｸｭ窶ｦ");
 
     if (type === "shipment") {
       const kind = document.getElementById("shipmentKind").value;
@@ -853,11 +845,11 @@ async function submitEntryForm(e) {
           id: document.getElementById("entryId").value || createId(),
           type: "shipment",
           shipmentType: "spot",
-          date: requiredValue("shipmentDate", "出荷の日付"),
+          date: requiredValue("shipmentDate", "出荷日"),
           destinationId: destId,
           destinationName: destName,
           destination: destName,
-          standard: requiredValue("shipmentStandard", "規格"),
+          standard: requiredValue("shipmentStandard", "隕乗ｼ"),
           quantity: Number(document.getElementById("shipmentQuantity").value || 0),
           unit: requiredValue("shipmentUnit", "単位"),
           memo: document.getElementById("shipmentMemo").value.trim(),
@@ -886,7 +878,8 @@ async function submitEntryForm(e) {
         }
 
         state.selectedDate = entry.date;
-        setStatus("保存しました", "ok");
+        setStatus("菫晏ｭ倥＠縺ｾ縺励◆", "ok");
+        showToast("保存しました", "success");
         resetEntryForm();
         renderAll();
         return;
@@ -902,7 +895,7 @@ async function submitEntryForm(e) {
         destinationId: destId,
         destinationName: destName,
         destination: destName,
-        standard: requiredValue("shipmentStandard", "規格"),
+        standard: requiredValue("shipmentStandard", "隕乗ｼ"),
         quantity: Number(document.getElementById("shipmentQuantity").value || 0),
         unit: requiredValue("shipmentUnit", "単位"),
         memo: document.getElementById("shipmentMemo").value.trim(),
@@ -916,8 +909,8 @@ async function submitEntryForm(e) {
         updatedBy: currentUpdatedBy(),
       };
 
-      if (recurrenceType === "weekly" && rule.weekdays.length === 0) throw new Error("曜日を1つ以上選択してください");
-      if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上入力してください");
+      if (recurrenceType === "weekly" && rule.weekdays.length === 0) throw new Error("譖懈律繧・縺､莉･荳企∈謚槭＠縺ｦ縺上□縺輔＞");
+      if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("譌･莉倥ｒ1縺､莉･荳雁・蜉帙＠縺ｦ縺上□縺輔＞");
 
       if (isApiEnabled()) {
         await saveRecurringShipmentToApi({
@@ -943,7 +936,8 @@ async function submitEntryForm(e) {
       }
 
       state.selectedDate = rule.startDate;
-      setStatus("保存しました", "ok");
+      setStatus("菫晏ｭ倥＠縺ｾ縺励◆", "ok");
+      showToast("保存しました", "success");
       resetEntryForm();
       renderAll();
       return;
@@ -953,7 +947,7 @@ async function submitEntryForm(e) {
       const entry = {
         id: document.getElementById("entryId").value || createId(),
         type: "event",
-        date: requiredValue("eventDate", "予定の日付"),
+        date: requiredValue("eventDate", "予定日"),
         time: document.getElementById("eventTime").value,
         title: requiredValue("eventTitle", "予定名"),
         memo: document.getElementById("eventMemo").value.trim(),
@@ -970,7 +964,8 @@ async function submitEntryForm(e) {
       }
 
       state.selectedDate = entry.date;
-      setStatus("保存しました", "ok");
+      setStatus("菫晏ｭ倥＠縺ｾ縺励◆", "ok");
+      showToast("保存しました", "success");
       resetEntryForm();
       renderAll();
       return;
@@ -979,7 +974,7 @@ async function submitEntryForm(e) {
     const entry = {
       id: document.getElementById("entryId").value || createId(),
       type: "memo",
-      date: requiredValue("memoDate", "メモの日付"),
+      date: requiredValue("memoDate", "メモ日"),
       content: requiredValue("memoContent", "メモ内容"),
       priority: document.getElementById("memoPriority").value,
       updatedAt: new Date().toISOString(),
@@ -995,13 +990,16 @@ async function submitEntryForm(e) {
     }
 
     state.selectedDate = entry.date;
-    setStatus("保存しました", "ok");
+    setStatus("菫晏ｭ倥＠縺ｾ縺励◆", "ok");
+    showToast("保存しました", "success");
     resetEntryForm();
     renderAll();
   } catch (err) {
-    setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    setStatus(`菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆: ${err instanceof Error ? err.message : String(err)}`, "err");
+    showToast("保存に失敗しました", "error");
   } finally {
     setBusy(false, "");
+    resetButtonLoading(submitBtn);
   }
 }
 
@@ -1104,7 +1102,7 @@ async function submitDestinationForm(e) {
   const id = document.getElementById("destinationId").value || createId();
   const dest = {
     id,
-    name: requiredValue("destinationName", "出荷先名"),
+    name: requiredValue("destinationName", "蜃ｺ闕ｷ蜈亥錐"),
     address: document.getElementById("destinationAddress").value.trim(),
     phone: document.getElementById("destinationPhone").value.trim(),
     contactPerson: document.getElementById("destinationContact").value.trim(),
@@ -1116,7 +1114,7 @@ async function submitDestinationForm(e) {
   };
 
   try {
-    setBusy(true, "保存中…");
+    setBusy(true, "菫晏ｭ倅ｸｭ窶ｦ");
     if (isApiEnabled()) {
       await saveDestinationToApi(dest);
       await loadAllDataFromApi();
@@ -1124,12 +1122,13 @@ async function submitDestinationForm(e) {
       upsertById(state.destinations, dest);
       saveState();
     }
-    setStatus("保存しました", "ok");
+    setStatus("菫晏ｭ倥＠縺ｾ縺励◆", "ok");
+    showToast("保存しました", "success");
     resetDestinationForm();
     fillMasterSelects();
     renderDestinationList();
   } catch (err) {
-    setStatus(formatErrorForUi("出荷先の保存に失敗しました", err, dest), "err");
+    setStatus(formatErrorForUi("蜃ｺ闕ｷ蜈医・菫晏ｭ倥↓螟ｱ謨励＠縺ｾ縺励◆", err, dest), "err");
   } finally {
     setBusy(false, "");
   }
@@ -1140,7 +1139,7 @@ function renderDestinationList() {
   ul.innerHTML = "";
   if (!state.destinations.length) {
     const li = document.createElement("li");
-    li.textContent = "出荷先は未登録です";
+    li.textContent = "出荷先が未登録です";
     ul.appendChild(li);
     return;
   }
@@ -1149,7 +1148,7 @@ function renderDestinationList() {
     const li = document.createElement("li");
     const name = document.createElement("div");
     name.className = "one-line";
-    name.textContent = `${d.name} ${d.active ? "" : "(無効)"}`;
+    name.textContent = `${d.name} ${d.active ? "" : "(辟｡蜉ｹ)"}`;
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
@@ -1184,10 +1183,12 @@ async function deleteDestination(d) {
       saveState();
     }
     setStatus("削除しました", "ok");
+    showToast("削除しました", "success");
     fillMasterSelects();
     renderDestinationList();
   } catch (err) {
     setStatus(formatErrorForUi("出荷先の削除に失敗しました", err, { id: d && d.id }), "err");
+    showToast("削除に失敗しました", "error");
   } finally {
     setBusy(false, "");
   }
@@ -1260,7 +1261,7 @@ function masterRow(value, category) {
   editBtn.textContent = "編集";
   editBtn.disabled = state.isBusy;
   editBtn.addEventListener("click", () => {
-    const next = prompt("新しい値", value);
+    const next = prompt("譁ｰ縺励＞蛟､", value);
     if (!next || !next.trim()) return;
     const arr = category === "standard" ? state.standards : state.units;
     const idx = arr.indexOf(value);
@@ -1278,7 +1279,7 @@ function masterRow(value, category) {
   delBtn.addEventListener("click", () => {
     const arr = category === "standard" ? state.standards : state.units;
     if (arr.length <= 1) {
-      alert("最低1件は残してください");
+      alert("譛菴・莉ｶ縺ｯ谿九＠縺ｦ縺上□縺輔＞");
       return;
     }
     if (!confirm("削除しますか？")) return;
@@ -1306,7 +1307,7 @@ function fillDestinationSelect(id, destinations) {
   const prev = select.value;
   select.innerHTML = "";
   if (!destinations.length) {
-    const opt = new Option("出荷先を選択（未登録）", "");
+    const opt = new Option("出荷先を先に登録してください", "");
     select.appendChild(opt);
     select.disabled = true;
     return;
@@ -1355,7 +1356,7 @@ function entrySummary(entry) {
     const dest = entry.destinationName || entry.destination || "";
     return `${dest} ${entry.standard} ${entry.quantity}${entry.unit}`;
   }
-  // Show time first like "14:00 テスト予定"
+  // Show time first like "14:00 繝・せ繝井ｺ亥ｮ・
   if (entry.type === "event") {
     const t = normalizeTimeText(entry.time);
     return `${t ? `${t} ` : ""}${entry.title}`;
@@ -1371,7 +1372,7 @@ function upsertById(arr, item) {
 
 function requiredValue(id, label) {
   const v = String(document.getElementById(id).value || "").trim();
-  if (!v) throw new Error(`${label}を入力してください`);
+  if (!v) throw new Error(`${label}繧貞・蜉帙＠縺ｦ縺上□縺輔＞`);
   return v;
 }
 
@@ -1490,8 +1491,8 @@ window.addEventListener("error", (e) => {
   if (e.error instanceof Error) alert(e.error.message);
 });
 
-// TODO: 複数人共有（認証 + 権限）
-// TODO: CORS/権限を固めた本番運用（GASの公開範囲見直し）
-// TODO: 定期出荷の例外日（祝日スキップ等）
-// TODO: 定期出荷の個別発生分だけ削除/変更（ルールは残す）
+// TODO: 隍・焚莠ｺ蜈ｱ譛会ｼ郁ｪ崎ｨｼ + 讓ｩ髯撰ｼ・
+// TODO: CORS/讓ｩ髯舌ｒ蝗ｺ繧√◆譛ｬ逡ｪ驕狗畑・・AS縺ｮ蜈ｬ髢狗ｯ・峇隕狗峩縺暦ｼ・
+// TODO: 螳壽悄蜃ｺ闕ｷ縺ｮ萓句､匁律・育･晄律繧ｹ繧ｭ繝・・遲会ｼ・
+// TODO: 螳壽悄蜃ｺ闕ｷ縺ｮ蛟句挨逋ｺ逕溷・縺縺大炎髯､/螟画峩・医Ν繝ｼ繝ｫ縺ｯ谿九☆・・
 
