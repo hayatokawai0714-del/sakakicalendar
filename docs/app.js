@@ -761,7 +761,7 @@ async function deleteEntry(entry) {
 }
 
 function chipTag(entry) {
-  if (entry.type === "shipment") return "蜃ｺ闕ｷ";
+  if (entry.type === "shipment") return "出荷";
   if (entry.type === "event") return "予定";
   return "メモ";
 }
