@@ -161,11 +161,29 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
+  transition: transform 80ms ease, opacity 80ms ease, background-color 120ms ease, border-color 120ms ease;
+  touch-action: manipulation;
 }
 .btn.secondary {
   background: #fff;
   color: #111;
   border-color: var(--line);
+}
+
+/* Pressed feedback (mobile friendly) */
+button:active,
+.btn:active,
+.text-btn:active,
+.weekday-btn:active {
+  transform: scale(0.97);
+  opacity: 0.88;
+}
+
+button:disabled,
+.btn:disabled,
+.text-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .list {
@@ -226,6 +244,39 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   background: #111;
   color: #fff;
 }
+
+/* Toast */
+.toast-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+  z-index: 9999;
+}
+.toast {
+  pointer-events: none;
+  min-width: 220px;
+  max-width: min(520px, calc(100vw - 24px));
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.toast.success { border-color: #b7e4c7; }
+.toast.error { border-color: #ffccd5; }
+.toast.info { border-color: #cfe8ff; }
 
 @media (max-width: 720px) {
   .container { padding: 8px 10px; }
