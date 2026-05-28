@@ -106,17 +106,28 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
 }
 
 .day-cell {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
   min-height: 88px;
   padding: 6px;
+  padding-top: 24px;
   background: #fff;
   cursor: pointer;
+}
+
+.day-num {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: #111827;
 }
 .day-cell.outside { color: #aaa; background: #fafafa; }
 .day-cell.today { border-color: var(--accent); }
 .day-cell.selected { outline: 2px solid #222; }
-.day-num { font-size: 12px; margin-bottom: 4px; }
 
 .entry-chip {
   font-size: 10px;
@@ -281,7 +292,7 @@ button:disabled,
 @media (max-width: 720px) {
   .container { padding: 8px 10px; }
   .master-grid { grid-template-columns: 1fr; }
-  .day-cell { min-height: 78px; }
+
 }
 
 
@@ -387,4 +398,6 @@ button:disabled,
   font-size: 12px;
   color: #6b7280;
 }
+
+
 
