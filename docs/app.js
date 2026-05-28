@@ -106,6 +106,23 @@ function renderAll() {
   renderUnitList();
 }
 
+function setFormDate(dateKey) {
+  const key = normalizeDateKey(dateKey);
+  if (!key) return;
+
+  // Keep all date inputs in sync so the user can tap a day and immediately add items.
+  const shipmentDate = document.getElementById("shipmentDate");
+  const eventDate = document.getElementById("eventDate");
+  const memoDate = document.getElementById("memoDate");
+  const startDate = document.getElementById("startDate");
+
+  if (shipmentDate) shipmentDate.value = key;
+  if (eventDate) eventDate.value = key;
+  if (memoDate) memoDate.value = key;
+  // Recurring rule start date: helpful default when creating a new rule.
+  if (startDate && !startDate.value) startDate.value = key;
+}
+
 function isApiEnabled() {
   return Boolean(state.apiUrl);
 }
@@ -588,6 +605,7 @@ function renderCalendar() {
 
     cell.addEventListener("click", () => {
       state.selectedDate = dateKey;
+      setFormDate(dateKey);
       renderCalendar();
       renderSelectedDay();
     });
@@ -1002,9 +1020,7 @@ function resetEntryForm() {
   document.getElementById("shipmentKind").value = "spot";
   document.getElementById("entryType").value = "shipment";
 
-  document.getElementById("shipmentDate").value = state.selectedDate;
-  document.getElementById("eventDate").value = state.selectedDate;
-  document.getElementById("memoDate").value = state.selectedDate;
+  setFormDate(state.selectedDate);
   document.getElementById("startDate").value = state.selectedDate;
   document.getElementById("endDate").value = "";
 
