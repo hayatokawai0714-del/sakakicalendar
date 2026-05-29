@@ -1,4 +1,5 @@
-﻿html, body { max-width: 100%; overflow-x: hidden; }\r\n:root {
+﻿html, body { max-width: 100%; overflow-x: hidden; }
+:root {
   --bg: #ffffff;
   --text: #111111;
   --muted: #666666;
@@ -11,7 +12,9 @@
  param($m)
     $b=$m.Value
     if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;\r\n  max-width: 100%;\r\n  overflow-x: hidden;'
+      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
+  max-width: 100%;
+  overflow-x: hidden;'
     }
     return $b
   
@@ -60,7 +63,9 @@ details.accordion { padding: 0; overflow: hidden; }
 details.accordion[open] .accordion- param($m)
     $b=$m.Value
     if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;\r\n  max-width: 100%;\r\n  overflow-x: hidden;'
+      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
+  max-width: 100%;
+  overflow-x: hidden;'
     }
     return $b
   
@@ -85,7 +90,9 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
 .accordion- param($m)
     $b=$m.Value
     if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;\r\n  max-width: 100%;\r\n  overflow-x: hidden;'
+      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
+  max-width: 100%;
+  overflow-x: hidden;'
     }
     return $b
   
@@ -373,7 +380,9 @@ button:disabled,
 .sheet- param($m)
     $b=$m.Value
     if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;\r\n  max-width: 100%;\r\n  overflow-x: hidden;'
+      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
+  max-width: 100%;
+  overflow-x: hidden;'
     }
     return $b
   
@@ -540,3 +549,4 @@ button:disabled,
 @media (max-width: 420px) {
   .qty-unit-row { grid-template-columns: minmax(0, 1fr) 88px; }
 }
+
