@@ -86,6 +86,86 @@ function applyLastDestinationToForm() {
   if (exists) select.value = last;
 }
 
+function isShipmentSpecFormEmpty() {
+  const s1 = String((document.getElementById("shipmentStandard") || {}).value || "").trim();
+  const u1 = String((document.getElementById("shipmentUnit") || {}).value || "").trim();
+  const q1raw = String((document.getElementById("shipmentQuantity") || {}).value || "").trim();
+  const hasQ1 = q1raw !== "" && Number(q1raw) !== 0;
+
+  const s2 = String((document.getElementById("shipmentStandard2") || {}).value || "").trim();
+  const u2 = String((document.getElementById("shipmentUnit2") || {}).value || "").trim();
+  const q2raw = String((document.getElementById("shipmentQuantity2") || {}).value || "").trim();
+  const hasQ2 = q2raw !== "" && Number(q2raw) !== 0;
+
+  return !(s1 || u1 || hasQ1 || s2 || u2 || hasQ2);
+}
+
+function findLastShipmentTemplateByDestination(destinationId) {
+  const destId = String(destinationId || "").trim();
+  if (!destId) return null;
+
+  const byUpdatedAtDesc = (a, b) => {
+    const ta = String(a.updatedAt || "");
+    const tb = String(b.updatedAt || "");
+    if (ta && tb) return tb.localeCompare(ta);
+    if (tb) return 1;
+    if (ta) return -1;
+    return 0;
+  };
+
+  const shipments = state.entries
+    .filter((x) => x && x.type === "shipment" && String(x.destinationId || "") === destId)
+    .slice()
+    .sort(byUpdatedAtDesc);
+  if (shipments.length) return shipments[0];
+
+  const rules = state.recurringShipments
+    .filter((r) => r && String(r.destinationId || "") === destId)
+    .slice()
+    .sort(byUpdatedAtDesc);
+  if (rules.length) return rules[0];
+
+  return null;
+}
+
+function applyShipmentTemplateToForm(tpl) {
+  if (!tpl) return;
+  const s1 = document.getElementById("shipmentStandard");
+  const q1 = document.getElementById("shipmentQuantity");
+  const u1 = document.getElementById("shipmentUnit");
+  if (s1 && tpl.standard) s1.value = String(tpl.standard);
+  if (q1) q1.value = String(tpl.quantity ?? "");
+  if (u1 && tpl.unit) u1.value = String(tpl.unit);
+
+  const has2 = String(tpl.standard2 || "").trim() && String(tpl.unit2 || "").trim();
+  toggleShipmentSpec2(Boolean(has2));
+  const s2 = document.getElementById("shipmentStandard2");
+  const q2 = document.getElementById("shipmentQuantity2");
+  const u2 = document.getElementById("shipmentUnit2");
+  if (has2) {
+    if (s2 && tpl.standard2) s2.value = String(tpl.standard2);
+    if (q2) q2.value = String(tpl.quantity2 ?? "");
+    if (u2 && tpl.unit2) u2.value = String(tpl.unit2);
+  }
+}
+
+function handleDestinationChange(e) {
+  const destId = String(e && e.target ? e.target.value : "").trim();
+  if (!destId) return;
+  setLastDestinationId(destId);
+
+  // Only auto-fill when the user just changed destination and the shipment spec form is still empty.
+  const editingId = String((document.getElementById("entryId") || {}).value || "").trim();
+  if (editingId) return;
+  if (!isShipmentSpecFormEmpty()) return;
+
+  const tpl = findLastShipmentTemplateByDestination(destId);
+  if (!tpl) return;
+  applyShipmentTemplateToForm(tpl);
+  showToast("前回の内容を入力しました", "info");
+}
+
+
 
 function bindEvents() {
   document.getElementById("syncForm").addEventListener("submit", saveSyncSettings);
@@ -93,7 +173,7 @@ function bindEvents() {
 
   document.getElementById("entryType").addEventListener("change", switchEntryTypeFields);
   document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
-  document.getElementById("shipmentDestination").addEventListener("change", (e) => setLastDestinationId(e.target.value));
+  document.getElementById("shipmentDestination").addEventListener("change", handleDestinationChange);
   document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
 
   document.getElementById("entryForm").addEventListener("submit", (e) => void submitEntryForm(e));
