@@ -259,7 +259,7 @@ button:disabled,
 .toast {
   pointer-events: none;
   min-width: 220px;
-  max-width: min(520px, calc(100vw - 24px));
+  max-width: min(520px, calc(100% - 24px));
   border-radius: 14px;
   padding: 8px 10px;
   font-size: 14px;
@@ -557,3 +557,4 @@ html, body {
 /* Overflow guard for grid/flex children */
 .calendar-grid, .weekday-row, .day-cell, .sheet, .sheet-body, form, .form, .actions, .row-actions { min-width: 0; }
 
+\r\n\r\n/* PWA horizontal scroll lock */\r\nhtml,\r\nbody {\r\n  width: 100%;\r\n  max-width: 100%;\r\n  overflow-x: hidden !important;\r\n  overscroll-behavior-x: none;\r\n  position: relative;\r\n}\r\n\r\nbody {\r\n  touch-action: pan-y;\r\n}\r\n\r\n#app,\r\n.container,\r\n.card,\r\n.calendar-card,\r\n.calendar-wrap,\r\n.calendar-grid,\r\n.weekday-row,\r\n.sheet,\r\n.sheet-body,\r\nform,\r\n.form-row,\r\n.form-grid {\r\n  max-width: 100%;\r\n  min-width: 0;\r\n  overflow-x: hidden;\r\n  box-sizing: border-box;\r\n}\r\n\r\n*,\r\n*::before,\r\n*::after {\r\n  box-sizing: border-box;\r\n}\r\n\r\ninput,\r\nselect,\r\ntextarea,\r\nbutton {\r\n  max-width: 100%;\r\n  min-width: 0;\r\n  font-size: 16px;\r\n}\r\n
