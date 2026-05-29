@@ -468,7 +468,10 @@ button:disabled,
 .day-cell.today {
   background: rgba(0,0,0,0.03);
 }
-\n.today-title { font-size: 14px; font-weight: 700; color: #111827; margin: 0 0 2px; }\n.today-count { font-size: 12px; color: #374151; margin: 0; }\n
+
+.today-title { font-size: 14px; font-weight: 700; color: #111827; margin: 0 0 2px; }
+.today-count { font-size: 12px; color: #374151; margin: 0; }
+
 
 /* Entry list (today/selected day) */
 .entry-row { align-items: flex-start; }
@@ -507,9 +510,16 @@ button:disabled,
 .btn.small { height: 32px; padding: 0 12px; font-size: 12px; }
 .spec2-toggle { margin-top: 6px; }
 .spec2-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; }
-\n.entry-spec { margin-top: 2px; font-size: 13px; color: #111827; }\n
 
-\ninput,\nselect,\ntextarea,\nbutton { font-size: 16px; max-width: 100%; }\n
+.entry-spec { margin-top: 2px; font-size: 13px; color: #111827; }
+
+
+
+input,
+select,
+textarea,
+button { font-size: 16px; max-width: 100%; }
+
 .qty-unit-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 96px;
@@ -542,4 +552,8 @@ html, body {
   word-break: break-word;
 }
 
+
+
+/* Overflow guard for grid/flex children */
+.calendar-grid, .weekday-row, .day-cell, .sheet, .sheet-body, form, .form, .actions, .row-actions { min-width: 0; }
 

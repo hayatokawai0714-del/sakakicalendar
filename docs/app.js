@@ -196,6 +196,7 @@ function bindEvents() {
     renderCalendar();
   });
   bindAdminPanels();
+  maybeDebugOverflow_();
 }
 
 function bindAdminPanels() {
@@ -1994,5 +1995,6 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
 
 
