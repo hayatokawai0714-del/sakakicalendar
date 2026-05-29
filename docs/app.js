@@ -1063,7 +1063,7 @@ function syncSave(action, payload, snap, label) {
       console.error("[sakaki] sync save failed", { action, payload, err });
       restoreLocalState_(snap);
       refreshViewFast();
-      showToast("同期に失敗しました", "error");
+      showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   })();
 }
@@ -1078,7 +1078,7 @@ function syncDelete(action, id, snap) {
       console.error("[sakaki] sync delete failed", { action, id, err });
       restoreLocalState_(snap);
       refreshViewFast();
-      showToast("同期に失敗しました", "error");
+      showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   })();
 }
@@ -1284,7 +1284,7 @@ async function submitEntryForm(e) {
     renderAll();
   } catch (err) {
     setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
-    showToast("保存に失敗しました", "error");
+    showToast(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
   } finally {
     setBusy(false, "");
     resetButtonLoading(submitBtn);
@@ -1817,6 +1817,7 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
 
 
 
