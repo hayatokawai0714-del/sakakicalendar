@@ -377,16 +377,6 @@ button:disabled,
   font-size: 16px;
 }
 
-.sheet- param($m)
-    $b=$m.Value
-    if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
-  max-width: 100%;
-  overflow-x: hidden;'
-    }
-    return $b
-  
-
 .icon-btn {
   height: 32px;
   padding: 0 10px;
@@ -568,3 +558,4 @@ html, body {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
