@@ -1546,17 +1546,71 @@ async function submitDestinationForm(e) {
   }
 }
 
-function sortDestinations_(list) {
-  return (list || []).slice().sort((a, b) => {
-    const sa = a && a.sortOrder !== undefined && a.sortOrder !== null && String(a.sortOrder).trim() !== "" ? Number(a.sortOrder) : null;
-    const sb = b && b.sortOrder !== undefined && b.sortOrder !== null && String(b.sortOrder).trim() !== "" ? Number(b.sortOrder) : null;
-    if (sa === null && sb === null) return String(a.name || "").localeCompare(String(b.name || ""));
-    if (sa === null) return 1;
-    if (sb === null) return -1;
-    return sa - sb;
+function getDestinationUsageStats() {
+  // usage: shipments (spot) + recurring shipment rules
+  const stats = new Map();
+
+  function inc(destId, whenValue) {
+    const id = String(destId || "").trim();
+    if (!id) return;
+    const cur = stats.get(id) || { count: 0, lastUsed: "" };
+    cur.count += 1;
+    const when = pickNewestDateKey_(whenValue);
+    if (when && (!cur.lastUsed || when > cur.lastUsed)) cur.lastUsed = when;
+    stats.set(id, cur);
+  }
+
+  (state.entries || []).forEach((e) => {
+    if (!e || e.type !== "shipment") return;
+    inc(e.destinationId, e.updatedAt || e.date);
+  });
+
+  (state.recurringShipments || []).forEach((r) => {
+    if (!r) return;
+    inc(r.destinationId, r.updatedAt || r.startDate || r.date);
+  });
+
+  return stats;
+}
+
+function sortDestinationsByUsage(destinations) {
+  const list = (destinations || []).slice();
+  const stats = getDestinationUsageStats();
+
+  return list.sort((a, b) => {
+    const ida = String((a && a.id) || "");
+    const idb = String((b && b.id) || "");
+    const sa = stats.get(ida) || { count: 0, lastUsed: "" };
+    const sb = stats.get(idb) || { count: 0, lastUsed: "" };
+
+    if (sb.count !== sa.count) return sb.count - sa.count;
+    if (sb.lastUsed !== sa.lastUsed) return String(sb.lastUsed).localeCompare(String(sa.lastUsed));
+    return String(a && a.name ? a.name : "").localeCompare(String(b && b.name ? b.name : ""));
   });
 }
 
+function getSortedDestinations() {
+  return sortDestinationsByUsage(state.destinations || []);
+}
+
+function pickNewestDateKey_(value) {
+  // Normalize to YYYY-MM-DD for stable string comparison.
+  if (!value) return "";
+  const v = String(value).trim();
+  if (!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  if (!Number.isFinite(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function sortDestinations_(list) {
+  // Backward compat: existing callers use sortDestinations_.
+  return sortDestinationsByUsage(list);
+}
 function renderDestinationList() {
   const ul = document.getElementById("destinationList");
   ul.innerHTML = "";
@@ -1567,29 +1621,17 @@ function renderDestinationList() {
     return;
   }
 
-  const sorted = sortDestinations_(state.destinations);
+  const sorted = getSortedDestinations();
   sorted.forEach((d, idx) => {
     const li = document.createElement("li");
     const name = document.createElement("div");
     name.className = "one-line";
-    name.textContent = `${d.name} ${d.active ? "" : "(辟｡蜉ｹ)"}`;
+    name.textContent = `${d.name} ${d.active ? "" : "(無効)"}`;
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
 
-    const upBtn = document.createElement("button");
-    upBtn.className = "text-btn";
-    upBtn.textContent = "↑";
-    upBtn.disabled = state.isBusy || idx === 0;
-    upBtn.addEventListener("click", () => void moveDestination_(d.id, -1));
-
-    const downBtn = document.createElement("button");
-    downBtn.className = "text-btn";
-    downBtn.textContent = "↓";
-    downBtn.disabled = state.isBusy || idx === sorted.length - 1;
-    downBtn.addEventListener("click", () => void moveDestination_(d.id, 1));
-
-    const editBtn = document.createElement("button");
+      const editBtn = document.createElement("button");
     editBtn.className = "text-btn";
     editBtn.textContent = "編集";
     editBtn.disabled = state.isBusy;
@@ -1601,52 +1643,10 @@ function renderDestinationList() {
     delBtn.disabled = state.isBusy;
     delBtn.addEventListener("click", () => void deleteDestination(d));
 
-    actions.append(upBtn, downBtn, editBtn, delBtn);
+    actions.append(editBtn, delBtn);
     li.append(name, actions);
     ul.appendChild(li);
   });
-}
-
-async function moveDestination_(id, delta) {
-  const sorted = sortDestinations_(state.destinations);
-  const idx = sorted.findIndex((x) => String(x.id) === String(id));
-  if (idx < 0) return;
-  const next = idx + delta;
-  if (next < 0 || next >= sorted.length) return;
-
-  const snap = snapshotLocalState_();
-
-  const a = sorted[idx];
-  const b = sorted[next];
-  const sa = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : idx + 1;
-  const sb = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : next + 1;
-
-  // Swap sortOrder only (avoid rewriting every row, which can cause fetch failures on slow networks).
-  a.sortOrder = sb;
-  b.sortOrder = sa;
-
-  // Persist locally and re-render in the new order.
-  state.destinations = sortDestinations_(state.destinations);
-  saveState();
-  fillMasterSelects();
-  renderDestinationList();
-  showToast("並び替えました", "info");
-
-  if (!isApiEnabled()) return;
-
-  // Persist only the two changed rows.
-  try {
-    const now = new Date().toISOString();
-    const by = currentUpdatedBy();
-    await apiPostWithRetry_("saveDestination", { id: a.id, sortOrder: a.sortOrder, updatedAt: now, updatedBy: by }, { retries: 1, delayMs: 350 });
-    await sleep_(200);
-    await apiPostWithRetry_("saveDestination", { id: b.id, sortOrder: b.sortOrder, updatedAt: now, updatedBy: by }, { retries: 1, delayMs: 350 });
-  } catch (err) {
-    console.error("[sakaki] destination reorder sync failed", err);
-    restoreLocalState_(snap);
-    refreshViewFast();
-    showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
-  }
 }
 
 async function deleteDestination(d) {
@@ -1740,7 +1740,7 @@ function masterRow(value, category) {
   const actions = document.createElement("div");
   actions.className = "row-actions";
 
-  const editBtn = document.createElement("button");
+      const editBtn = document.createElement("button");
   editBtn.className = "text-btn";
   editBtn.textContent = "編集";
   editBtn.disabled = state.isBusy;
@@ -1994,4 +1994,5 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
 
