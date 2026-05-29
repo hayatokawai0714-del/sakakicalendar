@@ -577,9 +577,23 @@ function renderToday() {
         return today;
       }
     })();
-    meta.textContent = `今日 ${dayLabel} / ${items.length}件`;
+    const shipCount = items.filter((x) => x && x.type === "shipment").length;
+    const eventCount = items.filter((x) => x && x.type === "event").length;
+    const memoCount = items.filter((x) => x && x.type === "memo").length;
+    const lines = [];
+    lines.push(`今日 ${dayLabel}`);
+    if (shipCount) lines.push(`出荷 ${shipCount}件`);
+    if (eventCount) lines.push(`予定 ${eventCount}件`);
+    if (memoCount) lines.push(`メモ ${memoCount}件`);
+    meta.innerHTML = lines.map((t, idx) => idx === 0 ? `<div class="today-title">${t}</div>` : `<div class="today-count">${t}</div>`).join("");
   }
-  renderEntryList(list, items, "今日の予定はありません");
+  if (!items.length) {
+    list.innerHTML = "";
+    list.classList.add("hidden");
+  } else {
+    list.classList.remove("hidden");
+    renderEntryList(list, items, "");
+  }
 }
 
 function generateRecurringShipmentsForMonth(year, monthIndex) {
