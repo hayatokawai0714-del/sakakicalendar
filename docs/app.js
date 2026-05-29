@@ -1612,13 +1612,6 @@ async function moveDestination_(id, delta) {
       for (const d of sorted) {
         await apiPost("saveDestination", {
           id: d.id,
-          name: d.name,
-          address: d.address || "",
-          phone: d.phone || "",
-          contactPerson: d.contactPerson || "",
-          email: d.email || "",
-          note: d.note || "",
-          active: d.active,
           sortOrder: d.sortOrder,
           updatedAt: new Date().toISOString(),
           updatedBy: currentUpdatedBy(),

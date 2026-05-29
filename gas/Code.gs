@@ -237,7 +237,13 @@ function saveRow_(sheetName, data) {
     }
   }
 
-  const rowValues = headers.map((h) => (h in data ? data[h] : ""));
+  const existingRow = targetRow === -1 ? null : values[targetRow - 1];
+  const rowValues = headers.map((h, idx) => {
+    if (h in data) return data[h];
+    // On update, keep existing cell values when a field is omitted (partial update).
+    if (existingRow) return existingRow[idx];
+    return "";
+  });
   if (targetRow === -1) {
     sheet.appendRow(rowValues);
     return { created: true, id: data.id };
