@@ -1594,35 +1594,36 @@ async function moveDestination_(id, delta) {
   if (next < 0 || next >= sorted.length) return;
 
   const snap = snapshotLocalState_();
-  // Swap in the sorted list, then re-number sortOrder to keep it stable.
-  const tmp = sorted[idx];
-  sorted[idx] = sorted[next];
-  sorted[next] = tmp;
 
-  sorted.forEach((d, i) => { d.sortOrder = i + 1; });
-  state.destinations = sorted;
+  const a = sorted[idx];
+  const b = sorted[next];
+  const sa = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : idx + 1;
+  const sb = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : next + 1;
+
+  // Swap sortOrder only (avoid rewriting every row, which can cause fetch failures on slow networks).
+  a.sortOrder = sb;
+  b.sortOrder = sa;
+
+  // Persist locally and re-render in the new order.
+  state.destinations = sortDestinations_(state.destinations);
   saveState();
   fillMasterSelects();
   renderDestinationList();
   showToast("並び替えました", "info");
 
-  if (isApiEnabled()) {
-    // Persist order: update each destination row.
-    try {
-      for (const d of sorted) {
-        await apiPost("saveDestination", {
-          id: d.id,
-          sortOrder: d.sortOrder,
-          updatedAt: new Date().toISOString(),
-          updatedBy: currentUpdatedBy(),
-        });
-      }
-    } catch (err) {
-      console.error("[sakaki] destination reorder sync failed", err);
-      restoreLocalState_(snap);
-      refreshViewFast();
-      showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
-    }
+  if (!isApiEnabled()) return;
+
+  // Persist only the two changed rows.
+  try {
+    const now = new Date().toISOString();
+    const by = currentUpdatedBy();
+    await apiPost("saveDestination", { id: a.id, sortOrder: a.sortOrder, updatedAt: now, updatedBy: by });
+    await apiPost("saveDestination", { id: b.id, sortOrder: b.sortOrder, updatedAt: now, updatedBy: by });
+  } catch (err) {
+    console.error("[sakaki] destination reorder sync failed", err);
+    restoreLocalState_(snap);
+    refreshViewFast();
+    showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
   }
 }
 
@@ -1971,6 +1972,7 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
 
 
 
