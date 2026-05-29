@@ -442,10 +442,31 @@ async function apiPost(action, payload) {
   // Use GET with an encoded JSON payload for write actions.
   const url = new URL(state.apiUrl);
   url.searchParams.set("action", action);
-  url.searchParams.set("payload", encodeURIComponent(JSON.stringify(payload || {})));
+    // Important: URLSearchParams will handle encoding. Do not pre-encode here,
+  // otherwise the payload becomes double-encoded and GAS may fail to parse it.
+  url.searchParams.set("payload", JSON.stringify(payload || {}));
   return await apiRequest_("GET", action, url.toString(), payload || {});
 }
 
+
+function sleep_(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function apiPostWithRetry_(action, payload, opts) {
+  const retries = opts && Number.isFinite(Number(opts.retries)) ? Number(opts.retries) : 1;
+  const delayMs = opts && Number.isFinite(Number(opts.delayMs)) ? Number(opts.delayMs) : 250;
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await apiPost(action, payload);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) await sleep_(delayMs);
+    }
+  }
+  throw lastErr;
+}
 async function apiRequest_(method, action, url, payload) {
   const opts =
     method === "GET"
@@ -1617,8 +1638,9 @@ async function moveDestination_(id, delta) {
   try {
     const now = new Date().toISOString();
     const by = currentUpdatedBy();
-    await apiPost("saveDestination", { id: a.id, sortOrder: a.sortOrder, updatedAt: now, updatedBy: by });
-    await apiPost("saveDestination", { id: b.id, sortOrder: b.sortOrder, updatedAt: now, updatedBy: by });
+    await apiPostWithRetry_("saveDestination", { id: a.id, sortOrder: a.sortOrder, updatedAt: now, updatedBy: by }, { retries: 1, delayMs: 350 });
+    await sleep_(200);
+    await apiPostWithRetry_("saveDestination", { id: b.id, sortOrder: b.sortOrder, updatedAt: now, updatedBy: by }, { retries: 1, delayMs: 350 });
   } catch (err) {
     console.error("[sakaki] destination reorder sync failed", err);
     restoreLocalState_(snap);
@@ -1972,26 +1994,4 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
