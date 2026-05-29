@@ -586,6 +586,7 @@ async function loadAllDataFromApi() {
       email: String(d.email || ""),
       note: String(d.note || ""),
       active: String(d.active || "TRUE").toLowerCase() !== "false",
+      sortOrder: d.sortOrder === undefined || d.sortOrder === null || String(d.sortOrder).trim() === "" ? null : Number(d.sortOrder),
       updatedAt: String(d.updatedAt || new Date().toISOString()),
       updatedBy: String(d.updatedBy || "未設定"),
     }));
@@ -1485,6 +1486,15 @@ async function submitDestinationForm(e) {
     email: document.getElementById("destinationEmail").value.trim(),
     note: document.getElementById("destinationNote").value.trim(),
     active: document.getElementById("destinationActive").checked,
+    sortOrder: (function(){
+      const existing = state.destinations.find((x) => String(x.id) === String(id));
+      if (existing && existing.sortOrder !== undefined && existing.sortOrder !== null) return existing.sortOrder;
+      const max = state.destinations.reduce((m, x) => {
+        const v = x && x.sortOrder !== undefined && x.sortOrder !== null ? Number(x.sortOrder) : NaN;
+        return Number.isFinite(v) ? Math.max(m, v) : m;
+      }, 0);
+      return max + 1;
+    })(),
     updatedAt: new Date().toISOString(),
     updatedBy: currentUpdatedBy(),
   };
@@ -1515,6 +1525,17 @@ async function submitDestinationForm(e) {
   }
 }
 
+function sortDestinations_(list) {
+  return (list || []).slice().sort((a, b) => {
+    const sa = a && a.sortOrder !== undefined && a.sortOrder !== null && String(a.sortOrder).trim() !== "" ? Number(a.sortOrder) : null;
+    const sb = b && b.sortOrder !== undefined && b.sortOrder !== null && String(b.sortOrder).trim() !== "" ? Number(b.sortOrder) : null;
+    if (sa === null && sb === null) return String(a.name || "").localeCompare(String(b.name || ""));
+    if (sa === null) return 1;
+    if (sb === null) return -1;
+    return sa - sb;
+  });
+}
+
 function renderDestinationList() {
   const ul = document.getElementById("destinationList");
   ul.innerHTML = "";
@@ -1525,7 +1546,8 @@ function renderDestinationList() {
     return;
   }
 
-  state.destinations.forEach((d) => {
+  const sorted = sortDestinations_(state.destinations);
+  sorted.forEach((d, idx) => {
     const li = document.createElement("li");
     const name = document.createElement("div");
     name.className = "one-line";
@@ -1533,6 +1555,18 @@ function renderDestinationList() {
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
+
+    const upBtn = document.createElement("button");
+    upBtn.className = "text-btn";
+    upBtn.textContent = "↑";
+    upBtn.disabled = state.isBusy || idx === 0;
+    upBtn.addEventListener("click", () => void moveDestination_(d.id, -1));
+
+    const downBtn = document.createElement("button");
+    downBtn.className = "text-btn";
+    downBtn.textContent = "↓";
+    downBtn.disabled = state.isBusy || idx === sorted.length - 1;
+    downBtn.addEventListener("click", () => void moveDestination_(d.id, 1));
 
     const editBtn = document.createElement("button");
     editBtn.className = "text-btn";
@@ -1546,10 +1580,57 @@ function renderDestinationList() {
     delBtn.disabled = state.isBusy;
     delBtn.addEventListener("click", () => void deleteDestination(d));
 
-    actions.append(editBtn, delBtn);
+    actions.append(upBtn, downBtn, editBtn, delBtn);
     li.append(name, actions);
     ul.appendChild(li);
   });
+}
+
+async function moveDestination_(id, delta) {
+  const sorted = sortDestinations_(state.destinations);
+  const idx = sorted.findIndex((x) => String(x.id) === String(id));
+  if (idx < 0) return;
+  const next = idx + delta;
+  if (next < 0 || next >= sorted.length) return;
+
+  const snap = snapshotLocalState_();
+  // Swap in the sorted list, then re-number sortOrder to keep it stable.
+  const tmp = sorted[idx];
+  sorted[idx] = sorted[next];
+  sorted[next] = tmp;
+
+  sorted.forEach((d, i) => { d.sortOrder = i + 1; });
+  state.destinations = sorted;
+  saveState();
+  fillMasterSelects();
+  renderDestinationList();
+  showToast("並び替えました", "info");
+
+  if (isApiEnabled()) {
+    // Persist order: update each destination row.
+    try {
+      for (const d of sorted) {
+        await apiPost("saveDestination", {
+          id: d.id,
+          name: d.name,
+          address: d.address || "",
+          phone: d.phone || "",
+          contactPerson: d.contactPerson || "",
+          email: d.email || "",
+          note: d.note || "",
+          active: d.active,
+          sortOrder: d.sortOrder,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUpdatedBy(),
+        });
+      }
+    } catch (err) {
+      console.error("[sakaki] destination reorder sync failed", err);
+      restoreLocalState_(snap);
+      refreshViewFast();
+      showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+    }
+  }
 }
 
 async function deleteDestination(d) {
@@ -1703,7 +1784,7 @@ function fillDestinationSelect(id, destinations) {
     return;
   }
   select.disabled = false;
-  destinations.forEach((d) => select.appendChild(new Option(d.name, d.id)));
+  sortDestinations_(destinations).forEach((d) => select.appendChild(new Option(d.name, d.id)));
   if (destinations.some((d) => String(d.id) === prev)) select.value = prev;
 }
 
@@ -1897,6 +1978,9 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
+
+
 
 
 

@@ -305,7 +305,7 @@ function ensureHeaders_() {
   ensureHeaderRow_(SHEET_NAMES.events, ["id", "date", "time", "title", "memo", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.memos, ["id", "date", "content", "priority", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.destinations, [
-    "id", "name", "address", "phone", "contactPerson", "email", "note", "active", "updatedAt", "updatedBy",
+    "id", "name", "address", "phone", "contactPerson", "email", "note", "active", "sortOrder", "updatedAt", "updatedBy",
   ]);
   ensureHeaderRow_(SHEET_NAMES.settings_units, ["id", "type", "name", "sortOrder", "active", "updatedAt"]);
 }
@@ -338,3 +338,5 @@ function jsonOutput_(obj) {
   // If your environment blocks it, consider using an IFrame proxy or same-origin hosting.
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
+
+
