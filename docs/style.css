@@ -550,3 +550,21 @@ button:disabled,
   .qty-unit-row { grid-template-columns: minmax(0, 1fr) 88px; }
 }
 
+
+/* Hard guard against horizontal scroll on mobile */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.container, .card, .sheet, .form-row, .calendar, .admin-card {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.one-line, .muted, .status, label, .sheet-body {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
