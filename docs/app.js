@@ -819,12 +819,43 @@ function renderEntryList(ul, entries, emptyText) {
     .sort((a, b) => (a.time || "").localeCompare(b.time || "") || String(a.updatedAt).localeCompare(String(b.updatedAt)))
     .forEach((entry) => {
       const li = document.createElement("li");
-      const textWrap = document.createElement("div");
+      li.classList.add("entry-row");
 
-      const title = document.createElement("div");
-      title.className = "one-line";
-      title.textContent = `${chipTag(entry)}  ${entrySummary(entry)}`;
-      textWrap.appendChild(title);
+      const main = document.createElement("div");
+      main.className = "entry-main";
+
+      const line1 = document.createElement("div");
+      line1.className = "entry-line";
+
+      const pill = document.createElement("span");
+      pill.className = `pill pill--${entry.type}`;
+      pill.textContent = chipTag(entry);
+      line1.appendChild(pill);
+
+      const content = document.createElement("div");
+      content.className = "entry-content";
+
+      if (entry.type === "event") {
+        const t = normalizeTimeText(entry.time);
+        if (t) {
+          const timeEl = document.createElement("span");
+          timeEl.className = "entry-time";
+          timeEl.textContent = t;
+          content.appendChild(timeEl);
+        }
+        const titleEl = document.createElement("span");
+        titleEl.className = "entry-title";
+        titleEl.textContent = String(entry.title || "");
+        content.appendChild(titleEl);
+      } else {
+        const summary = document.createElement("span");
+        summary.className = "entry-title";
+        summary.textContent = entrySummary(entry);
+        content.appendChild(summary);
+      }
+
+      line1.appendChild(content);
+      main.appendChild(line1);
 
       // Detail lists (today/selected day) should show memo if present.
       const memoText = entry && (entry.type === "shipment" || entry.type === "event") ? String(entry.memo || "").trim() : "";
@@ -832,9 +863,8 @@ function renderEntryList(ul, entries, emptyText) {
         const memo = document.createElement("div");
         memo.className = "subline one-line";
         memo.textContent = `メモ：${memoText}`;
-        textWrap.appendChild(memo);
+        main.appendChild(memo);
       }
-
       const actions = document.createElement("div");
       actions.className = "row-actions";
 
@@ -851,7 +881,7 @@ function renderEntryList(ul, entries, emptyText) {
       delBtn.addEventListener("click", () => void deleteEntry(entry));
 
       actions.append(editBtn, delBtn);
-      li.append(textWrap, actions);
+      li.append(main, actions);
       ul.appendChild(li);
     });
 }
