@@ -9,16 +9,6 @@
 }
 
 * { box-sizing: border-box; }
- param($m)
-    $b=$m.Value
-    if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
-  max-width: 100%;
-  overflow-x: hidden;'
-    }
-    return $b
-  
-
 .container {
   max-width: 960px;
   margin: 0 auto;
@@ -60,15 +50,6 @@ h3 { font-size: 16px; }
 
 /* iPhone-like accordion */
 details.accordion { padding: 0; overflow: hidden; }
-details.accordion[open] .accordion- param($m)
-    $b=$m.Value
-    if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
-  max-width: 100%;
-  overflow-x: hidden;'
-    }
-    return $b
-  
 .accordion-summary {
   list-style: none;
   cursor: pointer;
@@ -87,15 +68,6 @@ details.accordion[open] .accordion- param($m)
   transition: transform 140ms ease;
 }
 details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg); }
-.accordion- param($m)
-    $b=$m.Value
-    if($b -notmatch 'overflow-x'){
-      $b = $b -replace 'line-height: 1\.4;','line-height: 1.4;
-  max-width: 100%;
-  overflow-x: hidden;'
-    }
-    return $b
-  
 @keyframes acc-in {
   from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: translateY(0); }
@@ -338,30 +310,32 @@ button:disabled,
   border-color: #d1d5db;
 }
 
+/* Backdrop covers entire screen */
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(17,24,39,0.22);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 12px;
-  z-index: 60;
+  z-index: 1000;
+  background: rgba(0,0,0,0.25);
+  display: block;
 }
 
+.sheet-backdrop.hidden {
+  display: none !important;
+}
+
+/* Bottom sheet panel */
 .sheet {
-  width: 100%;
-  max-width: 720px;
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(100%, 720px);
+  max-height: 85vh;
+  overflow: hidden;
   background: #fff;
   border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  border-radius: 18px 18px 0 0;
   box-shadow: 0 16px 40px rgba(0,0,0,0.18);
-  transform: translateY(8px);
-  animation: sheetIn 160ms ease-out forwards;
-}
-
-@keyframes sheetIn {
-  to { transform: translateY(0); }
 }
 
 .sheet-header {
@@ -377,6 +351,21 @@ button:disabled,
   font-size: 16px;
 }
 
+.sheet-body {
+  max-height: calc(85vh - 56px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+}
+
+.sheet input,
+.sheet select,
+.sheet textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .icon-btn {
   height: 32px;
   padding: 0 10px;
@@ -386,7 +375,6 @@ button:disabled,
   font-size: 13px;
   color: #374151;
 }
-
 
 .admin-card {
   padding-top: 10px;
@@ -406,27 +394,22 @@ button:disabled,
 
 @media (min-width: 720px) {
   .admin-card {
-  padding-top: 10px;
-  padding-bottom: 10px;
-  opacity: 0.92;
-  position: sticky;
-  bottom: 10px;
-  z-index: 10;
-  background: rgba(255,255,255,0.92);
-  backdrop-filter: blur(8px);
+    padding-top: 10px;
+    padding-bottom: 10px;
+    opacity: 0.92;
+    position: sticky;
+    bottom: 10px;
+    z-index: 10;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(8px);
+  }
 }
-}
-
 
 .subline {
   margin-top: 2px;
   font-size: 12px;
   color: #6b7280;
 }
-
-
-
-
 /* Today highlight */
 .day-num.is-today {
   width: 22px;
@@ -558,4 +541,5 @@ html, body {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
 
