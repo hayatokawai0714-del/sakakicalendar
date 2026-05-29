@@ -19,16 +19,16 @@ body {
 .container {
   max-width: 960px;
   margin: 0 auto;
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 14px;
+  padding: 12px;
 }
 
 .subcard {
@@ -42,7 +42,7 @@ body {
   margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   font-size: 13px;
   background: #fafafa;
 }
@@ -64,7 +64,7 @@ details.accordion[open] .accordion-body {
   list-style: none;
   cursor: pointer;
   user-select: none;
-  padding: 14px;
+  padding: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -99,7 +99,7 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
 }
 
 .weekday-row {
-  margin: 10px 0 6px;
+  margin: 8px 0 4px;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
@@ -109,9 +109,9 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
-  min-height: 88px;
+  min-height: 64px;
   padding: 6px;
-  padding-top: 24px;
+  padding-top: 20px;
   background: #fff;
   cursor: pointer;
 }
@@ -272,7 +272,7 @@ button:disabled,
   min-width: 220px;
   max-width: min(520px, calc(100vw - 24px));
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   font-size: 14px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.96);
@@ -418,3 +418,45 @@ button:disabled,
 
 
 
+
+/* Pills in calendar */
+.entry-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(17,24,39,0.10);
+  margin-bottom: 3px;
+  font-size: 10px;
+  line-height: 1.25;
+}
+.entry-chip.t-shipment { background: rgba(59,130,246,0.10); }
+.entry-chip.t-event { background: rgba(17,24,39,0.06); }
+.entry-chip.t-memo { background: rgba(245,158,11,0.16); }
+
+.entry-chip .tag {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-right: 4px;
+  color: rgba(17,24,39,0.70);
+}
+
+/* Compact empty lists */
+.list.is-empty {
+  padding-top: 4px;
+}
+.list.is-empty li {
+  padding: 6px 0;
+  color: var(--muted);
+}
+
+.today-meta {
+  margin: -6px 0 8px;
+  font-size: 12px;
+}
+
+/* Slight background hint for today cell (keep subtle) */
+.day-cell.today {
+  background: rgba(0,0,0,0.03);
+}

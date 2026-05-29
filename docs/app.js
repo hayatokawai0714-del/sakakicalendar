@@ -566,6 +566,19 @@ function renderToday() {
   const list = document.getElementById("todayList");
   const generated = generateRecurringShipmentsForMonth(new Date().getFullYear(), new Date().getMonth());
   const items = entriesByDate(today, { generatedRecurring: generated });
+  const meta = document.getElementById("todayMeta");
+  if (meta) {
+    const dayLabel = (function(){
+      try {
+        const d = parseDate(today);
+        const w = ["日","月","火","水","木","金","土"][d.getDay()];
+        return `${today}（${w}）`;
+      } catch {
+        return today;
+      }
+    })();
+    meta.textContent = `今日 ${dayLabel} / ${items.length}件`;
+  }
   renderEntryList(list, items, "今日の予定はありません");
 }
 
@@ -732,17 +745,18 @@ function renderCalendar() {
       num.textContent = String(day.getDate());
       cell.appendChild(num);
 
-      dayEntries.slice(0, 3).forEach((entry) => {
+      dayEntries.slice(0, 2).forEach((entry) => {
         const chip = document.createElement("div");
         chip.className = "entry-chip";
+        chip.classList.add(`t-${entry.type}`);
         chip.innerHTML = entry.type === "shipment" ? calendarChipText(entry) : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
         cell.appendChild(chip);
       });
 
-      if (dayEntries.length > 3) {
+      if (dayEntries.length > 2) {
         const more = document.createElement("div");
         more.className = "entry-chip";
-        more.textContent = `他${dayEntries.length - 3}件`;
+        more.textContent = `+${dayEntries.length - 2}件`;
         cell.appendChild(more);
       }
 
@@ -777,8 +791,10 @@ function renderSelectedDay() {
 
 function renderEntryList(ul, entries, emptyText) {
   ul.innerHTML = "";
+  ul.classList.remove("is-empty");
   if (!entries.length) {
     const li = document.createElement("li");
+    ul.classList.add("is-empty");
     li.textContent = emptyText;
     ul.appendChild(li);
     return;
