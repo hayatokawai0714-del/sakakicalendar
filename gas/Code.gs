@@ -1,4 +1,4 @@
-// Google Apps Script sample API for this repo.
+﻿// Google Apps Script sample API for this repo.
 // 1) Set SPREADSHEET_ID
 // 2) Deploy as Web app
 // 3) Use the Web app URL as API_URL in docs/app.js (sync settings)
@@ -266,12 +266,41 @@ function deleteRow_(sheetName, id) {
 function ensureHeaders_() {
   // Minimal headers for each sheet (match README / frontend expectations).
   ensureHeaderRow_(SHEET_NAMES.shipments, [
-    "id", "shipmentType", "date", "destinationId", "destinationName", "standard", "quantity", "unit", "memo",
-    "recurrenceRuleId", "updatedAt", "updatedBy",
+    "id",
+    "shipmentType",
+    "date",
+    "destinationId",
+    "destinationName",
+    "standard",
+    "quantity",
+    "unit",
+    "standard2",
+    "quantity2",
+    "unit2",
+    "memo",
+    "recurrenceRuleId",
+    "updatedAt",
+    "updatedBy",
   ]);
   ensureHeaderRow_(SHEET_NAMES.recurring_shipments, [
-    "id", "destinationId", "destinationName", "standard", "quantity", "unit", "memo",
-    "recurrenceType", "startDate", "endDate", "weekdays", "intervalWeeks", "monthDays", "updatedAt", "updatedBy",
+    "id",
+    "destinationId",
+    "destinationName",
+    "standard",
+    "quantity",
+    "unit",
+    "standard2",
+    "quantity2",
+    "unit2",
+    "memo",
+    "recurrenceType",
+    "startDate",
+    "endDate",
+    "weekdays",
+    "intervalWeeks",
+    "monthDays",
+    "updatedAt",
+    "updatedBy",
   ]);
   ensureHeaderRow_(SHEET_NAMES.events, ["id", "date", "time", "title", "memo", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.memos, ["id", "date", "content", "priority", "updatedAt", "updatedBy"]);

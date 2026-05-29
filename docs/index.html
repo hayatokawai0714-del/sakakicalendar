@@ -91,7 +91,25 @@
               単位
               <select id="shipmentUnit"></select>
             </label>
-            <label>メモ<textarea id="shipmentMemo" rows="2"></textarea></label>
+            \r\n            <div class="spec2-toggle">
+              <button type="button" class="btn secondary small" id="addSpec2Btn">＋ 2つ目の規格を追加</button>
+            </div>
+
+            <div id="shipmentSpec2" class="subcard hidden">
+              <div class="spec2-head">
+                <div class="muted" style="margin: 0;">規格2（任意）</div>
+                <button type="button" class="text-btn" id="removeSpec2Btn">削除</button>
+              </div>
+              <label>
+                規格
+                <select id="shipmentStandard2"></select>
+              </label>
+              <label>数量<input type="number" id="shipmentQuantity2" min="0" step="0.01" /></label>
+              <label>
+                単位
+                <select id="shipmentUnit2"></select>
+              </label>
+            </div>\r\n<label>メモ<textarea id="shipmentMemo" rows="2"></textarea></label>
           </div>
 
           <div id="eventFields" class="type-fields hidden">
@@ -212,6 +230,7 @@
     <script src="./app.js?v=2026-05-28"></script>
   </body>
 </html>
+
 
 
 

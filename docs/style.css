@@ -494,3 +494,9 @@ button:disabled,
   border-radius: 999px;
   opacity: 0.9;
 }
+
+/* Shipment second spec UI */
+.btn.small { height: 32px; padding: 0 12px; font-size: 12px; }
+.spec2-toggle { margin-top: 6px; }
+.spec2-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; }
+\n.entry-spec { margin-top: 2px; font-size: 13px; color: #111827; }\n

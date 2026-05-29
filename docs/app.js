@@ -97,6 +97,8 @@ function bindEvents() {
   document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
 
   document.getElementById("entryForm").addEventListener("submit", (e) => void submitEntryForm(e));
+  document.getElementById("addSpec2Btn").addEventListener("click", () => toggleShipmentSpec2(true));
+  document.getElementById("removeSpec2Btn").addEventListener("click", () => toggleShipmentSpec2(false));
   document.getElementById("cancelEditBtn").addEventListener("click", resetEntryForm);
 
   document.getElementById("destinationForm").addEventListener("submit", (e) => void submitDestinationForm(e));
@@ -171,6 +173,7 @@ function renderAll() {
   switchEntryTypeFields();
   switchShipmentKindFields();
   switchRecurrenceTypeFields();
+  toggleShipmentSpec2(false);
   fillMasterSelects();
   renderToday();
   renderCalendar();
@@ -430,6 +433,9 @@ async function loadAllDataFromApi() {
         standard: String(s.standard || ""),
         quantity: Number(s.quantity || 0),
         unit: String(s.unit || ""),
+        standard2: String(s.standard2 || ""),
+        quantity2: Number(s.quantity2 || 0),
+        unit2: String(s.unit2 || ""),
         memo: String(s.memo || ""),
         updatedAt: String(s.updatedAt || new Date().toISOString()),
         updatedBy: String(s.updatedBy || "未設定"),
@@ -477,6 +483,9 @@ async function loadAllDataFromApi() {
       standard: String(r.standard || ""),
       quantity: Number(r.quantity || 0),
       unit: String(r.unit || ""),
+      standard2: String(r.standard2 || ""),
+      quantity2: Number(r.quantity2 || 0),
+      unit2: String(r.unit2 || ""),
       memo: String(r.memo || ""),
       recurrenceType: String(r.recurrenceType || "weekly"),
       startDate: String(r.startDate || ""),
@@ -620,7 +629,13 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
         standard: rule.standard,
         quantity: rule.quantity,
         unit: rule.unit,
+        standard2: rule.standard2 || "",
+        quantity2: rule.quantity2 || 0,
+        unit2: rule.unit2 || "",
         memo: rule.memo,
+          standard2: rule.standard2 || "",
+          quantity2: rule.quantity2 || 0,
+          unit2: rule.unit2 || "",
         updatedAt: rule.updatedAt,
         updatedBy: rule.updatedBy || currentUpdatedBy(),
         _ruleId: rule.id,
@@ -942,8 +957,10 @@ function calendarChipText(entry) {
   if (entry.type === "shipment") {
     const dest = entry.destinationName || entry.destination || "";
     const qty = `${entry.quantity ?? ""}${entry.unit || ""}`;
-    // Spot/Recurring are displayed the same in the calendar (no label/spec).
-    return `${dest} ${qty}`.trim();
+    const has2 = String(entry.standard2 || "").trim() && String(entry.unit2 || "").trim();
+    const qty2 = has2 ? `+${entry.quantity2 ? String(entry.quantity2) : ""}${entry.unit2 || ""}` : "";
+    // Calendar stays compact: destination + qty1 (+ qty2)
+    return `${dest} ${qty}${qty2 ? ` ${qty2}` : ""}`.trim();
   }
   return entrySummary(entry);
 }
@@ -966,6 +983,24 @@ function switchRecurrenceTypeFields() {
   const monthly = value === "monthlyByDate";
   document.getElementById("weekdayPicker").classList.toggle("hidden", monthly);
   document.getElementById("monthDayPicker").classList.toggle("hidden", !monthly);
+}
+
+function toggleShipmentSpec2(show) {
+  const box = document.getElementById("shipmentSpec2");
+  if (!box) return;
+  box.classList.toggle("hidden", !show);
+  const addBtn = document.getElementById("addSpec2Btn");
+  if (addBtn) addBtn.classList.toggle("hidden", show);
+
+  if (!show) {
+    // Clear values when removing the 2nd spec so it will not be saved.
+    const s2 = document.getElementById("shipmentStandard2");
+    const q2 = document.getElementById("shipmentQuantity2");
+    const u2 = document.getElementById("shipmentUnit2");
+    if (s2) s2.value = "";
+    if (q2) q2.value = "";
+    if (u2) u2.value = "";
+  }
 }
 
 function initWeekdayButtons() {
@@ -1080,6 +1115,9 @@ async function submitEntryForm(e) {
           standard: requiredValue("shipmentStandard", "規格"),
           quantity: Number(document.getElementById("shipmentQuantity").value || 0),
           unit: requiredValue("shipmentUnit", "単位"),
+          standard2: String(document.getElementById("shipmentStandard2").value || "").trim(),
+          quantity2: Number(document.getElementById("shipmentQuantity2").value || 0),
+          unit2: String(document.getElementById("shipmentUnit2").value || "").trim(),
           memo: document.getElementById("shipmentMemo").value.trim(),
           updatedAt: new Date().toISOString(),
           updatedBy: currentUpdatedBy(),
@@ -1089,7 +1127,7 @@ async function submitEntryForm(e) {
           // Optimistic UI update: reflect immediately, then sync to API (no full reload).
           saveSpotShipment(entry);
           refreshViewFast();
-          await saveShipmentToApi({
+          syncSave("saveShipment", {
             id: entry.id,
             shipmentType: "spot",
             date: entry.date,
@@ -1098,11 +1136,14 @@ async function submitEntryForm(e) {
             standard: entry.standard,
             quantity: entry.quantity,
             unit: entry.unit,
+            standard2: entry.standard2 || "",
+            quantity2: entry.quantity2 || 0,
+            unit2: entry.unit2 || "",
             memo: entry.memo,
             recurrenceRuleId: "",
             updatedAt: entry.updatedAt,
             updatedBy: entry.updatedBy,
-          });
+          }, snap, "保存しました");
           // loadAllDataFromApi() removed for performance (optimistic update).
         } else {
           saveSpotShipment(entry);
@@ -1129,6 +1170,9 @@ async function submitEntryForm(e) {
         standard: requiredValue("shipmentStandard", "規格"),
         quantity: Number(document.getElementById("shipmentQuantity").value || 0),
         unit: requiredValue("shipmentUnit", "単位"),
+          standard2: String(document.getElementById("shipmentStandard2").value || "").trim(),
+          quantity2: Number(document.getElementById("shipmentQuantity2").value || 0),
+          unit2: String(document.getElementById("shipmentUnit2").value || "").trim(),
         memo: document.getElementById("shipmentMemo").value.trim(),
         recurrenceType,
         startDate: requiredValue("startDate", "開始日"),
@@ -1147,14 +1191,20 @@ async function submitEntryForm(e) {
         // Optimistic UI update: reflect immediately, then sync to API (no full reload).
         saveRecurringShipment(rule);
         refreshViewFast();
-        await saveRecurringShipmentToApi({
+        syncSave("saveRecurringShipment", {
           id: rule.id,
           destinationId: rule.destinationId,
           destinationName: rule.destinationName,
           standard: rule.standard,
           quantity: rule.quantity,
           unit: rule.unit,
+        standard2: rule.standard2 || "",
+        quantity2: rule.quantity2 || 0,
+        unit2: rule.unit2 || "",
           memo: rule.memo,
+          standard2: rule.standard2 || "",
+          quantity2: rule.quantity2 || 0,
+          unit2: rule.unit2 || "",
           recurrenceType: rule.recurrenceType,
           startDate: rule.startDate,
           endDate: rule.endDate,
@@ -1163,7 +1213,7 @@ async function submitEntryForm(e) {
           monthDays: JSON.stringify(rule.monthDays),
           updatedAt: rule.updatedAt,
           updatedBy: rule.updatedBy,
-        });
+        }, snap, "保存しました");
         // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
         saveRecurringShipment(rule);
@@ -1263,6 +1313,10 @@ function setEntryToForm(entry) {
     document.getElementById("shipmentStandard").value = rule.standard;
     document.getElementById("shipmentQuantity").value = String(rule.quantity ?? 0);
     document.getElementById("shipmentUnit").value = rule.unit;
+    document.getElementById("shipmentStandard2").value = String(rule.standard2 || "");
+    document.getElementById("shipmentQuantity2").value = String(rule.quantity2 ?? 0);
+    document.getElementById("shipmentUnit2").value = String(rule.unit2 || "");
+    toggleShipmentSpec2(Boolean(String(rule.standard2 || "").trim()));
     document.getElementById("shipmentMemo").value = rule.memo || "";
 
     if (rule.recurrenceType === "monthlyByDate") {
@@ -1292,6 +1346,10 @@ function setEntryToForm(entry) {
     document.getElementById("shipmentStandard").value = entry.standard;
     document.getElementById("shipmentQuantity").value = String(entry.quantity ?? 0);
     document.getElementById("shipmentUnit").value = entry.unit;
+    document.getElementById("shipmentStandard2").value = String(entry.standard2 || "");
+    document.getElementById("shipmentQuantity2").value = String(entry.quantity2 ?? 0);
+    document.getElementById("shipmentUnit2").value = String(entry.unit2 || "");
+    toggleShipmentSpec2(Boolean(String(entry.standard2 || "").trim()));
     document.getElementById("shipmentMemo").value = entry.memo || "";
     return;
   }
@@ -1553,7 +1611,9 @@ function fillMasterSelects() {
   fillDestinationSelect("shipmentDestination", state.destinations.filter((d) => d.active));
   applyLastDestinationToForm();
   fillSelect("shipmentStandard", state.standards, "規格を選択");
+  fillSelect("shipmentStandard2", state.standards, "規格を選択");
   fillSelect("shipmentUnit", state.units, "単位を選択");
+  fillSelect("shipmentUnit2", state.units, "単位を選択");
 }
 
 function fillDestinationSelect(id, destinations) {
@@ -1575,14 +1635,18 @@ function fillSelect(id, items, placeholder) {
   const select = document.getElementById(id);
   const prev = select.value;
   select.innerHTML = "";
+
+  // Always include a blank/placeholder option so optional selects can stay empty.
+  select.appendChild(new Option(placeholder, ""));
+
   if (!items.length) {
-    const opt = new Option(`${placeholder}（未登録）`, "");
-    select.appendChild(opt);
     select.disabled = true;
     return;
   }
   select.disabled = false;
   items.forEach((v) => select.appendChild(new Option(v, v)));
+
+  // Restore previous selection if still available; otherwise keep blank.
   if (items.includes(prev)) select.value = prev;
 }
 
@@ -1757,6 +1821,16 @@ window.addEventListener("error", (e) => {
 // TODO: Googleスプレッドシート連携の強化（CORS回避のGET方式は暫定）
 // TODO: FAX画像アップロード/OCR（将来拡張）
 // TODO: iPhoneホーム画面ウィジェット風の『今日の予定』
+
+
+
+
+
+
+
+
+
+
 
 
 
