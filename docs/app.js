@@ -629,9 +629,6 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
         standard: rule.standard,
         quantity: rule.quantity,
         unit: rule.unit,
-        standard2: rule.standard2 || "",
-        quantity2: rule.quantity2 || 0,
-        unit2: rule.unit2 || "",
         memo: rule.memo,
           standard2: rule.standard2 || "",
           quantity2: rule.quantity2 || 0,
@@ -1124,6 +1121,7 @@ async function submitEntryForm(e) {
         };
 
         if (isApiEnabled()) {
+          const snap = snapshotLocalState_();
           // Optimistic UI update: reflect immediately, then sync to API (no full reload).
           saveSpotShipment(entry);
           refreshViewFast();
@@ -1188,6 +1186,7 @@ async function submitEntryForm(e) {
       if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上指定してください");
 
       if (isApiEnabled()) {
+        const snap = snapshotLocalState_();
         // Optimistic UI update: reflect immediately, then sync to API (no full reload).
         saveRecurringShipment(rule);
         refreshViewFast();
@@ -1198,9 +1197,6 @@ async function submitEntryForm(e) {
           standard: rule.standard,
           quantity: rule.quantity,
           unit: rule.unit,
-        standard2: rule.standard2 || "",
-        quantity2: rule.quantity2 || 0,
-        unit2: rule.unit2 || "",
           memo: rule.memo,
           standard2: rule.standard2 || "",
           quantity2: rule.quantity2 || 0,
