@@ -1162,6 +1162,9 @@ function renderEntryList(ul, entries, emptyText) {
       actions.append(editBtn, delBtn);
       li.append(main, actions);
       ul.appendChild(li);
+
+      // Debug (only when ?debug=1): dump shipment HTML + computed styles
+      if (entry.type === "shipment") appendShipmentDebug_(li, line1);
     });
 }
 
@@ -1811,7 +1814,10 @@ function renderDestinationList() {
     actions.append(editBtn, delBtn);
     li.append(name, actions);
     ul.appendChild(li);
-  });
+
+      // Debug (only when ?debug=1): dump shipment HTML + computed styles
+      if (entry.type === "shipment") appendShipmentDebug_(li, line1);
+    });
 }
 
 async function deleteDestination(d) {
@@ -2297,4 +2303,52 @@ function stripGarbageTextNodes_() {
 
 
 
+
+
+function getDebugPre_() {
+  let pre = document.getElementById("shipmentDebugPre");
+  if (!pre) {
+    pre = document.createElement("pre");
+    pre.id = "shipmentDebugPre";
+    pre.className = "shipment-debug-pre";
+    pre.textContent = "";
+    document.body.appendChild(pre);
+  }
+  return pre;
+}
+
+function appendShipmentDebug_(li, line1) {
+  if (!state._debugUiEnabled) return;
+  try {
+    console.log("[shipment html]", li.outerHTML);
+
+    const dest = line1.querySelector(".entry-destination");
+    const std = line1.querySelector(".entry-standard");
+    const qty = line1.querySelector(".entry-quantity");
+
+    const csLine = getComputedStyle(line1);
+    const csDest = dest ? getComputedStyle(dest) : null;
+    const csStd = std ? getComputedStyle(std) : null;
+    const csQty = qty ? getComputedStyle(qty) : null;
+
+    console.log("[shipment style]", {
+      line: { display: csLine.display, gridTemplateColumns: csLine.gridTemplateColumns },
+      dest: csDest ? { display: csDest.display } : null,
+      std: csStd ? { display: csStd.display } : null,
+      qty: csQty ? { display: csQty.display } : null,
+    });
+
+    const pre = getDebugPre_();
+    const parts = [];
+    parts.push("--- shipment row ---");
+    parts.push(`hasClass(entry-line--shipment)=${line1.classList.contains("entry-line--shipment")}`);
+    parts.push(`display=${csLine.display}`);
+    parts.push(`grid-template-columns=${csLine.gridTemplateColumns}`);
+    parts.push(`dest/std/qty are separate nodes=${Boolean(dest)} / ${Boolean(std)} / ${Boolean(qty)}`);
+    parts.push(li.outerHTML);
+    pre.textContent = (pre.textContent ? pre.textContent + "\n" : "") + parts.join("\n") + "\n";
+  } catch (e) {
+    console.warn("[sakaki] shipment debug failed", e);
+  }
+}
 

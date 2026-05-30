@@ -565,3 +565,4 @@ html, body {
 
 
 \r\n.entry-standard{font-variant-numeric:tabular-nums;}\r\n.entry-quantity{font-variant-numeric:tabular-nums;text-align:right;}\r\n
+\r\n\r\n/* Shipment debug pre (debug=1) */\r\n.shipment-debug-pre{position:fixed;left:8px;right:8px;bottom:88px;max-height:38vh;overflow:auto;z-index:2500;background:rgba(0,0,0,0.85);color:#fff;border-radius:12px;padding:10px;font-size:11px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}\r\n
