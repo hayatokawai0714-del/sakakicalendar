@@ -221,7 +221,6 @@ function bindEvents() {
     renderCalendar();
   });
   bindAdminPanels();
-  maybeDebugOverflow_();
 }
 
 function bindAdminPanels() {
@@ -2194,4 +2193,5 @@ function bindGlobalErrorHandlers_() {
     setDebugError_("PROMISE ERROR", e && e.reason ? e.reason : String(e));
   });
 }
+
 
