@@ -1084,6 +1084,7 @@ function renderEntryList(ul, entries, emptyText) {
         if (entry.type === "shipment") {
           // Grid-aligned shipment display for detail lists (today/selected day)
           line1.classList.add("entry-line--shipment");
+          content.classList.add("entry-content--shipment");
 
           const destEl = document.createElement("span");
           destEl.className = "entry-destination";
@@ -2294,6 +2295,7 @@ function stripGarbageTextNodes_() {
     });
   } catch {}
 }
+
 
 
 
