@@ -790,10 +790,11 @@ button {
   .entry-line.entry-line--shipment .entry-standardqty {
     grid-column: 2;
     grid-row: 2;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 10px;
+    display: flex;
+    justify-content: flex-start;
+    gap: 10px;
     align-items: baseline;
+    flex-wrap: wrap;
     min-width: 0;
   }
 
@@ -805,7 +806,7 @@ button {
 
   .entry-line.entry-line--shipment .entry-quantity {
     white-space: nowrap;
-    text-align: right;
+    text-align: left;
   }
 
   /* 2nd spec line: no destination; keep standard+qty aligned */
@@ -869,3 +870,4 @@ form,
 
 /* Keep the existing mobile 2-line layout override (max-width:600px) below working;
    it will re-override .entry-standardqty to a grid for alignment. */
+
