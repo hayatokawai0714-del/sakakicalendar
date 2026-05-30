@@ -36,6 +36,8 @@ function init() {
   renderAll();
   void bootData();
   maybeEnableOverflowDebug_();
+  window.addEventListener("pageshow", () => requestBackgroundSync_("pageshow"));
+  window.addEventListener("online", () => requestBackgroundSync_("online"));
   window.addEventListener("focus", () => requestBackgroundSync_("focus"));
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") requestBackgroundSync_("visible");
@@ -248,10 +250,17 @@ function bindAdminPanels() {
   state._closeAdminPanels = closeAll;
 }
 async function bootData() {
-  setSyncInputs();
-  if (!isApiEnabled()) return;
-  await loadAllDataFromApi();
-  renderAll();
+  try {
+    setSyncInputs();
+    if (!isApiEnabled()) return;
+    await loadAllDataFromApi();
+    renderAll();
+    console.log("[sakaki] bootData synced", { apiUrl: state.apiUrl, entries: state.entries.length, recurring: state.recurringShipments.length });
+  } catch (err) {
+    console.error("[sakaki] bootData failed", err);
+    setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    showToast("同期に失敗しました", "error");
+  }
 }
 
 function renderAll() {
@@ -430,7 +439,6 @@ function saveSyncSettings(e) {
   localStorage.setItem(STORAGE_KEYS.updatedBy, updatedBy);
   setStatus("設定を保存しました", "ok");
   void bootData();
-  maybeEnableOverflowDebug_();
 }
 
 async function testApiConnection() {
@@ -2072,3 +2080,7 @@ function maybeEnableOverflowDebug_() {
   window.setTimeout(debugOverflowElements_, 600);
   window.addEventListener("resize", () => window.setTimeout(debugOverflowElements_, 200));
 }
+
+
+
+
