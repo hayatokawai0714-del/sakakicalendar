@@ -30,6 +30,7 @@ const state = {
 init();
 
 function init() {
+  console.log("[sakaki] init", { apiUrl: state.apiUrl, updatedBy: state.updatedBy });
   loadState();
   bindEvents();
   initWeekdayButtons();
@@ -252,10 +253,30 @@ function bindAdminPanels() {
 async function bootData() {
   try {
     setSyncInputs();
-    if (!isApiEnabled()) return;
-    await loadAllDataFromApi();
-    renderAll();
-    console.log("[sakaki] bootData synced", { apiUrl: state.apiUrl, entries: state.entries.length, recurring: state.recurringShipments.length });
+    if (!isApiEnabled()) {
+      console.log("[sakaki] bootData: api disabled (localStorage mode)");
+      return;
+    }
+
+    setStatus("同期中...", "");
+
+    // iOS PWA can start before network is ready; retry a couple of times.
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await loadAllDataFromApi();
+        renderAll();
+        console.log("[sakaki] bootData synced", { attempt: attempt + 1, apiUrl: state.apiUrl, entries: state.entries.length, recurring: state.recurringShipments.length });
+        setStatus("同期完了", "ok");
+        return;
+      } catch (e) {
+        lastErr = e;
+        console.warn("[sakaki] bootData retry", { attempt: attempt + 1 }, e);
+        await sleep_(600 + attempt * 600);
+      }
+    }
+
+    throw lastErr || new Error("bootData failed");
   } catch (err) {
     console.error("[sakaki] bootData failed", err);
     setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
@@ -2080,6 +2101,8 @@ function maybeEnableOverflowDebug_() {
   window.setTimeout(debugOverflowElements_, 600);
   window.addEventListener("resize", () => window.setTimeout(debugOverflowElements_, 200));
 }
+
+
 
 
 
