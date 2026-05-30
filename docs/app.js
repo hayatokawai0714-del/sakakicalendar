@@ -35,6 +35,11 @@ function init() {
   initWeekdayButtons();
   renderAll();
   void bootData();
+  maybeEnableOverflowDebug_();
+  window.addEventListener("focus", () => requestBackgroundSync_("focus"));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") requestBackgroundSync_("visible");
+  });
 }
 
 function loadState() {
@@ -197,7 +202,6 @@ function bindEvents() {
   });
   bindAdminPanels();
   maybeDebugOverflow_();
-  lockHorizontalScroll_();
 }
 
 function bindAdminPanels() {
@@ -426,6 +430,7 @@ function saveSyncSettings(e) {
   localStorage.setItem(STORAGE_KEYS.updatedBy, updatedBy);
   setStatus("設定を保存しました", "ok");
   void bootData();
+  maybeEnableOverflowDebug_();
 }
 
 async function testApiConnection() {
@@ -635,22 +640,34 @@ async function loadAllDataFromApi() {
 }
 
 async function saveShipmentToApi(data) {
-  return await apiPost("saveShipment", data);
+  const r = await apiPost("saveShipment", data);
+  requestBackgroundSync_("saveShipment");
+  return r;
 }
 async function saveRecurringShipmentToApi(data) {
-  return await apiPost("saveRecurringShipment", data);
+  const r = await apiPost("saveRecurringShipment", data);
+  requestBackgroundSync_("saveRecurringShipment");
+  return r;
 }
 async function saveEventToApi(data) {
-  return await apiPost("saveEvent", data);
+  const r = await apiPost("saveEvent", data);
+  requestBackgroundSync_("saveEvent");
+  return r;
 }
 async function saveMemoToApi(data) {
-  return await apiPost("saveMemo", data);
+  const r = await apiPost("saveMemo", data);
+  requestBackgroundSync_("saveMemo");
+  return r;
 }
 async function saveDestinationToApi(data) {
-  return await apiPost("saveDestination", data);
+  const r = await apiPost("saveDestination", data);
+  requestBackgroundSync_("saveDestination");
+  return r;
 }
 async function deleteItemFromApi(action, id) {
-  return await apiPost(action, { id });
+  const r = await apiPost(action, { id });
+  requestBackgroundSync_(action);
+  return r;
 }
 
 function getSpotShipments() {
@@ -2000,3 +2017,58 @@ window.addEventListener("error", (e) => {
 
 
 
+
+
+function requestBackgroundSync_(reason) {
+  if (!isApiEnabled()) return;
+  // Throttle background sync to avoid hammering GAS.
+  const now = Date.now();
+  const last = Number(state._lastAutoSyncAt || 0);
+  if (now - last < 8000) return;
+  state._lastAutoSyncAt = now;
+
+  // Fire-and-forget background refresh.
+  (async () => {
+    try {
+      await loadAllDataFromApi();
+      renderAll();
+      console.log("[sakaki] auto sync ok", reason || "");
+    } catch (e) {
+      console.warn("[sakaki] auto sync failed", reason || "", e);
+    }
+  })();
+}
+
+function debugOverflowElements_() {
+  const vw = document.documentElement.clientWidth;
+  const els = Array.from(document.querySelectorAll("*"))
+    .filter((el) => el && el.scrollWidth && el.scrollWidth > vw + 1);
+
+  console.log("[sakaki] viewport width", vw);
+  console.log("[sakaki] overflow elements", els);
+
+  let panel = document.getElementById("overflowDebugPanel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "overflowDebugPanel";
+    panel.className = "overflow-debug";
+    document.body.appendChild(panel);
+  }
+
+  const rows = els
+    .slice(0, 40)
+    .map((el) => {
+      const id = el.id ? `#${el.id}` : "";
+      const cls = el.className ? `.${String(el.className).trim().replace(/\s+/g, ".")}` : "";
+      return `<div class="overflow-debug__row"><div class="overflow-debug__k">${el.tagName}${id}${cls}</div><div class="overflow-debug__v">scrollW=${el.scrollWidth} clientW=${el.clientWidth} vw=${vw}</div></div>`;
+    })
+    .join("");
+
+  panel.innerHTML = `<div class="overflow-debug__head">overflow elements (${els.length})</div>` + (rows || `<div class="overflow-debug__empty">none</div>`);
+}
+
+function maybeEnableOverflowDebug_() {
+  if (!String(location.search || "").includes("debugOverflow=1")) return;
+  window.setTimeout(debugOverflowElements_, 600);
+  window.addEventListener("resize", () => window.setTimeout(debugOverflowElements_, 200));
+}
