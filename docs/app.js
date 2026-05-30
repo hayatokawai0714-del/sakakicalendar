@@ -38,6 +38,7 @@ const state = {
 init();
 
 function init() {
+  stripGarbageTextNodes_();
   loadState();
   state._didInit = true;
   console.log("[sakaki] init");
@@ -2210,4 +2211,23 @@ function bindGlobalErrorHandlers_() {
 
 
 
+
+
+function stripGarbageTextNodes_() {
+  // Old cached HTML sometimes contains literal '`r`n' sequences as text nodes.
+  // Remove them so the UI stays clean even if the PWA uses a stale index.html.
+  try {
+    const bad = "`r`n";
+    const nodes = Array.from(document.body.childNodes || []);
+    nodes.forEach((n) => {
+      if (n && n.nodeType === Node.TEXT_NODE) {
+        const t = String(n.textContent || "");
+        if (t.includes(bad) || t.includes('\\r\\n') || t.includes('\\n')) {
+          // Remove only if it looks like the garbage sequence (mostly backticks and letters)
+          if (/^[\s`rn\\]+$/.test(t)) n.remove();
+        }
+      }
+    });
+  } catch {}
+}
 
