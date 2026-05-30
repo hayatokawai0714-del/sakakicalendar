@@ -1084,7 +1084,6 @@ function renderEntryList(ul, entries, emptyText) {
         if (entry.type === "shipment") {
           // Grid-aligned shipment display for detail lists (today/selected day)
           line1.classList.add("entry-line--shipment");
-          content.classList.add("entry-content--shipment");
 
           const destEl = document.createElement("span");
           destEl.className = "entry-destination";
@@ -1098,7 +1097,8 @@ function renderEntryList(ul, entries, emptyText) {
           qtyEl.className = "entry-quantity";
           qtyEl.textContent = `${String(entry.quantity ?? "").trim()}${String(entry.unit || "").trim()}`.trim();
 
-          content.append(destEl, stdEl, qtyEl);
+          // Append columns directly to the grid row (pill + destination + standard + quantity)
+          line1.append(destEl, stdEl, qtyEl);
 
           // 2nd spec line (aligned, without repeating the pill)
           const s2 = String(entry.standard2 || "").trim();
@@ -1112,9 +1112,6 @@ function renderEntryList(ul, entries, emptyText) {
             spacer.className = "pill pill--spacer";
             spacer.textContent = "";
 
-            const content2 = document.createElement("div");
-            content2.className = "entry-content entry-content--shipment";
-
             const dest2 = document.createElement("span");
             dest2.className = "entry-destination";
             dest2.textContent = "";
@@ -1127,8 +1124,7 @@ function renderEntryList(ul, entries, emptyText) {
             qty2.className = "entry-quantity";
             qty2.textContent = `${q2}${u2}`.trim();
 
-            content2.append(dest2, std2, qty2);
-            line2.append(spacer, content2);
+            line2.append(spacer, dest2, std2, qty2);
             main.appendChild(line2);
           }
         } else {
@@ -1137,7 +1133,7 @@ function renderEntryList(ul, entries, emptyText) {
         }
       }
 
-      line1.appendChild(content);
+      if (!line1.classList.contains("entry-line--shipment")) line1.appendChild(content);
       main.appendChild(line1);
 
       // Detail lists (today/selected day) should show memo if present.
@@ -2295,6 +2291,8 @@ function stripGarbageTextNodes_() {
     });
   } catch {}
 }
+
+
 
 
 
