@@ -21,6 +21,12 @@ const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
 const APP_VERSION = "2026-05-30.1";
 const BUILD_TIME = "2026-05-30 12:00";
 
+function isDebugUiEnabled_() {
+  const q = String(location.search || "");
+  return q.includes("debug=1") || q.includes("debugOverflow=1");
+}
+
+
 
 const state = {
   entries: [], // spot shipments + events + memos
@@ -41,9 +47,14 @@ function init() {
   stripGarbageTextNodes_();
   loadState();
   state._didInit = true;
+  state._debugUiEnabled = isDebugUiEnabled_();
   console.log("[sakaki] init");
   bindGlobalErrorHandlers_();
-  updateDebugBar_();
+  if (state._debugUiEnabled) {
+    const bar = document.getElementById("appDebugBar");
+    if (bar) bar.classList.remove("hidden");
+    updateDebugBar_();
+  }
 
   bindEvents();
   initWeekdayButtons();
@@ -2174,6 +2185,7 @@ function maybeEnableOverflowDebug_() {
 
 
 function setDebugError_(label, err) {
+  if (!state._debugUiEnabled) return;
   const el = document.getElementById("debugErrors");
   if (!el) return;
   const msg = err instanceof Error ? err.message : String(err);
@@ -2182,6 +2194,7 @@ function setDebugError_(label, err) {
 }
 
 function updateDebugBar_() {
+  if (!state._debugUiEnabled) return;
   const v = document.getElementById("appVersion");
   const t = document.getElementById("buildTime");
   const f = document.getElementById("debugFlags");
@@ -2230,4 +2243,6 @@ function stripGarbageTextNodes_() {
     });
   } catch {}
 }
+
+
 
