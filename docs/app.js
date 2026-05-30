@@ -1080,9 +1080,60 @@ function renderEntryList(ul, entries, emptyText) {
         content.appendChild(titleEl);
       } else {
         const summary = document.createElement("span");
-        summary.className = "entry-title";
-        summary.textContent = entrySummary(entry);
-        content.appendChild(summary);
+                summary.className = "entry-title";
+        if (entry.type === "shipment") {
+          // Grid-aligned shipment display for detail lists (today/selected day)
+          line1.classList.add("entry-line--shipment");
+
+          const destEl = document.createElement("span");
+          destEl.className = "entry-destination";
+          destEl.textContent = String(entry.destinationName || entry.destination || "");
+
+          const stdEl = document.createElement("span");
+          stdEl.className = "entry-standard";
+          stdEl.textContent = String(entry.standard || "");
+
+          const qtyEl = document.createElement("span");
+          qtyEl.className = "entry-quantity";
+          qtyEl.textContent = `${String(entry.quantity ?? "").trim()}${String(entry.unit || "").trim()}`.trim();
+
+          content.append(destEl, stdEl, qtyEl);
+
+          // 2nd spec line (aligned, without repeating the pill)
+          const s2 = String(entry.standard2 || "").trim();
+          const q2 = String(entry.quantity2 ?? "").trim();
+          const u2 = String(entry.unit2 || "").trim();
+          if (s2 && (q2 || u2)) {
+            const line2 = document.createElement("div");
+            line2.className = "entry-line entry-line--shipment entry-line--shipment2";
+
+            const spacer = document.createElement("span");
+            spacer.className = "pill pill--spacer";
+            spacer.textContent = "";
+
+            const content2 = document.createElement("div");
+            content2.className = "entry-content entry-content--shipment";
+
+            const dest2 = document.createElement("span");
+            dest2.className = "entry-destination";
+            dest2.textContent = "";
+
+            const std2 = document.createElement("span");
+            std2.className = "entry-standard";
+            std2.textContent = s2;
+
+            const qty2 = document.createElement("span");
+            qty2.className = "entry-quantity";
+            qty2.textContent = `${q2}${u2}`.trim();
+
+            content2.append(dest2, std2, qty2);
+            line2.append(spacer, content2);
+            main.appendChild(line2);
+          }
+        } else {
+          summary.textContent = entrySummary(entry);
+          content.appendChild(summary);
+        }
       }
 
       line1.appendChild(content);
@@ -2243,6 +2294,7 @@ function stripGarbageTextNodes_() {
     });
   } catch {}
 }
+
 
 
 
