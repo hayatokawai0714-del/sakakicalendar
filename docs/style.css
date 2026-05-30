@@ -688,3 +688,73 @@ button {
 .entry-line.entry-line--shipment .entry-standard { grid-column: 3; white-space: nowrap; }
 .entry-line.entry-line--shipment .entry-quantity { grid-column: 4; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
 
+
+
+/* Fix: constrain detail list rows to card width (iOS PWA) */
+.entry-row {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.entry-main {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.entry-line.entry-line--shipment {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) 56px 56px !important;
+  column-gap: 6px;
+  align-items: center;
+}
+
+.entry-line.entry-line--shipment > * {
+  min-width: 0;
+}
+
+.entry-line.entry-line--shipment .entry-destination {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-line.entry-line--shipment .entry-standard,
+.entry-line.entry-line--shipment .entry-quantity {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.entry-line.entry-line--shipment .entry-quantity {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-actions {
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .entry-line.entry-line--shipment {
+    grid-template-columns: 38px minmax(0, 1fr) 48px 50px !important;
+    column-gap: 4px;
+  }
+  .row-actions .text-btn {
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+}
+
