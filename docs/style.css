@@ -871,3 +871,44 @@ form,
 /* Keep the existing mobile 2-line layout override (max-width:600px) below working;
    it will re-override .entry-standardqty to a grid for alignment. */
 
+
+/* Shipment detail card (today/selected day) */
+.shipment-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.shipment-detail {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shipment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.shipment-destination {
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.shipment-specs {
+  margin-left: 52px;
+  margin-top: 4px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shipment-spec {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

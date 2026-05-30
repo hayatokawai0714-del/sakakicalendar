@@ -1082,70 +1082,54 @@ function renderEntryList(ul, entries, emptyText) {
         const summary = document.createElement("span");
                 summary.className = "entry-title";
         if (entry.type === "shipment") {
-          // Grid-aligned shipment display for detail lists (today/selected day)
-          line1.classList.add("entry-line--shipment");
+          // Shipment detail block: destination first, then specs (prevents 2nd spec floating above on mobile)
+          li.classList.add("shipment-card");
 
-          const destEl = document.createElement("span");
-          destEl.className = "entry-destination";
-          destEl.textContent = String(entry.destinationName || entry.destination || "");
+          const wrap = document.createElement("div");
+          wrap.className = "shipment-detail";
 
-          // Wrap standard + quantity so mobile can render a 2-line layout while desktop keeps column alignment.
-          const stdQty = document.createElement("span");
-          stdQty.className = "entry-standardqty";
+          const head = document.createElement("div");
+          head.className = "shipment-head";
 
-          const stdEl = document.createElement("span");
-          stdEl.className = "entry-standard";
-          stdEl.textContent = String(entry.standard || "");
+          const dest = document.createElement("span");
+          dest.className = "shipment-destination";
+          dest.textContent = String(entry.destinationName || entry.destination || "");
 
-          const qtyEl = document.createElement("span");
-          qtyEl.className = "entry-quantity";
-          qtyEl.textContent = `${String(entry.quantity ?? "").trim()}${String(entry.unit || "").trim()}`.trim();
+          head.append(pill, dest);
 
-          stdQty.append(stdEl, qtyEl);
+          const specs = document.createElement("div");
+          specs.className = "shipment-specs";
 
-          // Append columns directly to the grid row (pill + destination + standard/qty wrapper)
-          line1.append(destEl, stdQty);
+          const mkSpec = (std, qty, unit) => {
+            const s = String(std || "").trim();
+            const q = String(qty ?? "").trim();
+            const u = String(unit || "").trim();
+            if (!s) return null;
+            const row = document.createElement("div");
+            row.className = "shipment-spec";
+            const right = `${q}${u}`.trim();
+            row.textContent = right ? `${s} ${right}` : s;
+            return row;
+          };
 
-          // 2nd spec line (aligned, without repeating the pill)
-          const s2 = String(entry.standard2 || "").trim();
-          const q2 = String(entry.quantity2 ?? "").trim();
-          const u2 = String(entry.unit2 || "").trim();
-          if (s2 && (q2 || u2)) {
-            const line2 = document.createElement("div");
-            line2.className = "entry-line entry-line--shipment entry-line--shipment2";
+          const spec1 = mkSpec(entry.standard, entry.quantity, entry.unit);
+          if (spec1) specs.appendChild(spec1);
 
-            const spacer = document.createElement("span");
-            spacer.className = "pill pill--spacer";
-            spacer.textContent = "";
+          const spec2 = mkSpec(entry.standard2, entry.quantity2, entry.unit2);
+          if (spec2) specs.appendChild(spec2);
 
-            const dest2 = document.createElement("span");
-            dest2.className = "entry-destination";
-            dest2.textContent = "";
-
-            const stdQty2 = document.createElement("span");
-            stdQty2.className = "entry-standardqty";
-
-            const std2 = document.createElement("span");
-            std2.className = "entry-standard";
-            std2.textContent = s2;
-
-            const qty2 = document.createElement("span");
-            qty2.className = "entry-quantity";
-            qty2.textContent = `${q2}${u2}`.trim();
-
-            stdQty2.append(std2, qty2);
-
-            line2.append(spacer, dest2, stdQty2);
-            main.appendChild(line2);
-          }
+          wrap.append(head, specs);
+          main.appendChild(wrap);
         } else {
           summary.textContent = entrySummary(entry);
           content.appendChild(summary);
         }
       }
 
+      if (!li.classList.contains("shipment-card")) {
       if (!line1.classList.contains("entry-line--shipment")) line1.appendChild(content);
       main.appendChild(line1);
+    }
 
       // Detail lists (today/selected day) should show memo if present.
       const memoText = entry && (entry.type === "shipment" || entry.type === "event") ? String(entry.memo || "").trim() : "";
@@ -2360,5 +2344,6 @@ function appendShipmentDebug_(li, line1) {
     console.warn("[sakaki] shipment debug failed", e);
   }
 }
+
 
 
