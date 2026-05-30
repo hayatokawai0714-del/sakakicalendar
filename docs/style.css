@@ -836,3 +836,36 @@ form,
   max-width: 100%;
   min-width: 0;
 }
+
+/* Compact shipment layout for detail lists (today/selected day)
+   Goal: keep destination and spec close (avoid overly wide 4-column table look). */
+.entry-line.entry-line--shipment {
+  /* Override older 4-col rules */
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  grid-auto-rows: auto;
+  row-gap: 2px;
+  column-gap: 10px;
+  align-items: start;
+}
+
+.entry-line.entry-line--shipment .entry-destination {
+  font-weight: 700;
+}
+
+/* Standard + quantity should stay visually close */
+.entry-standardqty {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.entry-standardqty .entry-standard,
+.entry-standardqty .entry-quantity {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* Keep the existing mobile 2-line layout override (max-width:600px) below working;
+   it will re-override .entry-standardqty to a grid for alignment. */
