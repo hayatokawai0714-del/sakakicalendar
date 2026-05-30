@@ -271,6 +271,11 @@ async function bootData() {
   updateDebugBar_();
   console.log("[sakaki] bootData start");
   const apiUrl = String(state.apiUrl || "").trim();
+  state._bootApiBranch = Boolean(apiUrl);
+  state._autoSyncStarted = false;
+  state._autoSyncSucceeded = false;
+  state._autoSyncFailed = false;
+  updateDebugBar_();
   console.log("[sakaki] api url exists", Boolean(apiUrl));
 
   try {
@@ -279,6 +284,8 @@ async function bootData() {
 
     setStatus("同期中...", "");
     console.log("[sakaki] auto sync start");
+    state._autoSyncStarted = true;
+    updateDebugBar_();
     state._lastAutoSyncOk = false;
     updateDebugBar_();
 
@@ -289,6 +296,7 @@ async function bootData() {
         await loadAllDataFromApi();
         renderAll();
         state._lastAutoSyncOk = true;
+        state._autoSyncSucceeded = true;
         updateDebugBar_();
         console.log("[sakaki] auto sync done", { attempt: attempt + 1, entries: state.entries.length, recurring: state.recurringShipments.length });
         setStatus("同期完了", "ok");
@@ -302,7 +310,10 @@ async function bootData() {
 
     throw lastErr || new Error("bootData failed");
   } catch (err) {
+    state._autoSyncFailed = true;
+    updateDebugBar_();
     console.error("[sakaki] bootData failed", err);
+    console.error("[sakaki] loadAllDataFromApi failed", err);
     setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
     state._lastAutoSyncOk = false;
     updateDebugBar_();
@@ -591,6 +602,7 @@ async function apiRequest_(method, action, url, payload) {
 }
 
 async function loadAllDataFromApi() {
+  console.log("[sakaki] loadAllDataFromApi start");
   try {
     setBusy(true, "読み込み中...");
     const all = await apiGet("getAll");
@@ -703,8 +715,10 @@ async function loadAllDataFromApi() {
     if (units.length) state.units = units;
 
     saveState();
+    console.log("[sakaki] loadAllDataFromApi success");
     setStatus("読み込み完了", "ok");
   } catch (err) {
+    console.error("[sakaki] loadAllDataFromApi failed", err);
     setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
   } finally {
     setBusy(false, "");
@@ -2179,7 +2193,7 @@ function updateDebugBar_() {
       `init:${Boolean(state._didInit)}`,
       `boot:${Boolean(state._didBoot)}`,
       `apiUrl:${Boolean(api)}`,
-      `autoSync:${String(state._lastAutoSyncOk)}`,
+      `autoSync:${String(state._lastAutoSyncOk)} / started:${Boolean(state._autoSyncStarted)} / ok:${Boolean(state._autoSyncSucceeded)} / fail:${Boolean(state._autoSyncFailed)} / branch:${Boolean(state._bootApiBranch)}`,
     ];
     f.textContent = flags.join(" / ");
   }
@@ -2193,5 +2207,7 @@ function bindGlobalErrorHandlers_() {
     setDebugError_("PROMISE ERROR", e && e.reason ? e.reason : String(e));
   });
 }
+
+
 
 
