@@ -3,8 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>出荷・予定管理</title>
-    <link rel="stylesheet" href="./style.css?v=2026-05-30-1" />
+    <title>出荷・予定管理</title>`r`n    <link rel="manifest" href="./manifest.json?v=2026-05-30-1" />`r`n    <meta name="apple-mobile-web-app-capable" content="yes" />`r`n    <meta name="apple-mobile-web-app-status-bar-style" content="default" />`r`n    <meta name="apple-mobile-web-app-title" content="出荷予定" />`r`n    <link rel="stylesheet" href="./style.css?v=2026-05-30-6" />
   </head>
   <body>
     <main class="container">
@@ -225,11 +224,18 @@
           </div>
         </section>
       </div>
+      <section class="debug-bar" id="appDebugBar" aria-label="debug">
+        <div class="debug-bar__row"><span id="appVersion"></span><span id="buildTime"></span></div>
+        <div class="debug-bar__row muted" id="debugFlags"></div>
+        <div class="debug-bar__err hidden" id="debugErrors"></div>
+      </section>
     </main>
 
-    <script src="./app.js?v=2026-05-30-5"></script>
+    <script src="./app.js?v=2026-05-30-6"></script>
   </body>
 </html>
+
+
 
 
 

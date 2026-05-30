@@ -10,10 +10,17 @@
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
 
-// Fallback API URL for iOS PWA cases where localStorage is wiped.\n// Must be the GAS Web app /exec URL.\nconst DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyDXMDE-UAyj66LCvNZ6Q43IaNAVRLxdFtUARDEbFWCmaKeKwQtlUf1o9X-1G3BrC4G/exec";
+// Fallback API URL for iOS PWA cases where localStorage is wiped.
+// Must be the GAS Web app /exec URL.
+const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyDXMDE-UAyj66LCvNZ6Q43IaNAVRLxdFtUARDEbFWCmaKeKwQtlUf1o9X-1G3BrC4G/exec";
 
 const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
 const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
+
+// Build info (for PWA cache debugging)
+const APP_VERSION = "2026-05-30.1";
+const BUILD_TIME = "2026-05-30 12:00";
+
 
 const state = {
   entries: [], // spot shipments + events + memos
@@ -32,7 +39,10 @@ init();
 
 function init() {
   loadState();
+  state._didInit = true;
   console.log("[sakaki] init");
+  bindGlobalErrorHandlers_();
+  updateDebugBar_();
 
   bindEvents();
   initWeekdayButtons();
@@ -258,6 +268,8 @@ function bindAdminPanels() {
   state._closeAdminPanels = closeAll;
 }
 async function bootData() {
+  state._didBoot = true;
+  updateDebugBar_();
   console.log("[sakaki] bootData start");
   const apiUrl = String(state.apiUrl || "").trim();
   console.log("[sakaki] api url exists", Boolean(apiUrl));
@@ -268,6 +280,8 @@ async function bootData() {
 
     setStatus("同期中...", "");
     console.log("[sakaki] auto sync start");
+    state._lastAutoSyncOk = false;
+    updateDebugBar_();
 
     // iOS PWA can start before network is ready; retry a couple of times.
     let lastErr = null;
@@ -275,6 +289,8 @@ async function bootData() {
       try {
         await loadAllDataFromApi();
         renderAll();
+        state._lastAutoSyncOk = true;
+        updateDebugBar_();
         console.log("[sakaki] auto sync done", { attempt: attempt + 1, entries: state.entries.length, recurring: state.recurringShipments.length });
         setStatus("同期完了", "ok");
         return;
@@ -289,6 +305,8 @@ async function bootData() {
   } catch (err) {
     console.error("[sakaki] bootData failed", err);
     setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    state._lastAutoSyncOk = false;
+    updateDebugBar_();
     showToast("同期に失敗しました", "error");
   }
 }
@@ -2139,4 +2157,41 @@ function maybeEnableOverflowDebug_() {
 
 
 
+
+
+function setDebugError_(label, err) {
+  const el = document.getElementById("debugErrors");
+  if (!el) return;
+  const msg = err instanceof Error ? err.message : String(err);
+  el.textContent = `${label}: ${msg}`;
+  el.classList.remove("hidden");
+}
+
+function updateDebugBar_() {
+  const v = document.getElementById("appVersion");
+  const t = document.getElementById("buildTime");
+  const f = document.getElementById("debugFlags");
+  if (v) v.textContent = `v${APP_VERSION}`;
+  if (t) t.textContent = BUILD_TIME;
+
+  if (f) {
+    const api = String(state.apiUrl || "").trim();
+    const flags = [
+      `init:${Boolean(state._didInit)}`,
+      `boot:${Boolean(state._didBoot)}`,
+      `apiUrl:${Boolean(api)}`,
+      `autoSync:${String(state._lastAutoSyncOk)}`,
+    ];
+    f.textContent = flags.join(" / ");
+  }
+}
+
+function bindGlobalErrorHandlers_() {
+  window.addEventListener("error", (e) => {
+    setDebugError_("JS ERROR", e && e.error ? e.error : (e && e.message ? e.message : String(e)));
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    setDebugError_("PROMISE ERROR", e && e.reason ? e.reason : String(e));
+  });
+}
 
