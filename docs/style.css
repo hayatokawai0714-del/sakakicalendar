@@ -758,3 +758,81 @@ button {
   }
 }
 
+
+/* Shipment detail: standard + quantity wrapper */
+.entry-standardqty { display: contents; }
+
+@media (max-width: 600px) {
+  /* Mobile: show destination on first line, standard+qty on second line (no over-truncation) */
+  .entry-line.entry-line--shipment {
+    grid-template-columns: 42px minmax(0, 1fr) !important;
+    grid-auto-rows: auto;
+    row-gap: 2px;
+    column-gap: 8px;
+    align-items: start;
+  }
+
+  .entry-line.entry-line--shipment .pill { grid-column: 1; grid-row: 1; }
+
+  .entry-line.entry-line--shipment .entry-destination {
+    grid-column: 2;
+    grid-row: 1;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: clip;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .entry-line.entry-line--shipment .entry-standardqty {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 10px;
+    align-items: baseline;
+    min-width: 0;
+  }
+
+  .entry-line.entry-line--shipment .entry-standard {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry-line.entry-line--shipment .entry-quantity {
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  /* 2nd spec line: no destination; keep standard+qty aligned */
+  .entry-line.entry-line--shipment2 .pill--spacer { grid-column: 1; grid-row: 1; }
+  .entry-line.entry-line--shipment2 .entry-destination { display: none; }
+  .entry-line.entry-line--shipment2 .entry-standardqty { grid-row: 1; }
+}
+/* Date input width guard (avoid horizontal scroll on iOS/PWA) */
+input[type="date"],
+input[type="datetime-local"],
+.date-input,
+#shipmentDate,
+#eventDate,
+#memoDate,
+#startDate,
+#endDate {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Form/layout overflow guard */
+form,
+.form,
+.form-row,
+.form-grid,
+.qty-unit-row {
+  max-width: 100%;
+  min-width: 0;
+}

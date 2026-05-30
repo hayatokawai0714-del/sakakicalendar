@@ -1089,6 +1089,10 @@ function renderEntryList(ul, entries, emptyText) {
           destEl.className = "entry-destination";
           destEl.textContent = String(entry.destinationName || entry.destination || "");
 
+          // Wrap standard + quantity so mobile can render a 2-line layout while desktop keeps column alignment.
+          const stdQty = document.createElement("span");
+          stdQty.className = "entry-standardqty";
+
           const stdEl = document.createElement("span");
           stdEl.className = "entry-standard";
           stdEl.textContent = String(entry.standard || "");
@@ -1097,8 +1101,10 @@ function renderEntryList(ul, entries, emptyText) {
           qtyEl.className = "entry-quantity";
           qtyEl.textContent = `${String(entry.quantity ?? "").trim()}${String(entry.unit || "").trim()}`.trim();
 
-          // Append columns directly to the grid row (pill + destination + standard + quantity)
-          line1.append(destEl, stdEl, qtyEl);
+          stdQty.append(stdEl, qtyEl);
+
+          // Append columns directly to the grid row (pill + destination + standard/qty wrapper)
+          line1.append(destEl, stdQty);
 
           // 2nd spec line (aligned, without repeating the pill)
           const s2 = String(entry.standard2 || "").trim();
@@ -1116,6 +1122,9 @@ function renderEntryList(ul, entries, emptyText) {
             dest2.className = "entry-destination";
             dest2.textContent = "";
 
+            const stdQty2 = document.createElement("span");
+            stdQty2.className = "entry-standardqty";
+
             const std2 = document.createElement("span");
             std2.className = "entry-standard";
             std2.textContent = s2;
@@ -1124,7 +1133,9 @@ function renderEntryList(ul, entries, emptyText) {
             qty2.className = "entry-quantity";
             qty2.textContent = `${q2}${u2}`.trim();
 
-            line2.append(spacer, dest2, std2, qty2);
+            stdQty2.append(std2, qty2);
+
+            line2.append(spacer, dest2, stdQty2);
             main.appendChild(line2);
           }
         } else {
@@ -2349,4 +2360,5 @@ function appendShipmentDebug_(li, line1) {
     console.warn("[sakaki] shipment debug failed", e);
   }
 }
+
 
