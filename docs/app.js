@@ -10,6 +10,7 @@
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
 
+// Fallback API URL for iOS PWA cases where localStorage is wiped.\n// Must be the GAS Web app /exec URL.\nconst DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyDXMDE-UAyj66LCvNZ6Q43IaNAVRLxdFtUARDEbFWCmaKeKwQtlUf1o9X-1G3BrC4G/exec";
 
 const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
 const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
@@ -56,8 +57,8 @@ function loadState() {
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
-  state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || localStorage.getItem("sakaki_api_url_v1") || "").trim();
-  console.log("[sakaki] loaded api url", localStorage.getItem("sakaki_api_url_v1"));
+  state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim() || String(DEFAULT_API_URL || "").trim();
+  console.log("[sakaki] loaded api url", state.apiUrl);
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
 
   // Backward compatibility: existing shipments are spot shipments.
@@ -331,7 +332,10 @@ function isApiEnabled() {
 function setSyncInputs() {
   const apiEl = document.getElementById("apiUrlInput");
   const byEl = document.getElementById("updatedByInput");
-  if (apiEl && apiEl.value !== state.apiUrl) apiEl.value = state.apiUrl;
+  if (apiEl) {
+    const v = state.apiUrl || String(DEFAULT_API_URL || "").trim();
+    if (apiEl.value !== v) apiEl.value = v;
+  }
   if (byEl && byEl.value !== state.updatedBy) byEl.value = state.updatedBy;
 }
 
@@ -2123,6 +2127,8 @@ function maybeEnableOverflowDebug_() {
   window.setTimeout(debugOverflowElements_, 600);
   window.addEventListener("resize", () => window.setTimeout(debugOverflowElements_, 200));
 }
+
+
 
 
 
