@@ -30,18 +30,23 @@ const state = {
 init();
 
 function init() {
-  console.log("[sakaki] init", { apiUrl: state.apiUrl, updatedBy: state.updatedBy });
   loadState();
+  console.log("[sakaki] init");
+
   bindEvents();
   initWeekdayButtons();
   renderAll();
+
+  // Always attempt auto sync on startup when API URL exists.
   void bootData();
   maybeEnableOverflowDebug_();
-  window.addEventListener("pageshow", () => requestBackgroundSync_("pageshow"));
-  window.addEventListener("online", () => requestBackgroundSync_("online"));
+
+  // iOS PWA may restore from bfcache; pageshow is the most reliable hook.
+  window.addEventListener("pageshow", () => void bootData());
+  window.addEventListener("online", () => void bootData());
   window.addEventListener("focus", () => requestBackgroundSync_("focus"));
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") requestBackgroundSync_("visible");
+    if (document.visibilityState === "visible") void bootData();
   });
 }
 
@@ -251,14 +256,16 @@ function bindAdminPanels() {
   state._closeAdminPanels = closeAll;
 }
 async function bootData() {
+  console.log("[sakaki] bootData start");
+  const apiUrl = String(state.apiUrl || "").trim();
+  console.log("[sakaki] api url exists", Boolean(apiUrl));
+
   try {
     setSyncInputs();
-    if (!isApiEnabled()) {
-      console.log("[sakaki] bootData: api disabled (localStorage mode)");
-      return;
-    }
+    if (!apiUrl) return;
 
     setStatus("同期中...", "");
+    console.log("[sakaki] auto sync start");
 
     // iOS PWA can start before network is ready; retry a couple of times.
     let lastErr = null;
@@ -266,7 +273,7 @@ async function bootData() {
       try {
         await loadAllDataFromApi();
         renderAll();
-        console.log("[sakaki] bootData synced", { attempt: attempt + 1, apiUrl: state.apiUrl, entries: state.entries.length, recurring: state.recurringShipments.length });
+        console.log("[sakaki] auto sync done", { attempt: attempt + 1, entries: state.entries.length, recurring: state.recurringShipments.length });
         setStatus("同期完了", "ok");
         return;
       } catch (e) {
@@ -2101,6 +2108,9 @@ function maybeEnableOverflowDebug_() {
   window.setTimeout(debugOverflowElements_, 600);
   window.addEventListener("resize", () => window.setTimeout(debugOverflowElements_, 200));
 }
+
+
+
 
 
 
