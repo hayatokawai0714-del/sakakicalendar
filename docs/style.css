@@ -557,12 +557,134 @@ html, body {
 /* Overflow guard for grid/flex children */
 .calendar-grid, .weekday-row, .day-cell, .sheet, .sheet-body, form, .form, .actions, .row-actions { min-width: 0; }
 
-\r\n\r\n/* PWA horizontal scroll lock */\r\nhtml,\r\nbody {\r\n  width: 100%;\r\n  max-width: 100%;\r\n  overflow-x: hidden !important;\r\n  overscroll-behavior-x: none;\r\n  position: relative;\r\n}\r\n\r\nbody {\r\n  touch-action: pan-y;\r\n}\r\n\r\n#app,\r\n.container,\r\n.card,\r\n.calendar-card,\r\n.calendar-wrap,\r\n.calendar-grid,\r\n.weekday-row,\r\n.sheet,\r\n.sheet-body,\r\nform,\r\n.form-row,\r\n.form-grid {\r\n  max-width: 100%;\r\n  min-width: 0;\r\n  overflow-x: hidden;\r\n  box-sizing: border-box;\r\n}\r\n\r\n*,\r\n*::before,\r\n*::after {\r\n  box-sizing: border-box;\r\n}\r\n\r\ninput,\r\nselect,\r\ntextarea,\r\nbutton {\r\n  max-width: 100%;\r\n  min-width: 0;\r\n  font-size: 16px;\r\n}\r\n
-\r\n\r\n/* Overflow debug panel (debugOverflow=1) */\r\n.overflow-debug{position:fixed;left:8px;right:8px;bottom:88px;max-height:38vh;overflow:auto;z-index:2000;background:rgba(0,0,0,0.82);color:#fff;border-radius:12px;padding:10px;font-size:12px;line-height:1.35;}\r\n.overflow-debug__head{font-weight:700;margin:0 0 8px;}\r\n.overflow-debug__row{padding:6px 0;border-top:1px solid rgba(255,255,255,0.15);}\r\n.overflow-debug__k{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;overflow-wrap:anywhere;word-break:break-word;}\r\n.overflow-debug__v{opacity:0.85;}\r\n.overflow-debug__empty{opacity:0.75;}\r\n
-\r\n\r\n/* Debug bar */\r\n.debug-bar{position:sticky;bottom:0;z-index:20;background:rgba(255,255,255,0.94);backdrop-filter:blur(8px);border:1px solid #e5e7eb;border-radius:14px;padding:8px 10px;margin:10px 0 0;max-width:100%;overflow:hidden;}\r\n.debug-bar__row{display:flex;justify-content:space-between;gap:8px;min-width:0;}\r\n.debug-bar__row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\r\n.debug-bar__err{margin-top:6px;padding-top:6px;border-top:1px solid #eef2f7;color:#b91c1c;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}\r\n
-\r\n.qty-unit-row label > input,\r\n.qty-unit-row label > select { width: 100%; }\r\n
-\r\n\r\n/* Detail list: aligned shipment rows */\r\n.entry-line--shipment {\r\n  display: grid !important;\r\n  grid-template-columns: auto minmax(0, 1.6fr) 5.5ch 7ch;\r\n  gap: 8px;\r\n  align-items: center;\r\n}\r\n\r\n.entry-content--shipment {\r\n  display: contents;\r\n}\r\n\r\n.pill--spacer {\r\n  opacity: 0;\r\n  width: auto;\r\n}\r\n\r\n.entry-destination {\r\n  min-width: 0;\r\n  overflow: hidden;\r\n  text-overflow: ellipsis;\r\n  white-space: nowrap;\r\n}\r\n\r\n.entry-standard,\r\n.entry-quantity {\r\n  white-space: nowrap;\r\n}\r\n\r\n.entry-line--shipment2 {\r\n  margin-top: 4px;\r\n}\r\n
 
 
-\r\n.entry-standard{font-variant-numeric:tabular-nums;}\r\n.entry-quantity{font-variant-numeric:tabular-nums;text-align:right;}\r\n
-\r\n\r\n/* Shipment debug pre (debug=1) */\r\n.shipment-debug-pre{position:fixed;left:8px;right:8px;bottom:88px;max-height:38vh;overflow:auto;z-index:2500;background:rgba(0,0,0,0.85);color:#fff;border-radius:12px;padding:10px;font-size:11px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}\r\n
+/* PWA horizontal scroll lock */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden !important;
+  overscroll-behavior-x: none;
+  position: relative;
+}
+
+body {
+  touch-action: pan-y;
+}
+
+#app,
+.container,
+.card,
+.calendar-card,
+.calendar-wrap,
+.calendar-grid,
+.weekday-row,
+.sheet,
+.sheet-body,
+form,
+.form-row,
+.form-grid {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+  min-width: 0;
+  font-size: 16px;
+}
+
+
+
+/* Overflow debug panel (debugOverflow=1) */
+.overflow-debug{position:fixed;left:8px;right:8px;bottom:88px;max-height:38vh;overflow:auto;z-index:2000;background:rgba(0,0,0,0.82);color:#fff;border-radius:12px;padding:10px;font-size:12px;line-height:1.35;}
+.overflow-debug__head{font-weight:700;margin:0 0 8px;}
+.overflow-debug__row{padding:6px 0;border-top:1px solid rgba(255,255,255,0.15);}
+.overflow-debug__k{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;overflow-wrap:anywhere;word-break:break-word;}
+.overflow-debug__v{opacity:0.85;}
+.overflow-debug__empty{opacity:0.75;}
+
+
+
+/* Debug bar */
+.debug-bar{position:sticky;bottom:0;z-index:20;background:rgba(255,255,255,0.94);backdrop-filter:blur(8px);border:1px solid #e5e7eb;border-radius:14px;padding:8px 10px;margin:10px 0 0;max-width:100%;overflow:hidden;}
+.debug-bar__row{display:flex;justify-content:space-between;gap:8px;min-width:0;}
+.debug-bar__row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.debug-bar__err{margin-top:6px;padding-top:6px;border-top:1px solid #eef2f7;color:#b91c1c;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}
+
+
+.qty-unit-row label > input,
+.qty-unit-row label > select { width: 100%; }
+
+
+
+/* Detail list: aligned shipment rows */
+.entry-line--shipment {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1.6fr) 5.5ch 7ch;
+  gap: 8px;
+  align-items: center;
+}
+
+.entry-content--shipment {
+  display: contents;
+}
+
+.pill--spacer {
+  opacity: 0;
+  width: auto;
+}
+
+.entry-destination {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-standard,
+.entry-quantity {
+  white-space: nowrap;
+}
+
+.entry-line--shipment2 {
+  margin-top: 4px;
+}
+
+
+
+
+.entry-standard{font-variant-numeric:tabular-nums;}
+.entry-quantity{font-variant-numeric:tabular-nums;text-align:right;}
+
+
+
+/* Shipment debug pre (debug=1) */
+.shipment-debug-pre{position:fixed;left:8px;right:8px;bottom:88px;max-height:38vh;overflow:auto;z-index:2500;background:rgba(0,0,0,0.85);color:#fff;border-radius:12px;padding:10px;font-size:11px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}
+
+
+
+/* Strong override: force shipment row grid */
+.entry-line.entry-line--shipment {
+  display: grid !important;
+  grid-template-columns: 44px minmax(0, 1fr) 64px 64px;
+  column-gap: 8px;
+  align-items: center;
+}
+.entry-line.entry-line--shipment .pill { grid-column: 1; }
+.entry-line.entry-line--shipment .entry-destination { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-line.entry-line--shipment .entry-standard { grid-column: 3; white-space: nowrap; }
+.entry-line.entry-line--shipment .entry-quantity { grid-column: 4; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+

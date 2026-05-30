@@ -1815,8 +1815,6 @@ function renderDestinationList() {
     li.append(name, actions);
     ul.appendChild(li);
 
-      // Debug (only when ?debug=1): dump shipment HTML + computed styles
-      if (entry.type === "shipment") appendShipmentDebug_(li, line1);
     });
 }
 
