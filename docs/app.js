@@ -56,7 +56,8 @@ function loadState() {
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
-  state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
+  state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || localStorage.getItem("sakaki_api_url_v1") || "").trim();
+  console.log("[sakaki] loaded api url", localStorage.getItem("sakaki_api_url_v1"));
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
 
   // Backward compatibility: existing shipments are spot shipments.
@@ -461,10 +462,24 @@ function saveSyncSettings(e) {
   e.preventDefault();
   const apiUrl = String(document.getElementById("apiUrlInput").value || "").trim();
   const updatedBy = String(document.getElementById("updatedByInput").value || "").trim();
-  state.apiUrl = apiUrl;
+
+  console.log("[sakaki] save api url", apiUrl);
+
+  // Prevent accidental clearing: if input is empty but we already have a saved URL, keep it.
+  const existing = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
+  const nextUrl = apiUrl || existing;
+
+  state.apiUrl = nextUrl;
   state.updatedBy = updatedBy;
-  localStorage.setItem(STORAGE_KEYS.apiUrl, apiUrl);
+
+  localStorage.setItem(STORAGE_KEYS.apiUrl, nextUrl);
   localStorage.setItem(STORAGE_KEYS.updatedBy, updatedBy);
+
+  console.log("[sakaki] localStorage saved api url", localStorage.getItem("sakaki_api_url_v1"));
+
+  // Reflect to inputs immediately
+  setSyncInputs();
+
   setStatus("設定を保存しました", "ok");
   void bootData();
 }
@@ -2108,6 +2123,8 @@ function maybeEnableOverflowDebug_() {
   window.setTimeout(debugOverflowElements_, 600);
   window.addEventListener("resize", () => window.setTimeout(debugOverflowElements_, 200));
 }
+
+
 
 
 
