@@ -2401,7 +2401,8 @@ function getGeneratedRecurringForRange(startDate, endDate) {
 }
 
 function summarizeShipmentQuantities(shipments) {
-  const map = new Map();
+  // Group by destination, then by (standard, unit) and sum numeric quantities.
+  const destMap = new Map();
 
   function addLine(dest, std, qty, unit) {
     const d = String(dest || "").trim();
@@ -2411,24 +2412,42 @@ function summarizeShipmentQuantities(shipments) {
 
     const qtyNum = Number.parseFloat(String(qty ?? "").trim());
     const hasNum = Number.isFinite(qtyNum);
-    const key = `${d}||${s}||${u}`;
-    const cur = map.get(key) || { destinationName: d, standard: s, unit: u, total: 0, nonNumeric: [] };
+
+    const group = destMap.get(d) || new Map();
+    const key = `${s}||${u}`;
+    const cur = group.get(key) || { standard: s, unit: u, total: 0, nonNumeric: [] };
     if (hasNum) cur.total += qtyNum;
     else cur.nonNumeric.push(String(qty ?? "").trim());
-    map.set(key, cur);
+    group.set(key, cur);
+    destMap.set(d, group);
   }
 
   (shipments || []).forEach((sh) => {
-    addLine(sh.destinationName || sh.destination, sh.standard, sh.quantity, sh.unit);
+    const dest = sh.destinationName || sh.destination;
+    addLine(dest, sh.standard, sh.quantity, sh.unit);
     const s2 = String(sh.standard2 || "").trim();
     const u2 = String(sh.unit2 || "").trim();
-    if (s2 && u2) addLine(sh.destinationName || sh.destination, sh.standard2, sh.quantity2, sh.unit2);
+    if (s2 && u2) addLine(dest, sh.standard2, sh.quantity2, sh.unit2);
   });
 
-  return Array.from(map.values()).map((x) => {
-    const qtyText = x.nonNumeric.length ? null : String(trimTrailingZeros(x.total));
-    return { ...x, qtyText };
+  const out = [];
+  destMap.forEach((group, destinationName) => {
+    const specs = Array.from(group.values()).map((x) => {
+      const qtyText = x.nonNumeric.length ? null : String(trimTrailingZeros(x.total));
+      return { ...x, qtyText };
+    });
+
+    // Sort specs: standard then unit
+    specs.sort((a, b) => a.standard.localeCompare(b.standard) || a.unit.localeCompare(b.unit));
+
+    // Destination sort weight: sum of numeric totals across specs (non-numeric treated as 0)
+    const weight = specs.reduce((sum, x) => sum + (x.qtyText == null ? 0 : Number.parseFloat(x.qtyText)), 0);
+    out.push({ destinationName, weight, specs });
   });
+
+  // Destinations: highest weight first, then name
+  out.sort((a, b) => (b.weight - a.weight) || a.destinationName.localeCompare(b.destinationName));
+  return out;
 }
 
 function trimTrailingZeros(n) {
@@ -2453,9 +2472,6 @@ function renderNextWeekShipmentSummary() {
   const all = spots.concat(rec);
   const summary = summarizeShipmentQuantities(all);
 
-  // Sort: biggest total first, then destination/standard/unit
-  summary.sort((a, b) => (b.total - a.total) || a.destinationName.localeCompare(b.destinationName) || a.standard.localeCompare(b.standard) || a.unit.localeCompare(b.unit));
-
   listEl.innerHTML = "";
 
   if (!summary.length) {
@@ -2466,16 +2482,31 @@ function renderNextWeekShipmentSummary() {
     return;
   }
 
-  const max = 5;
-  summary.slice(0, max).forEach((x) => {
+  const maxDest = 5;
+  summary.slice(0, maxDest).forEach((dest) => {
     const li = document.createElement("li");
     li.className = "nextweek-item";
-    const qtyText = x.qtyText != null ? `${x.qtyText}${x.unit}` : x.unit;
-    li.textContent = `${x.destinationName}　${x.standard} ${qtyText}`;
+
+    const title = document.createElement("div");
+    title.className = "nextweek-dest";
+    title.textContent = dest.destinationName;
+
+    const specs = document.createElement("div");
+    specs.className = "nextweek-specs";
+
+    dest.specs.forEach((sp) => {
+      const row = document.createElement("div");
+      row.className = "nextweek-spec";
+      const qtyText = sp.qtyText != null ? `${sp.qtyText}${sp.unit}` : sp.unit;
+      row.textContent = `${sp.standard} ${qtyText}`.trim();
+      specs.appendChild(row);
+    });
+
+    li.append(title, specs);
     listEl.appendChild(li);
   });
 
-  const rest = summary.length - max;
+  const rest = summary.length - maxDest;
   if (rest > 0) {
     const li = document.createElement("li");
     li.className = "muted";
@@ -2483,4 +2514,6 @@ function renderNextWeekShipmentSummary() {
     listEl.appendChild(li);
   }
 }
+
+
 
