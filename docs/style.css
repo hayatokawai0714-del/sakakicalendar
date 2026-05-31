@@ -1033,7 +1033,7 @@ input::placeholder {
 }
 
 /* Next week shipment summary */
-.nextweek-card {
+.nextweek-card {\r\n  border: 1px solid var(--line);\r\n  border-radius: 14px;\r\n  background: #fff;
   padding: 10px 12px;
 }
 
@@ -1090,3 +1090,4 @@ input::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
