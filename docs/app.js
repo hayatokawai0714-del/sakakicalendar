@@ -340,7 +340,6 @@ function renderAll() {
   switchRecurrenceTypeFields();
   toggleShipmentSpec2(false);
   fillMasterSelects();
-  renderToday();
   renderCalendar();
   renderSelectedDay();
   renderDestinationList();
@@ -790,39 +789,10 @@ function saveRecurringShipment(rule) {
 }
 
 function renderToday() {
-  const today = formatDate(new Date());
-  const list = document.getElementById("todayList");
-  const generated = generateRecurringShipmentsForMonth(new Date().getFullYear(), new Date().getMonth());
-  const items = entriesByDate(today, { generatedRecurring: generated });
-  const meta = document.getElementById("todayMeta");
-  if (meta) {
-    const dayLabel = (function(){
-      try {
-        const d = parseDate(today);
-        const w = ["日","月","火","水","木","金","土"][d.getDay()];
-        return `${today}（${w}）`;
-      } catch {
-        return today;
-      }
-    })();
-    const shipCount = items.filter((x) => x && x.type === "shipment").length;
-    const eventCount = items.filter((x) => x && x.type === "event").length;
-    const memoCount = items.filter((x) => x && x.type === "memo").length;
-    const lines = [];
-    lines.push(`今日 ${dayLabel}`);
-    if (shipCount) lines.push(`出荷 ${shipCount}件`);
-    if (eventCount) lines.push(`予定 ${eventCount}件`);
-    if (memoCount) lines.push(`メモ ${memoCount}件`);
-    meta.innerHTML = lines.map((t, idx) => idx === 0 ? `<div class="today-title">${t}</div>` : `<div class="today-count">${t}</div>`).join("");
-  }
-  if (!items.length) {
-    list.innerHTML = "";
-    list.classList.add("hidden");
-  } else {
-    list.classList.remove("hidden");
-    renderEntryList(list, items, "");
-  }
+  // Today card was removed to save vertical space.
+  return;
 }
+
 
 function generateRecurringShipmentsForMonth(year, monthIndex) {
   const end = new Date(year, monthIndex + 1, 0);
@@ -1329,7 +1299,6 @@ function restoreLocalState_(snap) {
 function refreshViewFast() {
   // Keep this minimal and synchronous for snappy UI.
   fillMasterSelects();
-  renderToday();
   renderCalendar();
   renderSelectedDay();
   renderDestinationList();
@@ -2361,6 +2330,8 @@ function appendShipmentDebug_(li, line1) {
     console.warn("[sakaki] shipment debug failed", e);
   }
 }
+
+
 
 
 
