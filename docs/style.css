@@ -140,7 +140,7 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 9px 10px;
-  font-size: 14px;
+  font-size: 16px;
   background: #fff;
 }
 .form.compact { grid-template-columns: 1fr; }
@@ -977,4 +977,29 @@ input[type="date"]::-webkit-date-and-time-value {
   #memoDateRow {
     grid-column: 1 / -1;
   }
+}
+
+/* iOS/PWA auto-zoom guard: keep form controls >= 16px */
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+input[type="number"],
+input[type="text"],
+input[type="date"],
+input[type="time"],
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+textarea {
+  line-height: 1.4;
+}
+
+textarea::placeholder,
+input::placeholder {
+  font-size: 16px;
 }
