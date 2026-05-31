@@ -116,7 +116,7 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
 }
 .day-cell.outside { color: #aaa; background: #fafafa; }
 .day-cell.today { border-color: var(--line); }
-.day-cell.selected { outline: 2px solid #222; }
+.day-cell.selected { outline: none; box-shadow: inset 0 0 0 3px #111; }
 
 .entry-chip {
   font-size: 10px;
@@ -1002,4 +1002,14 @@ textarea {
 textarea::placeholder,
 input::placeholder {
   font-size: 16px;
+}
+
+/* Calendar overflow visible (avoid clipping selection ring) */
+.calendar-grid,
+.weekday-row {
+  overflow: visible;
+}
+
+.day-cell {
+  overflow: visible;
 }
