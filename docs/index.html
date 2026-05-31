@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="出荷予定" />
-    <link rel="stylesheet" href="./style.css?v=2026-05-31-01" />
+    <link rel="stylesheet" href="./style.css?v=2026-05-31-02" />
   </head>
   <body>
     <main class="container">
@@ -35,112 +35,144 @@
 
       <section class="card">
         <h2>予定を追加 / 編集</h2>
-        <form id="entryForm" class="form">
-          <input type="hidden" id="entryId" />
-          <label>
-            種別
-            <select id="entryType" required>
-              <option value="shipment">出荷</option>
-              <option value="event">予定</option>
-              <option value="memo">メモ</option>
-            </select>
-          </label>
+        <form id="entryForm" class="form form--compact">
+  <input type="hidden" id="entryId" />
 
-          <div id="shipmentFields" class="type-fields">
-            <label>
-              出荷区分
-              <select id="shipmentKind">
-                <option value="spot">スポット</option>
-                <option value="recurring">定期</option>
-              </select>
-            </label>
+  <div class="form-top-row">
+    <label>
+      種別
+      <select id="entryType" required>
+        <option value="shipment">出荷</option>
+        <option value="event">予定</option>
+        <option value="memo">メモ</option>
+      </select>
+    </label>
 
-            <label id="spotDateRow">日付<input type="date" id="shipmentDate" /></label>
+    <!-- Shipment only -->
+    <label id="shipmentKindRow">
+      出荷区分
+      <select id="shipmentKind">
+        <option value="spot">スポット</option>
+        <option value="recurring">定期</option>
+      </select>
+    </label>
 
-            <div id="recurringFields" class="subcard hidden">
-              <div class="muted" style="margin: 0 0 8px;">定期出荷ルール</div>
-              <input type="hidden" id="recurringId" />
-              <label>
-                繰り返し種類
-                <select id="recurrenceType">
-                  <option value="weekly_1">毎週</option>
-                  <option value="weekly_2">隔週</option>
-                  <option value="monthlyByDate">毎月指定日</option>
-                </select>
-              </label>
+    <label id="spotDateRow">日付<input type="date" id="shipmentDate" /></label>
 
-              <div id="weekdayPicker" class="weekday-picker">
-                <div class="muted" style="margin: 0 0 6px;">曜日（複数可）</div>
-                <div class="weekday-buttons" id="weekdayButtons"></div>
-              </div>
+    <!-- Event only -->
+    <label id="eventDateRow" class="hidden">日付<input type="date" id="eventDate" /></label>
+    <label id="eventTimeRow" class="hidden">時刻<input type="time" id="eventTime" /></label>
 
-              <div id="monthDayPicker" class="hidden">
-                <label>日付（カンマ区切り）<input type="text" id="monthDays" placeholder="例: 5,20,28" /></label>
-              </div>
+    <!-- Memo only -->
+    <label id="memoDateRow" class="hidden">日付<input type="date" id="memoDate" /></label>
+    <label id="memoPriorityRow" class="hidden">
+      優先度
+      <select id="memoPriority">
+        <option value="high">高</option>
+        <option value="medium" selected>中</option>
+        <option value="low">低</option>
+      </select>
+    </label>
+  </div>
 
-              <label>開始日<input type="date" id="startDate" /></label>
-              <label>終了日（空欄可）<input type="date" id="endDate" /></label>
-            </div>
+  <div id="shipmentFields" class="type-fields">
+    <div id="recurringFields" class="subcard hidden">
+      <div class="muted" style="margin: 0 0 8px;">定期出荷ルール</div>
+      <input type="hidden" id="recurringId" />
+      <label>
+        繰り返し種類
+        <select id="recurrenceType">
+          <option value="weekly_1">毎週</option>
+          <option value="weekly_2">隔週</option>
+          <option value="monthlyByDate">毎月指定日</option>
+        </select>
+      </label>
 
-            <label>
-              出荷先
-              <select id="shipmentDestination"></select>
-            </label>
-            <label>
-              規格
-              <select id="shipmentStandard"></select>
-            </label>
-            <div class="qty-unit-row">
-              <label>数量<input type="number" id="shipmentQuantity" min="0" step="0.01" inputmode="decimal" /></label>
-              <label>単位<select id="shipmentUnit"></select></label>
-            </div>
-                        <div class="spec2-toggle">
-              <button type="button" class="btn secondary small" id="addSpec2Btn">＋ 2つ目の規格を追加</button>
-            </div>
+      <div id="weekdayPicker" class="weekday-picker">
+        <div class="muted" style="margin: 0 0 6px;">曜日（複数可）</div>
+        <div class="weekday-buttons" id="weekdayButtons"></div>
+      </div>
 
-            <div id="shipmentSpec2" class="subcard hidden">
-              <div class="spec2-head">
-                <div class="muted" style="margin: 0;">規格2（任意）</div>
-                <button type="button" class="text-btn" id="removeSpec2Btn">削除</button>
-              </div>
-              <label>
-                規格
-                <select id="shipmentStandard2"></select>
-              </label>
-              <div class="qty-unit-row">
-              <label>数量<input type="number" id="shipmentQuantity2" min="0" step="0.01" inputmode="decimal" /></label>
-              <label>単位<select id="shipmentUnit2"></select></label>
-            </div>
-            </div>
+      <div id="monthDayPicker" class="hidden">
+        <label>日付（カンマ区切り）<input type="text" id="monthDays" placeholder="例: 5,20,28" /></label>
+      </div>
 
-            <label>メモ<textarea id="shipmentMemo" rows="2"></textarea></label>
-          </div>
+      <label>開始日<input type="date" id="startDate" /></label>
+      <label>終了日（空欄可）<input type="date" id="endDate" /></label>
+    </div>
 
-          <div id="eventFields" class="type-fields hidden">
-            <label>日付<input type="date" id="eventDate" /></label>
-            <label>時刻<input type="time" id="eventTime" /></label>
-            <label>予定名<input type="text" id="eventTitle" /></label>
-            <label>メモ<textarea id="eventMemo" rows="2"></textarea></label>
-          </div>
+    <div class="form-destination-row">
+      <label>
+        出荷先
+        <select id="shipmentDestination"></select>
+      </label>
+    </div>
 
-          <div id="memoFields" class="type-fields hidden">
-            <label>日付<input type="date" id="memoDate" /></label>
-            <label>メモ内容<textarea id="memoContent" rows="2"></textarea></label>
-            <label>
-              優先度
-              <select id="memoPriority">
-                <option value="high">高</option>
-                <option value="medium" selected>中</option>
-                <option value="low">低</option>
-              </select>
-            </label>
-          </div>
+    <div class="form-spec-row">
+      <label>
+        規格
+        <select id="shipmentStandard"></select>
+      </label>
+      <label>
+        数量
+        <input type="number" id="shipmentQuantity" min="0" step="0.01" inputmode="decimal" />
+      </label>
+      <label>
+        単位
+        <select id="shipmentUnit"></select>
+      </label>
+    </div>
 
-          <div class="actions">
-            <button type="submit" class="btn">保存</button>
-            <button type="button" id="cancelEditBtn" class="btn secondary">編集キャンセル</button>
-          </div>
-        </form>
+    <div class="spec2-toggle">
+      <button type="button" class="btn secondary small" id="addSpec2Btn">＋ 2つ目の規格を追加</button>
+    </div>
+
+    <div id="shipmentSpec2" class="subcard hidden">
+      <div class="spec2-head">
+        <div class="muted" style="margin: 0;">規格2（任意）</div>
+        <button type="button" class="text-btn" id="removeSpec2Btn">削除</button>
+      </div>
+      <div class="form-spec-row">
+        <label>
+          規格2
+          <select id="shipmentStandard2"></select>
+        </label>
+        <label>
+          数量2
+          <input type="number" id="shipmentQuantity2" min="0" step="0.01" inputmode="decimal" />
+        </label>
+        <label>
+          単位2
+          <select id="shipmentUnit2"></select>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-memo-row">
+      <label>メモ<textarea id="shipmentMemo" rows="2"></textarea></label>
+    </div>
+  </div>
+
+  <div id="eventFields" class="type-fields hidden">
+    <div class="form-destination-row">
+      <label>予定名<input type="text" id="eventTitle" /></label>
+    </div>
+    <div class="form-memo-row">
+      <label>メモ<textarea id="eventMemo" rows="2"></textarea></label>
+    </div>
+  </div>
+
+  <div id="memoFields" class="type-fields hidden">
+    <div class="form-memo-row">
+      <label>メモ内容<textarea id="memoContent" rows="2"></textarea></label>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="submit" class="btn">保存</button>
+    <button type="button" id="cancelEditBtn" class="btn secondary">編集キャンセル</button>
+  </div>
+</form>
       </section>
       <section class="card admin-card" aria-label="管理メニュー">
         <div class="admin-bar admin-bar--bottom">
@@ -236,9 +268,11 @@
       </section>
     </main>
 
-    <script src="./app.js?v=2026-05-31-01"></script>
+    <script src="./app.js?v=2026-05-31-02"></script>
   </body>
 </html>
+
+
 
 
 

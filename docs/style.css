@@ -930,3 +930,51 @@ input[type="date"]::-webkit-datetime-edit,
 input[type="date"]::-webkit-date-and-time-value {
   text-align: left;
 }
+
+/* Form compact grid */
+.form.form--compact label { font-size: 12px; }
+.form.form--compact label { gap: 3px; }
+
+.form-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.form-destination-row {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.form-spec-row {
+  display: grid;
+  grid-template-columns: 1.3fr 0.9fr 0.8fr;
+  gap: 8px;
+  align-items: end;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.form-memo-row {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.form-top-row > label,
+.form-spec-row > label {
+  min-width: 0;
+}
+
+@media (max-width: 390px) {
+  .form-top-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* date spans full row on narrow screens */
+  #spotDateRow,
+  #eventDateRow,
+  #memoDateRow {
+    grid-column: 1 / -1;
+  }
+}

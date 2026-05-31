@@ -1229,14 +1229,31 @@ function calendarChipText(entry) {
 
 function switchEntryTypeFields() {
   const type = document.getElementById("entryType").value;
+
   document.getElementById("shipmentFields").classList.toggle("hidden", type !== "shipment");
   document.getElementById("eventFields").classList.toggle("hidden", type !== "event");
   document.getElementById("memoFields").classList.toggle("hidden", type !== "memo");
+
+  // Compact form top-row switching (keep IDs; just hide/show the right controls)
+  const shipmentKindRow = document.getElementById("shipmentKindRow");
+  const spotDateRow = document.getElementById("spotDateRow");
+  const eventDateRow = document.getElementById("eventDateRow");
+  const eventTimeRow = document.getElementById("eventTimeRow");
+  const memoDateRow = document.getElementById("memoDateRow");
+  const memoPriorityRow = document.getElementById("memoPriorityRow");
+
+  if (shipmentKindRow) shipmentKindRow.classList.toggle("hidden", type !== "shipment");
+  if (spotDateRow) spotDateRow.classList.toggle("hidden", type !== "shipment" || document.getElementById("shipmentKind").value !== "spot");
+  if (eventDateRow) eventDateRow.classList.toggle("hidden", type !== "event");
+  if (eventTimeRow) eventTimeRow.classList.toggle("hidden", type !== "event");
+  if (memoDateRow) memoDateRow.classList.toggle("hidden", type !== "memo");
+  if (memoPriorityRow) memoPriorityRow.classList.toggle("hidden", type !== "memo");
 }
 
 function switchShipmentKindFields() {
   const kind = document.getElementById("shipmentKind").value;
-  document.getElementById("spotDateRow").classList.toggle("hidden", kind !== "spot");
+  const isShipment = document.getElementById("entryType").value === "shipment";
+  document.getElementById("spotDateRow").classList.toggle("hidden", !isShipment || kind !== "spot");
   document.getElementById("recurringFields").classList.toggle("hidden", kind !== "recurring");
 }
 
@@ -2344,6 +2361,8 @@ function appendShipmentDebug_(li, line1) {
     console.warn("[sakaki] shipment debug failed", e);
   }
 }
+
+
 
 
 
