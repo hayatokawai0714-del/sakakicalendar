@@ -4,6 +4,7 @@
   standards: "sakaki_standards_v1",
   units: "sakaki_units_v1",
   recurringShipments: "sakaki_recurring_shipments_v1",
+  thisWeekOpen: "sakaki_this_week_summary_open_v1",
   nextWeekOpen: "sakaki_nextweek_open_v1",
   apiUrl: "sakaki_api_url_v1",
   updatedBy: "sakaki_updated_by_v1",
@@ -234,7 +235,7 @@ function bindEvents() {
     renderCalendar();
   });
   bindAdminPanels();
-  bindNextWeekDetails();
+  bindWeekSummaries();
 }
 
 function bindAdminPanels() {
@@ -343,6 +344,7 @@ function renderAll() {
   toggleShipmentSpec2(false);
   fillMasterSelects();
   renderCalendar();
+  renderThisWeekShipmentSummary();
   renderNextWeekShipmentSummary();
   renderSelectedDay();
   renderDestinationList();
@@ -2341,12 +2343,13 @@ function appendShipmentDebug_(li, line1) {
 
 
 
-function getNextWeekRange(today) {
+function getWeekRange(offsetWeeks, today) {
   const base = stripTime(today || new Date());
+  // Week is Monday..Sunday, with Monday as the first day.
   const dow = base.getDay(); // 0=Sun..6=Sat
-  const daysUntilNextMon = ((8 - dow) % 7) || 7;
+  const diffToMon = (dow + 6) % 7; // Mon->0, Tue->1, ..., Sun->6
   const start = new Date(base);
-  start.setDate(base.getDate() + daysUntilNextMon);
+  start.setDate(base.getDate() - diffToMon + (Number(offsetWeeks || 0) * 7));
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   return { start, end, startKey: formatDate(start), endKey: formatDate(end) };
@@ -2458,15 +2461,19 @@ function trimTrailingZeros(n) {
   return s.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
 
-function renderNextWeekShipmentSummary() {
-  const box = document.getElementById("nextWeekSummary");
-  if (!box) return;
+function renderShipmentWeekSummary(opts) {
+  const title = String((opts && opts.title) || "");
+  const detailsId = String((opts && opts.detailsId) || "");
+  const rangeId = String((opts && opts.rangeId) || "");
+  const listId = String((opts && opts.listId) || "");
+  const offsetWeeks = Number((opts && opts.offsetWeeks) || 0);
 
-  const rangeEl = document.getElementById("nextWeekRange");
-  const listEl = document.getElementById("nextWeekList");
-  if (!rangeEl || !listEl) return;
+  const details = document.getElementById(detailsId);
+  const rangeEl = document.getElementById(rangeId);
+  const listEl = document.getElementById(listId);
+  if (!details || !rangeEl || !listEl) return;
 
-  const { start, end, startKey, endKey } = getNextWeekRange(new Date());
+  const { start, end, startKey, endKey } = getWeekRange(offsetWeeks, new Date());
   rangeEl.textContent = `${startKey.replace(/-/g, "/")}〜${endKey.replace(/-/g, "/")}`;
 
   const spots = getShipmentsForRange(start, end);
@@ -2515,7 +2522,7 @@ function renderNextWeekShipmentSummary() {
   if (!dateKeys.length) {
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = "来週の出荷予定はありません";
+    li.textContent = `${title}はありません`;
     listEl.appendChild(li);
     return;
   }
@@ -2573,22 +2580,46 @@ function renderNextWeekShipmentSummary() {
   });
 }
 
-
-
-
-
-
-
-
-function bindNextWeekDetails() {
-  const details = document.getElementById("nextWeekDetails");
-  if (!details) return;
-
-  // Default closed, restore last state if available.
-  const saved = readLS(STORAGE_KEYS.nextWeekOpen, false);
-  details.open = Boolean(saved);
-
-  details.addEventListener("toggle", () => {
-    writeLS(STORAGE_KEYS.nextWeekOpen, Boolean(details.open));
+function renderThisWeekShipmentSummary() {
+  renderShipmentWeekSummary({
+    title: "今週の出荷予定",
+    detailsId: "thisWeekDetails",
+    rangeId: "thisWeekRange",
+    listId: "thisWeekList",
+    offsetWeeks: 0,
   });
 }
+
+function renderNextWeekShipmentSummary() {
+  renderShipmentWeekSummary({
+    title: "来週の出荷予定",
+    detailsId: "nextWeekDetails",
+    rangeId: "nextWeekRange",
+    listId: "nextWeekList",
+    offsetWeeks: 1,
+  });
+}
+
+
+
+
+
+
+
+
+function bindWeekDetails(detailsId, storageKey) {
+  const details = document.getElementById(detailsId);
+  if (!details) return;
+  const saved = readLS(storageKey, false);
+  details.open = Boolean(saved);
+  details.addEventListener("toggle", () => {
+    writeLS(storageKey, Boolean(details.open));
+  });
+}
+
+function bindWeekSummaries() {
+  bindWeekDetails("thisWeekDetails", STORAGE_KEYS.thisWeekOpen);
+  bindWeekDetails("nextWeekDetails", STORAGE_KEYS.nextWeekOpen);
+}
+
+
