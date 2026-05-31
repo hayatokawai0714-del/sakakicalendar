@@ -341,6 +341,7 @@ function renderAll() {
   toggleShipmentSpec2(false);
   fillMasterSelects();
   renderCalendar();
+  renderNextWeekShipmentSummary();
   renderSelectedDay();
   renderDestinationList();
   renderStandardList();
@@ -2336,4 +2337,150 @@ function appendShipmentDebug_(li, line1) {
 
 
 
+
+
+function getNextWeekRange(today) {
+  const base = stripTime(today || new Date());
+  const dow = base.getDay(); // 0=Sun..6=Sat
+  const daysUntilNextMon = ((8 - dow) % 7) || 7;
+  const start = new Date(base);
+  start.setDate(base.getDate() + daysUntilNextMon);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return { start, end, startKey: formatDate(start), endKey: formatDate(end) };
+}
+
+function getShipmentsForRange(startDate, endDate) {
+  const startKey = formatDate(startDate);
+  const endKey = formatDate(endDate);
+  return (state.entries || []).filter((e) => {
+    if (!e || e.type !== "shipment") return false;
+    if (e.shipmentType && e.shipmentType !== "spot") return false;
+    const key = normalizeDateKey(e.date);
+    if (!key) return false;
+    return key >= startKey && key <= endKey;
+  });
+}
+
+function getGeneratedRecurringForRange(startDate, endDate) {
+  const out = [];
+  const start = stripTime(startDate);
+  const end = stripTime(endDate);
+
+  const rules = getRecurringShipments();
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const date = new Date(d);
+    rules.forEach((rule) => {
+      if (!isWithinRuleRange(date, rule)) return;
+      const matches = rule.recurrenceType === "weekly" ? matchesWeeklyRule(date, rule) : matchesMonthlyByDateRule(date, rule);
+      if (!matches) return;
+      const dateKey = formatDate(date);
+      out.push({
+        id: createIdFrom(rule.id, dateKey),
+        type: "shipment",
+        shipmentType: "recurring",
+        date: dateKey,
+        destinationId: rule.destinationId || "",
+        destinationName: rule.destinationName || rule.destination || "",
+        destination: rule.destinationName || rule.destination || "",
+        standard: rule.standard,
+        quantity: rule.quantity,
+        unit: rule.unit,
+        memo: rule.memo,
+        standard2: rule.standard2 || "",
+        quantity2: rule.quantity2 || 0,
+        unit2: rule.unit2 || "",
+        updatedAt: rule.updatedAt,
+        updatedBy: rule.updatedBy || currentUpdatedBy(),
+        _ruleId: rule.id,
+      });
+    });
+  }
+
+  return out;
+}
+
+function summarizeShipmentQuantities(shipments) {
+  const map = new Map();
+
+  function addLine(dest, std, qty, unit) {
+    const d = String(dest || "").trim();
+    const s = String(std || "").trim();
+    const u = String(unit || "").trim();
+    if (!d || !s || !u) return;
+
+    const qtyNum = Number.parseFloat(String(qty ?? "").trim());
+    const hasNum = Number.isFinite(qtyNum);
+    const key = `${d}||${s}||${u}`;
+    const cur = map.get(key) || { destinationName: d, standard: s, unit: u, total: 0, nonNumeric: [] };
+    if (hasNum) cur.total += qtyNum;
+    else cur.nonNumeric.push(String(qty ?? "").trim());
+    map.set(key, cur);
+  }
+
+  (shipments || []).forEach((sh) => {
+    addLine(sh.destinationName || sh.destination, sh.standard, sh.quantity, sh.unit);
+    const s2 = String(sh.standard2 || "").trim();
+    const u2 = String(sh.unit2 || "").trim();
+    if (s2 && u2) addLine(sh.destinationName || sh.destination, sh.standard2, sh.quantity2, sh.unit2);
+  });
+
+  return Array.from(map.values()).map((x) => {
+    const qtyText = x.nonNumeric.length ? null : String(trimTrailingZeros(x.total));
+    return { ...x, qtyText };
+  });
+}
+
+function trimTrailingZeros(n) {
+  const s = String(n);
+  if (!s.includes(".")) return s;
+  return s.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+}
+
+function renderNextWeekShipmentSummary() {
+  const box = document.getElementById("nextWeekSummary");
+  if (!box) return;
+
+  const rangeEl = document.getElementById("nextWeekRange");
+  const listEl = document.getElementById("nextWeekList");
+  if (!rangeEl || !listEl) return;
+
+  const { start, end, startKey, endKey } = getNextWeekRange(new Date());
+  rangeEl.textContent = `${startKey.replace(/-/g, "/")}〜${endKey.replace(/-/g, "/")}`;
+
+  const spots = getShipmentsForRange(start, end);
+  const rec = getGeneratedRecurringForRange(start, end);
+  const all = spots.concat(rec);
+  const summary = summarizeShipmentQuantities(all);
+
+  // Sort: biggest total first, then destination/standard/unit
+  summary.sort((a, b) => (b.total - a.total) || a.destinationName.localeCompare(b.destinationName) || a.standard.localeCompare(b.standard) || a.unit.localeCompare(b.unit));
+
+  listEl.innerHTML = "";
+
+  if (!summary.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "来週の出荷予定はありません";
+    listEl.appendChild(li);
+    return;
+  }
+
+  const max = 5;
+  summary.slice(0, max).forEach((x) => {
+    const li = document.createElement("li");
+    li.className = "nextweek-item";
+    const qtyText = x.qtyText != null ? `${x.qtyText}${x.unit}` : x.unit;
+    li.textContent = `${x.destinationName}　${x.standard} ${qtyText}`;
+    listEl.appendChild(li);
+  });
+
+  const rest = summary.length - max;
+  if (rest > 0) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = `他${rest}件`;
+    listEl.appendChild(li);
+  }
+}
 

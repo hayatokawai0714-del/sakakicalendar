@@ -1031,3 +1031,41 @@ input::placeholder {
     margin-top: 0;
   }
 }
+
+/* Next week shipment summary */
+.nextweek-card {
+  padding: 10px 12px;
+}
+
+.nextweek-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nextweek-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.nextweek-range {
+  font-size: 12px;
+}
+
+.nextweek-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.nextweek-item {
+  font-size: 12px;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
