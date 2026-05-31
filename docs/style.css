@@ -14,7 +14,7 @@
   margin: 0 auto;
   padding: 8px 10px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .card {
@@ -792,7 +792,7 @@ button {
     grid-row: 2;
     display: flex;
     justify-content: flex-start;
-    gap: 10px;
+    gap: 12px;
     align-items: baseline;
     flex-wrap: wrap;
     min-width: 0;
@@ -1014,3 +1014,20 @@ input::placeholder {
   overflow: visible;
 }
 
+
+/* Admin spacing unify: avoid "stuck to form" look on mobile */
+@media (max-width: 720px) {
+  .admin-card {
+    position: static;
+    bottom: auto;
+    z-index: auto;
+    opacity: 1;
+    background: #fff;
+    backdrop-filter: none;
+    margin-top: 0;
+  }
+
+  .admin-bar--bottom {
+    margin-top: 0;
+  }
+}
