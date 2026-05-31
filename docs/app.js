@@ -2190,15 +2190,24 @@ function isJapaneseHoliday(date) {
 
   if (isBaseHoliday(m, day)) return true;
 
-  // Substitute holiday (if base holiday is Sunday)
-  if (d.getDay() !== 0) {
+  // Substitute holiday (if a base holiday falls on Sunday, the next non-holiday weekday becomes a holiday).
+  // Only treat this day as substitute when the days in-between are also base holidays (carry-over rule).
+  if (d.getDay() >= 1 && d.getDay() <= 6 && !isBaseHoliday(m, day)) {
     for (let back = 1; back <= 7; back += 1) {
-      const p = new Date(d);
-      p.setDate(d.getDate() - back);
-      if (isBaseHoliday(p.getMonth() + 1, p.getDate()) && p.getDay() === 0) {
-        if (!isBaseHoliday(m, day)) return true;
-        break;
+      const sunday = new Date(d);
+      sunday.setDate(d.getDate() - back);
+      if (!(isBaseHoliday(sunday.getMonth() + 1, sunday.getDate()) && sunday.getDay() === 0)) continue;
+
+      let ok = true;
+      for (let i = 1; i < back; i += 1) {
+        const mid = new Date(d);
+        mid.setDate(d.getDate() - i);
+        if (!isBaseHoliday(mid.getMonth() + 1, mid.getDate())) {
+          ok = false;
+          break;
+        }
       }
+      if (ok) return true;
     }
   }
 
@@ -2708,6 +2717,7 @@ function bindWeekSummaries() {
   bindWeekDetails("thisWeekDetails", STORAGE_KEYS.thisWeekOpen);
   bindWeekDetails("nextWeekDetails", STORAGE_KEYS.nextWeekOpen);
 }
+
 
 
 
