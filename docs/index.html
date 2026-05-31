@@ -8,11 +8,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="出荷予定" />
-    <link rel="stylesheet" href="./style.css?v=2026-05-31-15" />
+    <link rel="stylesheet" href="./style.css?v=2026-05-31-17" />
   </head>
   <body>
     <main class="container">
-            <section class="card" aria-label="今週の出荷予定">
+      <section class="card" aria-label="今週の出荷予定">
         <details id="thisWeekDetails" class="nextweek-details">
           <summary class="nextweek-summary">
             <span class="nextweek-title">今週の出荷予定</span>
@@ -24,7 +24,8 @@
           </div>
         </details>
       </section>
-<section class="card" aria-label="来週の出荷予定">
+
+      <section class="card" aria-label="来週の出荷予定">
         <details id="nextWeekDetails" class="nextweek-details">
           <summary class="nextweek-summary">
             <span class="nextweek-title">来週の出荷予定</span>
@@ -37,6 +38,13 @@
         </details>
       </section>
 
+      <section class="card">
+        <h2 id="selectedDateLabel">本日の予定</h2>
+        <ul id="selectedDayList" class="list"></ul>
+      </section>
+
+      
+
       <section class="card" aria-label="カレンダー">
         <div class="calendar-head"> 
           <button id="prevMonthBtn" class="btn secondary">前月</button>
@@ -45,11 +53,6 @@
         </div>
         <div id="weekdayRow" class="weekday-row"></div>
         <div id="calendarGrid" class="calendar-grid"></div>
-      </section>
-
-      <section class="card">
-        <h2 id="selectedDateLabel">日付を選択してください</h2>
-        <ul id="selectedDayList" class="list"></ul>
       </section>
 
       <section class="card">
@@ -287,9 +290,13 @@
       </section>
     </main>
 
-    <script src="./app.js?v=2026-05-31-15"></script>
+    <script src="./app.js?v=2026-05-31-17"></script>
   </body>
 </html>
+
+
+
+
 
 
 
