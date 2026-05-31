@@ -1297,3 +1297,15 @@ input::placeholder {
 
 .nextweek-list { margin-top: 0; }
 
+
+/* Weekend/holiday coloring in calendar */
+.weekday-row .wk-sun { color: #dc2626; }
+.weekday-row .wk-sat { color: #2563eb; }
+
+.day-num.is-sun,
+.day-num.is-holiday { color: #dc2626; }
+
+.day-num.is-sat { color: #2563eb; }
+
+/* Today badge stays black/white */
+.day-num.is-today { color: #ffffff; }

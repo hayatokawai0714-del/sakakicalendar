@@ -889,6 +889,9 @@ function renderCalendar() {
   ["日", "月", "火", "水", "木", "金", "土"].forEach((d) => {
     const el = document.createElement("div");
     el.textContent = d;
+    // weekend header coloring
+    if (d === "日") el.classList.add("wk-sun");
+    if (d === "土") el.classList.add("wk-sat");
     weekdayRow.appendChild(el);
   });
 
@@ -962,6 +965,9 @@ function renderCalendar() {
       const num = document.createElement("div");
       num.className = "day-num";
       if (dateKey === today && day.getMonth() === month) num.classList.add("is-today");
+      if (day.getDay() === 0) num.classList.add("is-sun");
+      if (day.getDay() === 6) num.classList.add("is-sat");
+      if (day.getMonth() === month && isJapaneseHoliday(day)) num.classList.add("is-holiday");
       num.textContent = String(day.getDate());
       cell.appendChild(num);
 
@@ -2126,6 +2132,87 @@ function formatDate(date) {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+function isJapaneseHoliday(date) {
+  // Minimal JP holiday calculation (sufficient for calendar coloring).
+  // Covers fixed-date holidays, Happy Monday, equinoxes, substitute/citizens holidays.
+  const d = stripTime(date);
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+
+  function nthMonday(month, nth) {
+    const first = new Date(y, month - 1, 1);
+    const firstDow = first.getDay();
+    const offset = (8 - firstDow) % 7;
+    return 1 + offset + (nth - 1) * 7;
+  }
+
+  function vernalEquinoxDay(year) {
+    // Approx for 1900-2099
+    return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  }
+
+  function autumnEquinoxDay(year) {
+    return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  }
+
+  function isFixedHoliday(mm, dd) {
+    const fixed = [
+      [1, 1],
+      [2, 11],
+      [2, 23],
+      [4, 29],
+      [5, 3],
+      [5, 4],
+      [5, 5],
+      [8, 11],
+      [11, 3],
+      [11, 23],
+    ];
+    return fixed.some(([fm, fd]) => fm === mm && fd === dd);
+  }
+
+  function isHappyMondayHoliday(mm, dd) {
+    if (mm === 1 && dd === nthMonday(1, 2) && y >= 2000) return true;
+    if (mm === 7 && dd === nthMonday(7, 3) && y >= 2003) return true;
+    if (mm === 9 && dd === nthMonday(9, 3) && y >= 2003) return true;
+    if (mm === 10 && dd === nthMonday(10, 2) && y >= 2000) return true;
+    return false;
+  }
+
+  function isBaseHoliday(mm, dd) {
+    if (isFixedHoliday(mm, dd)) return true;
+    if (mm === 3 && dd === vernalEquinoxDay(y)) return true;
+    if (mm === 9 && dd === autumnEquinoxDay(y)) return true;
+    if (isHappyMondayHoliday(mm, dd)) return true;
+    return false;
+  }
+
+  if (isBaseHoliday(m, day)) return true;
+
+  // Substitute holiday (if base holiday is Sunday)
+  if (d.getDay() !== 0) {
+    for (let back = 1; back <= 7; back += 1) {
+      const p = new Date(d);
+      p.setDate(d.getDate() - back);
+      if (isBaseHoliday(p.getMonth() + 1, p.getDate()) && p.getDay() === 0) {
+        if (!isBaseHoliday(m, day)) return true;
+        break;
+      }
+    }
+  }
+
+  // Citizen's holiday: weekday between two base holidays
+  if (d.getDay() >= 1 && d.getDay() <= 5) {
+    const prev = new Date(d);
+    const next = new Date(d);
+    prev.setDate(d.getDate() - 1);
+    next.setDate(d.getDate() + 1);
+    if (isBaseHoliday(prev.getMonth() + 1, prev.getDate()) && isBaseHoliday(next.getMonth() + 1, next.getDate())) return true;
+  }
+
+  return false;
+}
 
 function readLS(key, fallback) {
   try {
@@ -2621,5 +2708,9 @@ function bindWeekSummaries() {
   bindWeekDetails("thisWeekDetails", STORAGE_KEYS.thisWeekOpen);
   bindWeekDetails("nextWeekDetails", STORAGE_KEYS.nextWeekOpen);
 }
+
+
+
+
 
 
