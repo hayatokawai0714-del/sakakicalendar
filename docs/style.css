@@ -1254,3 +1254,45 @@ input::placeholder {
     padding-left: 8px;
   }
 }
+
+/* Next week summary accordion */
+.nextweek-details {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.nextweek-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 14px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.nextweek-summary::-webkit-details-marker { display: none; }
+
+.nextweek-chevron {
+  margin-left: auto;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #6b7280;
+  border-bottom: 2px solid #6b7280;
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.nextweek-details[open] .nextweek-chevron {
+  transform: rotate(-135deg);
+}
+
+.nextweek-card {
+  border: 0;
+  border-radius: 0;
+  padding: 0 16px 14px;
+}
+
+.nextweek-list { margin-top: 0; }

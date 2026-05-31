@@ -8,18 +8,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="出荷予定" />
-    <link rel="stylesheet" href="./style.css?v=2026-05-31-13" />
+    <link rel="stylesheet" href="./style.css?v=2026-05-31-14" />
   </head>
   <body>
     <main class="container">
       <section class="card" aria-label="来週の出荷予定">
-        <div id="nextWeekSummary" class="nextweek-card">
-          <div class="nextweek-head">
-            <div class="nextweek-title">来週の出荷予定</div>
-            <div id="nextWeekRange" class="nextweek-range muted"></div>
+        <details id="nextWeekDetails" class="nextweek-details">
+          <summary class="nextweek-summary">
+            <span class="nextweek-title">来週の出荷予定</span>
+            <span id="nextWeekRange" class="nextweek-range muted"></span>
+            <span class="nextweek-chevron" aria-hidden="true"></span>
+          </summary>
+          <div id="nextWeekSummary" class="nextweek-card">
+            <ul id="nextWeekList" class="nextweek-list"></ul>
           </div>
-          <ul id="nextWeekList" class="nextweek-list"></ul>
-        </div>
+        </details>
       </section>
 
       <section class="card" aria-label="カレンダー">
@@ -272,9 +275,11 @@
       </section>
     </main>
 
-    <script src="./app.js?v=2026-05-31-13"></script>
+    <script src="./app.js?v=2026-05-31-14"></script>
   </body>
 </html>
+
+
 
 
 

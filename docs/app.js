@@ -4,6 +4,7 @@
   standards: "sakaki_standards_v1",
   units: "sakaki_units_v1",
   recurringShipments: "sakaki_recurring_shipments_v1",
+  nextWeekOpen: "sakaki_nextweek_open_v1",
   apiUrl: "sakaki_api_url_v1",
   updatedBy: "sakaki_updated_by_v1",
 };
@@ -233,6 +234,7 @@ function bindEvents() {
     renderCalendar();
   });
   bindAdminPanels();
+  bindNextWeekDetails();
 }
 
 function bindAdminPanels() {
@@ -2575,3 +2577,18 @@ function renderNextWeekShipmentSummary() {
 
 
 
+
+
+
+function bindNextWeekDetails() {
+  const details = document.getElementById("nextWeekDetails");
+  if (!details) return;
+
+  // Default closed, restore last state if available.
+  const saved = readLS(STORAGE_KEYS.nextWeekOpen, false);
+  details.open = Boolean(saved);
+
+  details.addEventListener("toggle", () => {
+    writeLS(STORAGE_KEYS.nextWeekOpen, Boolean(details.open));
+  });
+}
