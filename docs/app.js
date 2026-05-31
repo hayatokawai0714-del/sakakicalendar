@@ -2519,10 +2519,8 @@ function renderNextWeekShipmentSummary() {
   }
 
   const labels = ["日", "月", "火", "水", "木", "金", "土"];
-  const maxDates = 7;
-  const shownDates = dateKeys.slice(0, maxDates);
 
-  shownDates.forEach((dateKey) => {
+  dateKeys.forEach((dateKey) => {
     const date = parseDate(dateKey);
     const mmdd = date ? `${date.getMonth() + 1}/${date.getDate()}` : dateKey;
     const dow = date ? labels[date.getDay()] : "";
@@ -2531,11 +2529,11 @@ function renderNextWeekShipmentSummary() {
     li.className = "nextweek-day";
 
     const head = document.createElement("div");
-    head.className = "nextweek-dayhead";
+    head.className = "nextweek-date";
     head.textContent = dow ? `${mmdd}(${dow})` : mmdd;
 
-    const body = document.createElement("div");
-    body.className = "nextweek-daybody";
+    const items = document.createElement("div");
+    items.className = "nextweek-items";
 
     const dateMap = byDate.get(dateKey) || new Map();
     const destNames = Array.from(dateMap.keys()).sort((a, b) => a.localeCompare(b));
@@ -2549,8 +2547,8 @@ function renderNextWeekShipmentSummary() {
       destBlock.className = "nextweek-destblock";
 
       const destLine = document.createElement("div");
-      destLine.className = "nextweek-destline";
-      destLine.textContent = destName;
+      destLine.className = "nextweek-dest";
+      destLine.textContent = `・${destName}`;
       destBlock.appendChild(destLine);
 
       const specList = document.createElement("div");
@@ -2558,20 +2556,21 @@ function renderNextWeekShipmentSummary() {
 
       specs.forEach((sp) => {
         const row = document.createElement("div");
-        row.className = "nextweek-specline";
+        row.className = "nextweek-spec";
         const qtyText = sp.nonNumeric.length ? sp.unit : `${trimTrailingZeros(sp.total)}${sp.unit}`;
-        row.textContent = `${sp.standard} ${qtyText}`.trim();
+        row.textContent = `${sp.standard}　${qtyText}`.trim();
         specList.appendChild(row);
       });
 
       destBlock.appendChild(specList);
-      body.appendChild(destBlock);
+      items.appendChild(destBlock);
     });
 
-    li.append(head, body);
+    li.append(head, items);
     listEl.appendChild(li);
   });
 }
+
 
 
 
