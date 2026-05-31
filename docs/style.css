@@ -912,3 +912,21 @@ form,
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* Date input visual alignment (match select look) */
+input[type="date"],
+#shipmentDate,
+#eventDate,
+#memoDate,
+#startDate,
+#endDate {
+  text-align: left;
+  padding: 9px 10px;
+  line-height: 1.2;
+}
+
+/* Safari/Chromium date text alignment */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
