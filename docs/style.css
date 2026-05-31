@@ -1091,3 +1091,86 @@ input::placeholder {
   white-space: nowrap;
 }
 
+
+/* Next week shipment summary (date-grouped) */
+.nextweek-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nextweek-range {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.nextweek-list {
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.nextweek-day {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.nextweek-day:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.nextweek-dayhead {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.nextweek-daybody {
+  margin-top: 6px;
+  display: grid;
+  gap: 8px;
+}
+
+.nextweek-destblock {
+  display: grid;
+  gap: 2px;
+}
+
+.nextweek-destline {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.nextweek-speclist {
+  padding-left: 12px;
+  display: grid;
+  gap: 2px;
+}
+
+.nextweek-specline {
+  font-size: 12px;
+  color: #111827;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (min-width: 720px) {
+  /* On desktop, place date and lines on one row for compact scanning */
+  .nextweek-day {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: start;
+  }
+  .nextweek-dayhead { padding-top: 2px; }
+  .nextweek-daybody { margin-top: 0; }
+  .nextweek-destblock {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .nextweek-speclist {
+    padding-left: 0;
+  }
+}

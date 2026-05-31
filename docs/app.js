@@ -2470,11 +2470,47 @@ function renderNextWeekShipmentSummary() {
   const spots = getShipmentsForRange(start, end);
   const rec = getGeneratedRecurringForRange(start, end);
   const all = spots.concat(rec);
-  const summary = summarizeShipmentQuantities(all);
 
+  // Group by dateKey -> destination -> (standard, unit) aggregate
+  const byDate = new Map();
+
+  function addAgg(dateKey, destName, standard, qty, unit) {
+    const d = String(dateKey || "").trim();
+    const dest = String(destName || "").trim();
+    const std = String(standard || "").trim();
+    const u = String(unit || "").trim();
+    if (!d || !dest || !std || !u) return;
+
+    const dateMap = byDate.get(d) || new Map();
+    const destMap = dateMap.get(dest) || new Map();
+    const key = `${std}||${u}`;
+
+    const cur = destMap.get(key) || { standard: std, unit: u, total: 0, nonNumeric: [] };
+    const qtyNum = Number.parseFloat(String(qty ?? "").trim());
+    if (Number.isFinite(qtyNum)) cur.total += qtyNum;
+    else {
+      const raw = String(qty ?? "").trim();
+      if (raw) cur.nonNumeric.push(raw);
+    }
+
+    destMap.set(key, cur);
+    dateMap.set(dest, destMap);
+    byDate.set(d, dateMap);
+  }
+
+  (all || []).forEach((sh) => {
+    const dateKey = normalizeDateKey(sh.date);
+    const dest = sh.destinationName || sh.destination || "";
+    addAgg(dateKey, dest, sh.standard, sh.quantity, sh.unit);
+    const s2 = String(sh.standard2 || "").trim();
+    const u2 = String(sh.unit2 || "").trim();
+    if (s2 && u2) addAgg(dateKey, dest, sh.standard2, sh.quantity2, sh.unit2);
+  });
+
+  const dateKeys = Array.from(byDate.keys()).sort();
   listEl.innerHTML = "";
 
-  if (!summary.length) {
+  if (!dateKeys.length) {
     const li = document.createElement("li");
     li.className = "muted";
     li.textContent = "来週の出荷予定はありません";
@@ -2482,38 +2518,61 @@ function renderNextWeekShipmentSummary() {
     return;
   }
 
-  const maxDest = 5;
-  summary.slice(0, maxDest).forEach((dest) => {
+  const labels = ["日", "月", "火", "水", "木", "金", "土"];
+  const maxDates = 7;
+  const shownDates = dateKeys.slice(0, maxDates);
+
+  shownDates.forEach((dateKey) => {
+    const date = parseDate(dateKey);
+    const mmdd = date ? `${date.getMonth() + 1}/${date.getDate()}` : dateKey;
+    const dow = date ? labels[date.getDay()] : "";
+
     const li = document.createElement("li");
-    li.className = "nextweek-item";
+    li.className = "nextweek-day";
 
-    const title = document.createElement("div");
-    title.className = "nextweek-dest";
-    title.textContent = dest.destinationName;
+    const head = document.createElement("div");
+    head.className = "nextweek-dayhead";
+    head.textContent = dow ? `${mmdd}(${dow})` : mmdd;
 
-    const specs = document.createElement("div");
-    specs.className = "nextweek-specs";
+    const body = document.createElement("div");
+    body.className = "nextweek-daybody";
 
-    dest.specs.forEach((sp) => {
-      const row = document.createElement("div");
-      row.className = "nextweek-spec";
-      const qtyText = sp.qtyText != null ? `${sp.qtyText}${sp.unit}` : sp.unit;
-      row.textContent = `${sp.standard} ${qtyText}`.trim();
-      specs.appendChild(row);
+    const dateMap = byDate.get(dateKey) || new Map();
+    const destNames = Array.from(dateMap.keys()).sort((a, b) => a.localeCompare(b));
+
+    destNames.forEach((destName) => {
+      const destMap = dateMap.get(destName) || new Map();
+      const specs = Array.from(destMap.values());
+      specs.sort((a, b) => a.standard.localeCompare(b.standard) || a.unit.localeCompare(b.unit));
+
+      const destBlock = document.createElement("div");
+      destBlock.className = "nextweek-destblock";
+
+      const destLine = document.createElement("div");
+      destLine.className = "nextweek-destline";
+      destLine.textContent = destName;
+      destBlock.appendChild(destLine);
+
+      const specList = document.createElement("div");
+      specList.className = "nextweek-speclist";
+
+      specs.forEach((sp) => {
+        const row = document.createElement("div");
+        row.className = "nextweek-specline";
+        const qtyText = sp.nonNumeric.length ? sp.unit : `${trimTrailingZeros(sp.total)}${sp.unit}`;
+        row.textContent = `${sp.standard} ${qtyText}`.trim();
+        specList.appendChild(row);
+      });
+
+      destBlock.appendChild(specList);
+      body.appendChild(destBlock);
     });
 
-    li.append(title, specs);
+    li.append(head, body);
     listEl.appendChild(li);
   });
-
-  const rest = summary.length - maxDest;
-  if (rest > 0) {
-    const li = document.createElement("li");
-    li.className = "muted";
-    li.textContent = `他${rest}件`;
-    listEl.appendChild(li);
-  }
 }
+
 
 
 
