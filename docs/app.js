@@ -8,6 +8,7 @@
   nextWeekOpen: "sakaki_nextweek_open_v1",
   apiUrl: "sakaki_api_url_v1",
   updatedBy: "sakaki_updated_by_v1",
+  lastSeenUpdatedAt: "sakaki_last_seen_updated_at",
 };
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
@@ -235,6 +236,11 @@ function bindEvents() {
     state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() + 1, 1);
     renderCalendar();
   });
+  const markSeenBtn = document.getElementById("markSeenBtn");
+  if (markSeenBtn) markSeenBtn.addEventListener("click", () => {
+    markAllAsSeen();
+    renderAll();
+  });
   bindAdminPanels();
   bindWeekSummaries();
 }
@@ -348,6 +354,7 @@ function renderAll() {
   renderThisWeekShipmentSummary();
   renderNextWeekShipmentSummary();
   renderSelectedDay();
+  renderNewBadges();
   renderDestinationList();
   renderStandardList();
   renderUnitList();
@@ -505,6 +512,47 @@ function setBusy(isBusy, message) {
 
 function currentUpdatedBy() {
   return state.updatedBy || "未設定";
+}
+
+function getLastSeenUpdatedAt() {
+  try {
+    return String(localStorage.getItem(STORAGE_KEYS.lastSeenUpdatedAt) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function setLastSeenUpdatedAt(dateString) {
+  const value = String(dateString || "").trim();
+  try {
+    localStorage.setItem(STORAGE_KEYS.lastSeenUpdatedAt, value);
+  } catch {}
+  renderNewBadges();
+}
+
+function isNewEntry(entry) {
+  if (!entry) return false;
+  const updatedAt = String(entry.updatedAt || "").trim();
+  if (!updatedAt) return false;
+  const lastSeen = getLastSeenUpdatedAt();
+  const mine = String(entry.updatedBy || "").trim() && String(entry.updatedBy || "").trim() === currentUpdatedBy();
+  const isAfterSeen = !lastSeen ? true : updatedAt > lastSeen;
+  return isAfterSeen || !mine;
+}
+
+function markAllAsSeen() {
+  setLastSeenUpdatedAt(new Date().toISOString());
+}
+
+function newBadgeHtml(entry) {
+  return isNewEntry(entry) ? '<span class="new-badge">新着</span>' : "";
+}
+
+function renderNewBadges() {
+  const btn = document.getElementById("markSeenBtn");
+  if (!btn) return;
+  const hasNew = [...state.entries, ...state.recurringShipments].some((entry) => isNewEntry(entry));
+  btn.classList.toggle("hidden", !hasNew);
 }
 
 function saveSyncSettings(e) {
@@ -1158,7 +1206,11 @@ function renderCalendar() {
         const chip = document.createElement("div");
         chip.className = "entry-chip";
         chip.classList.add(`t-${entry.type}`);
-        chip.innerHTML = entry.type === "shipment" ? calendarChipText(entry) : `<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
+        const badge = newBadgeHtml(entry);
+        chip.innerHTML =
+          entry.type === "shipment"
+            ? `${badge}${calendarChipText(entry)}`
+            : `${badge}<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
         cell.appendChild(chip);
       });
 
@@ -1226,6 +1278,12 @@ function renderEntryList(ul, entries, emptyText) {
       pill.className = `pill pill--${entry.type}`;
       pill.textContent = chipTag(entry);
       line1.appendChild(pill);
+      if (isNewEntry(entry)) {
+        const badge = document.createElement("span");
+        badge.className = "new-badge";
+        badge.textContent = "新着";
+        line1.appendChild(badge);
+      }
 
       const content = document.createElement("div");
       content.className = "entry-content";
@@ -1259,13 +1317,20 @@ function renderEntryList(ul, entries, emptyText) {
           dest.className = "shipment-destination";
           dest.textContent = String(entry.destinationName || entry.destination || "");
 
+          if (isNewEntry(entry)) {
+            const badge = document.createElement("span");
+            badge.className = "new-badge";
+            badge.textContent = "新着";
+            head.append(badge);
+          }
+
           if (entry.shipmentType === "recurring") {
             const recur = document.createElement("span");
             recur.className = "pill pill--recurring";
             recur.textContent = "定期";
-            head.append(pill, recur, dest);
+            head.append(recur, dest);
           } else {
-            head.append(pill, dest);
+            head.append(dest);
           }
 
           const specs = document.createElement("div");
@@ -1309,6 +1374,12 @@ function renderEntryList(ul, entries, emptyText) {
         memo.className = "subline one-line";
         memo.textContent = `メモ：${memoText}`;
         main.appendChild(memo);
+      }
+      if (isNewEntry(entry) && String(entry.updatedBy || "").trim()) {
+        const updated = document.createElement("div");
+        updated.className = "subline one-line";
+        updated.textContent = `更新：${String(entry.updatedBy)}`;
+        main.appendChild(updated);
       }
       const actions = document.createElement("div");
       actions.className = "row-actions";
@@ -2952,7 +3023,7 @@ function renderShipmentWeekSummary(opts) {
   // Group by dateKey -> destination -> (standard, unit) aggregate
   const byDate = new Map();
 
-  function addAgg(dateKey, destName, standard, qty, unit) {
+  function addAgg(dateKey, destName, standard, qty, unit, sourceEntry) {
     const d = String(dateKey || "").trim();
     const dest = String(destName || "").trim();
     const std = String(standard || "").trim();
@@ -2963,13 +3034,14 @@ function renderShipmentWeekSummary(opts) {
     const destMap = dateMap.get(dest) || new Map();
     const key = `${std}||${u}`;
 
-    const cur = destMap.get(key) || { standard: std, unit: u, total: 0, nonNumeric: [] };
+    const cur = destMap.get(key) || { standard: std, unit: u, total: 0, nonNumeric: [], hasNew: false };
     const qtyNum = Number.parseFloat(String(qty ?? "").trim());
     if (Number.isFinite(qtyNum)) cur.total += qtyNum;
     else {
       const raw = String(qty ?? "").trim();
       if (raw) cur.nonNumeric.push(raw);
     }
+    if (sourceEntry && isNewEntry(sourceEntry)) cur.hasNew = true;
 
     destMap.set(key, cur);
     dateMap.set(dest, destMap);
@@ -2979,10 +3051,10 @@ function renderShipmentWeekSummary(opts) {
   (all || []).forEach((sh) => {
     const dateKey = normalizeDateKey(sh.date);
     const dest = sh.destinationName || sh.destination || "";
-    addAgg(dateKey, dest, sh.standard, sh.quantity, sh.unit);
+    addAgg(dateKey, dest, sh.standard, sh.quantity, sh.unit, sh);
     const s2 = String(sh.standard2 || "").trim();
     const u2 = String(sh.unit2 || "").trim();
-    if (s2 && u2) addAgg(dateKey, dest, sh.standard2, sh.quantity2, sh.unit2);
+    if (s2 && u2) addAgg(dateKey, dest, sh.standard2, sh.quantity2, sh.unit2, sh);
   });
 
   const dateKeys = Array.from(byDate.keys()).sort();
@@ -3026,7 +3098,15 @@ function renderShipmentWeekSummary(opts) {
 
       const destLine = document.createElement("div");
       destLine.className = "nextweek-dest";
-      destLine.textContent = `・${destName}`;
+      if (specs.some((sp) => sp.hasNew)) {
+        const badge = document.createElement("span");
+        badge.className = "new-badge";
+        badge.textContent = "新着";
+        destLine.appendChild(badge);
+      }
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = `・${destName}`;
+      destLine.appendChild(nameSpan);
       destBlock.appendChild(destLine);
 
       const specList = document.createElement("div");
