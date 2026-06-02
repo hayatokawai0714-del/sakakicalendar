@@ -498,7 +498,10 @@ button:disabled,
 .pill--event { background: rgba(17,24,39,0.06); }
 .pill--memo { background: rgba(245,158,11,0.16); }
 
-/* Make action buttons less prominent */
+
+.pill--recurring {
+  background: rgba(17, 24, 39, 0.08);
+}/* Make action buttons less prominent */
 .row-actions .text-btn {
   padding: 3px 7px;
   font-size: 11px;
@@ -948,6 +951,19 @@ input[type="date"]::-webkit-date-and-time-value {
   min-width: 0;
 }
 
+#referenceRuleFields {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.weekday-picker {
+  max-width: 100%;
+  min-width: 0;
+}
+
 .form-spec-row {
   display: grid;
   grid-template-columns: 1.3fr 0.9fr 0.8fr;
@@ -1309,3 +1325,4 @@ input::placeholder {
 
 /* Today badge stays black/white */
 .day-num.is-today { color: #ffffff; }
+

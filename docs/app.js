@@ -701,6 +701,10 @@ async function loadAllDataFromApi() {
       weekdays: parseJsonArray(r.weekdays),
       intervalWeeks: Number(r.intervalWeeks || 1),
       monthDays: parseJsonArray(r.monthDays),
+      referenceDay: Number(r.referenceDay || 0),
+      referenceWeekdays: parseJsonArray(r.referenceWeekdays),
+      candidateWeekdays: parseJsonArray(r.candidateWeekdays),
+      shipOffsetDays: Number(r.shipOffsetDays || 0),
       updatedAt: String(r.updatedAt || new Date().toISOString()),
       updatedBy: String(r.updatedBy || "未設定"),
     }));
@@ -804,19 +808,38 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
   const out = [];
 
   getRecurringShipments().forEach((rule) => {
+    if (rule.recurrenceType === "beforeReferenceNearestWeekday") {
+      const ship = generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex, rule, end);
+      if (ship) out.push(ship);
+      return;
+    }
+
     for (let d = 1; d <= end.getDate(); d += 1) {
       const date = new Date(year, monthIndex, d);
-      if (!isWithinRuleRange(date, rule)) continue;
+      if ((rule.recurrenceType === "weekly" || rule.recurrenceType === "monthlyByDate") && !isWithinRuleRange(date, rule)) continue;
 
       const dateKey = formatDate(date);
-      const matches = rule.recurrenceType === "weekly" ? matchesWeeklyRule(date, rule) : matchesMonthlyByDateRule(date, rule);
+      const matches =
+        rule.recurrenceType === "weekly"
+          ? matchesWeeklyRule(date, rule)
+          : rule.recurrenceType === "monthlyByDate"
+            ? matchesMonthlyByDateRule(date, rule)
+            : rule.recurrenceType === "referenceDate"
+              ? matchesReferenceDateRule(date, rule)
+              : false;
       if (!matches) continue;
 
+      const shipOffsetDays = Number(rule.shipOffsetDays ?? 0);
+      const shipDate = new Date(date);
+      shipDate.setDate(shipDate.getDate() + shipOffsetDays);
+      if (!isWithinRuleRange(shipDate, rule)) continue;
+      const shipDateKey = formatDate(shipDate);
+
       out.push({
-        id: createIdFrom(rule.id, dateKey),
+        id: createIdFrom(rule.id, shipDateKey),
         type: "shipment",
         shipmentType: "recurring",
-        date: dateKey,
+        date: shipDateKey,
         destinationId: rule.destinationId || "",
         destinationName: rule.destinationName || rule.destination || "",
         destination: rule.destinationName || rule.destination || "",
@@ -824,12 +847,14 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
         quantity: rule.quantity,
         unit: rule.unit,
         memo: rule.memo,
-          standard2: rule.standard2 || "",
-          quantity2: rule.quantity2 || 0,
-          unit2: rule.unit2 || "",
+        standard2: rule.standard2 || "",
+        quantity2: rule.quantity2 || 0,
+        unit2: rule.unit2 || "",
         updatedAt: rule.updatedAt,
         updatedBy: rule.updatedBy || currentUpdatedBy(),
         _ruleId: rule.id,
+        sourceType: "recurring",
+        recurringId: rule.id,
       });
     }
   });
@@ -842,6 +867,61 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
   } catch {}
 
   return out;
+}
+
+function matchesReferenceDateRule(date, rule) {
+  if (rule.recurrenceType !== "referenceDate") return false;
+  const refDay = Number(rule.referenceDay || 0);
+  if (!Number.isFinite(refDay) || refDay < 1 || refDay > 31) return false;
+  const weekdays = parseNumberList(rule.referenceWeekdays || rule.weekdays);
+  if (!weekdays.length) return false;
+  if (date.getDate() >= refDay) return false;
+  return weekdays.includes(date.getDay());
+}
+
+function generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex, rule, monthEnd) {
+  if (rule.recurrenceType !== "beforeReferenceNearestWeekday") return null;
+  const refDay = Number(rule.referenceDay || 0);
+  if (!Number.isFinite(refDay) || refDay < 1 || refDay > monthEnd.getDate()) return null;
+
+  const weekdays = parseNumberList(rule.candidateWeekdays || rule.referenceWeekdays || rule.weekdays);
+  if (!weekdays.length) return null;
+
+  const referenceDate = new Date(year, monthIndex, refDay);
+  for (let d = refDay - 1; d >= 1; d -= 1) {
+    const candidate = new Date(year, monthIndex, d);
+    if (!weekdays.includes(candidate.getDay())) continue;
+
+    const shipOffsetDays = Number(rule.shipOffsetDays ?? -1);
+    const shipDate = new Date(candidate);
+    shipDate.setDate(shipDate.getDate() + shipOffsetDays);
+    if (!isWithinRuleRange(shipDate, rule)) continue;
+    const shipDateKey = formatDate(shipDate);
+    return {
+      id: createIdFrom(rule.id, shipDateKey),
+      type: "shipment",
+      shipmentType: "recurring",
+      date: shipDateKey,
+      destinationId: rule.destinationId || "",
+      destinationName: rule.destinationName || rule.destination || "",
+      destination: rule.destinationName || rule.destination || "",
+      standard: rule.standard,
+      quantity: rule.quantity,
+      unit: rule.unit,
+      memo: rule.memo,
+      standard2: rule.standard2 || "",
+      quantity2: rule.quantity2 || 0,
+      unit2: rule.unit2 || "",
+      updatedAt: rule.updatedAt,
+      updatedBy: rule.updatedBy || currentUpdatedBy(),
+      _ruleId: rule.id,
+      sourceType: "recurring",
+      recurringId: rule.id,
+      referenceDate: formatDate(referenceDate),
+      nearestWeekdayDate: formatDate(candidate),
+    };
+  }
+  return null;
 }
 
 function isWithinRuleRange(date, rule) {
@@ -1076,7 +1156,14 @@ function renderEntryList(ul, entries, emptyText) {
           dest.className = "shipment-destination";
           dest.textContent = String(entry.destinationName || entry.destination || "");
 
-          head.append(pill, dest);
+          if (entry.shipmentType === "recurring") {
+            const recur = document.createElement("span");
+            recur.className = "pill pill--recurring";
+            recur.textContent = "定期";
+            head.append(pill, recur, dest);
+          } else {
+            head.append(pill, dest);
+          }
 
           const specs = document.createElement("div");
           specs.className = "shipment-specs";
@@ -1145,21 +1232,23 @@ function renderEntryList(ul, entries, emptyText) {
 }
 
 async function deleteEntry(entry) {
-  if (!confirm("削除しますか？")) return;
+  const isRecurringShipment = entry && entry.type === "shipment" && entry.shipmentType === "recurring";
+  const msg = isRecurringShipment ? "この定期出荷ルールを削除しますか？" : "削除しますか？";
+  if (!confirm(msg)) return;
   try {
     setBusy(true, "削除中…");
 
     if (isApiEnabled()) {
       // Optimistic UI update: remove locally first, then sync delete to API.
       const snap = snapshotLocalState_();
-      if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+      if (isRecurringShipment) {
         state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
       } else {
         state.entries = state.entries.filter((x) => x.id !== entry.id);
       }
       saveState();
       refreshViewFast();
-      if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+      if (isRecurringShipment) {
         await deleteItemFromApi("deleteRecurringShipment", entry._ruleId || entry.id);
       } else if (entry.type === "shipment") {
         await deleteItemFromApi("deleteShipment", entry.id);
@@ -1170,7 +1259,7 @@ async function deleteEntry(entry) {
       }
       // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
-      if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+      if (isRecurringShipment) {
         state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
       } else {
         state.entries = state.entries.filter((x) => x.id !== entry.id);
@@ -1241,8 +1330,15 @@ function switchShipmentKindFields() {
 function switchRecurrenceTypeFields() {
   const value = document.getElementById("recurrenceType").value;
   const monthly = value === "monthlyByDate";
+  const reference = value === "referenceDate" || value === "beforeReferenceNearestWeekday";
   document.getElementById("weekdayPicker").classList.toggle("hidden", monthly);
   document.getElementById("monthDayPicker").classList.toggle("hidden", !monthly);
+  document.getElementById("referenceRuleFields").classList.toggle("hidden", !reference);
+  const weekdayLabel = document.getElementById("weekdayPickerLabel");
+  if (weekdayLabel) {
+    weekdayLabel.textContent =
+      value === "beforeReferenceNearestWeekday" ? "候補曜日（複数可）" : reference ? "対象曜日（複数可）" : "曜日（複数可）";
+  }
 }
 
 function toggleShipmentSpec2(show) {
@@ -1280,12 +1376,12 @@ function initWeekdayButtons() {
   });
 }
 
-function getSelectedWeekdays() {
-  return Array.from(document.querySelectorAll("#weekdayButtons .weekday-btn.on")).map((b) => Number(b.dataset.value));
+function getSelectedWeekdays(containerId = "weekdayButtons") {
+  return Array.from(document.querySelectorAll(`#${containerId} .weekday-btn.on`)).map((b) => Number(b.dataset.value));
 }
 
-function setSelectedWeekdays(weekdays) {
-  document.querySelectorAll("#weekdayButtons .weekday-btn").forEach((b) => {
+function setSelectedWeekdays(weekdays, containerId = "weekdayButtons") {
+  document.querySelectorAll(`#${containerId} .weekday-btn`).forEach((b) => {
     const v = Number(b.dataset.value);
     b.classList.toggle("on", Array.isArray(weekdays) && weekdays.includes(v));
   });
@@ -1419,7 +1515,16 @@ async function submitEntryForm(e) {
 
       const recurrenceRaw = document.getElementById("recurrenceType").value;
       const intervalWeeks = recurrenceRaw === "weekly_2" ? 2 : 1;
-      const recurrenceType = recurrenceRaw === "monthlyByDate" ? "monthlyByDate" : "weekly";
+      const recurrenceType =
+        recurrenceRaw === "monthlyByDate" ||
+        recurrenceRaw === "referenceDate" ||
+        recurrenceRaw === "beforeReferenceNearestWeekday"
+          ? recurrenceRaw
+          : "weekly";
+
+      const referenceDay = Number(document.getElementById("referenceDay").value || 0);
+      const shipOffsetDays = Number(document.getElementById("shipOffsetDays").value || 0);
+      const selectedRecurringWeekdays = getSelectedWeekdays();
 
       const rule = {
         id: document.getElementById("recurringId").value || createId(),
@@ -1437,15 +1542,28 @@ async function submitEntryForm(e) {
         recurrenceType,
         startDate: requiredValue("startDate", "開始日"),
         endDate: document.getElementById("endDate").value,
-        weekdays: recurrenceType === "weekly" ? getSelectedWeekdays() : [],
+        weekdays: recurrenceType === "weekly" ? selectedRecurringWeekdays : [],
         intervalWeeks,
         monthDays: recurrenceType === "monthlyByDate" ? parseMonthDays(document.getElementById("monthDays").value) : [],
+        referenceDay,
+        referenceWeekdays: recurrenceType === "referenceDate" ? selectedRecurringWeekdays : [],
+        candidateWeekdays: recurrenceType === "beforeReferenceNearestWeekday" ? selectedRecurringWeekdays : [],
+        shipOffsetDays: recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday" ? shipOffsetDays : 0,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUpdatedBy(),
       };
 
       if (recurrenceType === "weekly" && rule.weekdays.length === 0) throw new Error("曜日を1つ以上選択してください");
       if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上指定してください");
+      if ((recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday") && !Number.isInteger(referenceDay)) {
+        throw new Error("基準日を入力してください");
+      }
+      if ((recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday") && (referenceDay < 1 || referenceDay > 31)) {
+        throw new Error("基準日を入力してください");
+      }
+      if ((recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday") && selectedRecurringWeekdays.length === 0) {
+        throw new Error("曜日を1つ以上選択してください");
+      }
 
       if (isApiEnabled()) {
         const snap = snapshotLocalState_();
@@ -1469,6 +1587,10 @@ async function submitEntryForm(e) {
           weekdays: JSON.stringify(rule.weekdays),
           intervalWeeks: rule.intervalWeeks,
           monthDays: JSON.stringify(rule.monthDays),
+          referenceDay: rule.referenceDay,
+          referenceWeekdays: JSON.stringify(rule.referenceWeekdays || []),
+          candidateWeekdays: JSON.stringify(rule.candidateWeekdays || []),
+          shipOffsetDays: rule.shipOffsetDays || 0,
           updatedAt: rule.updatedAt,
           updatedBy: rule.updatedBy,
         }, snap, "保存しました");
@@ -1557,6 +1679,8 @@ function setEntryToForm(entry) {
   resetEntryForm();
 
   if (entry.type === "shipment" && entry.shipmentType === "recurring") {
+    const ok = confirm("この出荷は定期出荷です。\n定期出荷ルールを編集しますか？");
+    if (!ok) return;
     const rule = state.recurringShipments.find((r) => r.id === (entry._ruleId || entry.id)) || state.recurringShipments.find((r) => r.id === entry.id);
     if (!rule) return;
 
@@ -1580,6 +1704,16 @@ function setEntryToForm(entry) {
     if (rule.recurrenceType === "monthlyByDate") {
       document.getElementById("recurrenceType").value = "monthlyByDate";
       document.getElementById("monthDays").value = (rule.monthDays || []).join(",");
+    } else if (rule.recurrenceType === "referenceDate") {
+      document.getElementById("recurrenceType").value = "referenceDate";
+      document.getElementById("referenceDay").value = String(rule.referenceDay || "");
+      document.getElementById("shipOffsetDays").value = String(rule.shipOffsetDays ?? -1);
+      setSelectedWeekdays(rule.referenceWeekdays || rule.weekdays || []);
+    } else if (rule.recurrenceType === "beforeReferenceNearestWeekday") {
+      document.getElementById("recurrenceType").value = "beforeReferenceNearestWeekday";
+      document.getElementById("referenceDay").value = String(rule.referenceDay || "");
+      document.getElementById("shipOffsetDays").value = String(rule.shipOffsetDays ?? -1);
+      setSelectedWeekdays(rule.candidateWeekdays || rule.referenceWeekdays || rule.weekdays || []);
     } else {
       document.getElementById("recurrenceType").value = Number(rule.intervalWeeks) === 2 ? "weekly_2" : "weekly_1";
       setSelectedWeekdays(rule.weekdays || []);
@@ -1647,6 +1781,8 @@ function resetEntryForm() {
   document.getElementById("recurrenceType").value = "weekly_1";
   setSelectedWeekdays([new Date(state.selectedDate).getDay()]);
   document.getElementById("monthDays").value = "";
+  document.getElementById("referenceDay").value = "";
+  document.getElementById("shipOffsetDays").value = "-1";
 
   switchEntryTypeFields();
   switchShipmentKindFields();
@@ -2465,39 +2601,27 @@ function getShipmentsForRange(startDate, endDate) {
 
 function getGeneratedRecurringForRange(startDate, endDate) {
   const out = [];
+  const seen = new Set();
   const start = stripTime(startDate);
   const end = stripTime(endDate);
 
-  const rules = getRecurringShipments();
+  const monthKeys = new Set();
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const date = new Date(d);
-    rules.forEach((rule) => {
-      if (!isWithinRuleRange(date, rule)) return;
-      const matches = rule.recurrenceType === "weekly" ? matchesWeeklyRule(date, rule) : matchesMonthlyByDateRule(date, rule);
-      if (!matches) return;
-      const dateKey = formatDate(date);
-      out.push({
-        id: createIdFrom(rule.id, dateKey),
-        type: "shipment",
-        shipmentType: "recurring",
-        date: dateKey,
-        destinationId: rule.destinationId || "",
-        destinationName: rule.destinationName || rule.destination || "",
-        destination: rule.destinationName || rule.destination || "",
-        standard: rule.standard,
-        quantity: rule.quantity,
-        unit: rule.unit,
-        memo: rule.memo,
-        standard2: rule.standard2 || "",
-        quantity2: rule.quantity2 || 0,
-        unit2: rule.unit2 || "",
-        updatedAt: rule.updatedAt,
-        updatedBy: rule.updatedBy || currentUpdatedBy(),
-        _ruleId: rule.id,
-      });
-    });
+    monthKeys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
 
+  monthKeys.forEach((key) => {
+    const [y, m] = key.split("-").map((n) => Number(n));
+    generateRecurringShipmentsForMonth(y, m - 1).forEach((entry) => {
+      const dateKey = normalizeDateKey(entry.date);
+      if (dateKey < formatDate(start) || dateKey > formatDate(end)) return;
+      if (seen.has(entry.id)) return;
+      seen.add(entry.id);
+      out.push(entry);
+    });
+  });
+
+  out.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)));
   return out;
 }
 
@@ -2717,6 +2841,7 @@ function bindWeekSummaries() {
   bindWeekDetails("thisWeekDetails", STORAGE_KEYS.thisWeekOpen);
   bindWeekDetails("nextWeekDetails", STORAGE_KEYS.nextWeekOpen);
 }
+
 
 
 

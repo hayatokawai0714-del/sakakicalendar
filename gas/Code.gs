@@ -290,11 +290,11 @@ function ensureHeaders_() {
     "updatedAt",
     "updatedBy",
   ]);
-  ensureHeaderRow_(SHEET_NAMES.recurring_shipments, [
-    "id",
-    "destinationId",
-    "destinationName",
-    "standard",
+  ensureHeaderRow_(SHEET_NAMES.recurring_shipments, [
+    "id",
+    "destinationId",
+    "destinationName",
+    "standard",
     "quantity",
     "unit",
     "standard2",
@@ -304,12 +304,16 @@ function ensureHeaders_() {
     "recurrenceType",
     "startDate",
     "endDate",
-    "weekdays",
-    "intervalWeeks",
-    "monthDays",
-    "updatedAt",
-    "updatedBy",
-  ]);
+    "weekdays",
+    "intervalWeeks",
+    "monthDays",
+    "referenceDay",
+    "referenceWeekdays",
+    "candidateWeekdays",
+    "shipOffsetDays",
+    "updatedAt",
+    "updatedBy",
+  ]);
   ensureHeaderRow_(SHEET_NAMES.events, ["id", "date", "time", "title", "memo", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.memos, ["id", "date", "content", "priority", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.destinations, [

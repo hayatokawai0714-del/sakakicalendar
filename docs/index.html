@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="出荷予定" />
-    <link rel="stylesheet" href="./style.css?v=2026-05-31-20" />
+    <link rel="stylesheet" href="./style.css?v=2026-06-02-01" />
   </head>
   <body>
     <main class="container">
@@ -109,11 +109,18 @@
           <option value="weekly_1">毎週</option>
           <option value="weekly_2">隔週</option>
           <option value="monthlyByDate">毎月指定日</option>
+          <option value="referenceDate">基準日連動</option>
+          <option value="beforeReferenceNearestWeekday">基準日前の最寄り曜日</option>
         </select>
       </label>
 
+      <div id="referenceRuleFields" class="hidden">
+        <label>基準日<input type="number" id="referenceDay" min="1" max="31" inputmode="numeric" placeholder="例: 20" /></label>
+        <label>出荷オフセット<input type="number" id="shipOffsetDays" step="1" inputmode="numeric" placeholder="例: -1" /></label>
+      </div>
+
       <div id="weekdayPicker" class="weekday-picker">
-        <div class="muted" style="margin: 0 0 6px;">曜日（複数可）</div>
+        <div class="muted" id="weekdayPickerLabel" style="margin: 0 0 6px;">曜日（複数可）</div>
         <div class="weekday-buttons" id="weekdayButtons"></div>
       </div>
 
@@ -292,9 +299,10 @@
       </section>
     </main>
 
-    <script src="./app.js?v=2026-05-31-20"></script>
+    <script src="./app.js?v=2026-06-02-01"></script>
   </body>
 </html>
+
 
 
 
