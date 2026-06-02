@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="出荷予定" />
-    <link rel="stylesheet" href="./style.css?v=2026-06-02-01" />
+    <link rel="stylesheet" href="./style.css?v=2026-06-02-02" />
   </head>
   <body>
     <main class="container">
@@ -117,6 +117,17 @@
       <div id="referenceRuleFields" class="hidden">
         <label>基準日<input type="number" id="referenceDay" min="1" max="31" inputmode="numeric" placeholder="例: 20" /></label>
         <label>出荷オフセット<input type="number" id="shipOffsetDays" step="1" inputmode="numeric" placeholder="例: -1" /></label>
+      </div>
+
+      <div id="referenceItemsSection" class="subcard hidden">
+        <div class="spec2-head" style="margin-bottom: 6px;">
+          <div>
+            <div class="muted" style="margin: 0;">基準日別数量</div>
+            <div class="muted small-note">5日と20日で数量が違う場合に使います。</div>
+          </div>
+          <button type="button" class="btn secondary small" id="addReferenceItemBtn">＋ 基準日を追加</button>
+        </div>
+        <div id="referenceItemsList" class="reference-items-list"></div>
       </div>
 
       <div id="weekdayPicker" class="weekday-picker">
@@ -299,7 +310,7 @@
       </section>
     </main>
 
-    <script src="./app.js?v=2026-06-02-01"></script>
+    <script src="./app.js?v=2026-06-02-02"></script>
   </body>
 </html>
 

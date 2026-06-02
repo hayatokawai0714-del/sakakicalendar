@@ -60,6 +60,7 @@ function init() {
 
   bindEvents();
   initWeekdayButtons();
+  initReferenceItemSection();
   renderAll();
 
   // Always attempt auto sync on startup when API URL exists.
@@ -705,6 +706,7 @@ async function loadAllDataFromApi() {
       referenceWeekdays: parseJsonArray(r.referenceWeekdays),
       candidateWeekdays: parseJsonArray(r.candidateWeekdays),
       shipOffsetDays: Number(r.shipOffsetDays || 0),
+      referenceItems: parseReferenceItems(r.referenceItems),
       updatedAt: String(r.updatedAt || new Date().toISOString()),
       updatedBy: String(r.updatedBy || "未設定"),
     }));
@@ -808,6 +810,12 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
   const out = [];
 
   getRecurringShipments().forEach((rule) => {
+    const referenceItems = Array.isArray(rule.referenceItems) ? rule.referenceItems.filter(Boolean) : [];
+    if (referenceItems.length && ["monthlyByDate", "referenceDate", "beforeReferenceNearestWeekday"].includes(rule.recurrenceType)) {
+      out.push(...generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems));
+      return;
+    }
+
     if (rule.recurrenceType === "beforeReferenceNearestWeekday") {
       const ship = generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex, rule, end);
       if (ship) out.push(ship);
@@ -867,6 +875,101 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
   } catch {}
 
   return out;
+}
+
+function generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems) {
+  const out = [];
+  const monthLabel = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  const weekdays = parseNumberList(rule.candidateWeekdays || rule.referenceWeekdays || rule.weekdays);
+  const baseOffset = Number(rule.shipOffsetDays ?? 0);
+
+  referenceItems.forEach((rawItem, idx) => {
+    const item = normalizeReferenceItem(rawItem, rule);
+    const refDay = Number(item.referenceDay || 0);
+    if (!Number.isFinite(refDay) || refDay < 1 || refDay > 31) return;
+    const refDate = new Date(year, monthIndex, refDay);
+    if (refDate.getMonth() !== monthIndex) return;
+
+    const shipOffsetDays = Number(item.shipOffsetDays ?? baseOffset);
+
+    if (rule.recurrenceType === "monthlyByDate") {
+      const shipDate = new Date(refDate);
+      shipDate.setDate(shipDate.getDate() + shipOffsetDays);
+      const shipDateKey = formatDate(shipDate);
+      out.push(buildRecurringShipmentEntry_(rule, item, shipDateKey, refDate, null, idx));
+      return;
+    }
+
+    if (rule.recurrenceType === "beforeReferenceNearestWeekday") {
+      const nearest = findNearestCandidateBeforeReference_(year, monthIndex, refDay, weekdays);
+      if (!nearest) return;
+      const shipDate = new Date(nearest);
+      shipDate.setDate(shipDate.getDate() + shipOffsetDays);
+      const shipDateKey = formatDate(shipDate);
+      out.push(buildRecurringShipmentEntry_(rule, item, shipDateKey, refDate, nearest, idx));
+      return;
+    }
+
+    if (rule.recurrenceType === "referenceDate") {
+      for (let d = refDay - 1; d >= 1; d -= 1) {
+        const candidate = new Date(year, monthIndex, d);
+        if (!weekdays.length || !weekdays.includes(candidate.getDay())) continue;
+        const shipDate = new Date(candidate);
+        shipDate.setDate(shipDate.getDate() + shipOffsetDays);
+        const shipDateKey = formatDate(shipDate);
+        out.push(buildRecurringShipmentEntry_(rule, item, shipDateKey, refDate, candidate, idx));
+      }
+    }
+  });
+
+  return out.filter((entry) => normalizeDateKey(entry.date).startsWith(monthLabel));
+}
+
+function buildRecurringShipmentEntry_(rule, item, shipDateKey, referenceDate, nearestWeekdayDate, index) {
+  const refDay = Number(item.referenceDay || rule.referenceDay || 0);
+  const standard = String(item.standard || rule.standard || "");
+  const quantity = Number(item.quantity ?? rule.quantity ?? 0);
+  const unit = String(item.unit || rule.unit || "");
+  const standard2 = String(item.standard2 || rule.standard2 || "");
+  const quantity2 = Number(item.quantity2 ?? rule.quantity2 ?? 0);
+  const unit2 = String(item.unit2 || rule.unit2 || "");
+
+  return {
+    id: createIdFrom(`${rule.id}__ref${refDay || "x"}__${index}`, shipDateKey),
+    type: "shipment",
+    shipmentType: "recurring",
+    date: shipDateKey,
+    destinationId: rule.destinationId || "",
+    destinationName: rule.destinationName || rule.destination || "",
+    destination: rule.destinationName || rule.destination || "",
+    standard,
+    quantity,
+    unit,
+    standard2,
+    quantity2,
+    unit2,
+    memo: String(item.memo || rule.memo || ""),
+    updatedAt: rule.updatedAt,
+    updatedBy: rule.updatedBy || currentUpdatedBy(),
+    _ruleId: rule.id,
+    sourceType: "recurring",
+    recurringId: rule.id,
+    referenceDay: refDay,
+    referenceDate: referenceDate ? formatDate(referenceDate) : "",
+    nearestWeekdayDate: nearestWeekdayDate ? formatDate(nearestWeekdayDate) : "",
+    referenceItemIndex: index,
+  };
+}
+
+function findNearestCandidateBeforeReference_(year, monthIndex, refDay, weekdays) {
+  const list = parseNumberList(weekdays);
+  if (!list.length) return null;
+  for (let d = refDay - 1; d >= 1; d -= 1) {
+    const candidate = new Date(year, monthIndex, d);
+    if (candidate.getMonth() !== monthIndex) continue;
+    if (list.includes(candidate.getDay())) return candidate;
+  }
+  return null;
 }
 
 function matchesReferenceDateRule(date, rule) {
@@ -1331,13 +1434,18 @@ function switchRecurrenceTypeFields() {
   const value = document.getElementById("recurrenceType").value;
   const monthly = value === "monthlyByDate";
   const reference = value === "referenceDate" || value === "beforeReferenceNearestWeekday";
+  const referenceItemsSection = document.getElementById("referenceItemsSection");
   document.getElementById("weekdayPicker").classList.toggle("hidden", monthly);
   document.getElementById("monthDayPicker").classList.toggle("hidden", !monthly);
   document.getElementById("referenceRuleFields").classList.toggle("hidden", !reference);
+  if (referenceItemsSection) referenceItemsSection.classList.toggle("hidden", value === "weekly_1" || value === "weekly_2");
   const weekdayLabel = document.getElementById("weekdayPickerLabel");
   if (weekdayLabel) {
     weekdayLabel.textContent =
       value === "beforeReferenceNearestWeekday" ? "候補曜日（複数可）" : reference ? "対象曜日（複数可）" : "曜日（複数可）";
+  }
+  if (referenceItemsSection && !referenceItemsSection.classList.contains("hidden") && getReferenceItemRows().length === 0) {
+    addReferenceItemRow();
   }
 }
 
@@ -1374,6 +1482,110 @@ function initWeekdayButtons() {
     });
     container.appendChild(btn);
   });
+}
+
+function initReferenceItemSection() {
+  const btn = document.getElementById("addReferenceItemBtn");
+  if (btn) {
+    btn.addEventListener("click", () => addReferenceItemRow());
+  }
+  const list = document.getElementById("referenceItemsList");
+  if (list && !list.children.length) {
+    // Start empty; a row is added when the relevant recurrence type is selected.
+    list.innerHTML = "";
+  }
+}
+
+function getReferenceItemRows() {
+  return Array.from(document.querySelectorAll("#referenceItemsList .reference-item-row"));
+}
+
+function createReferenceItemRow(item = {}) {
+  const row = document.createElement("div");
+  row.className = "reference-item-row";
+
+  const currentStandard = String(document.getElementById("shipmentStandard").value || "");
+  const currentStandard2 = String(document.getElementById("shipmentStandard2").value || "");
+
+  row.innerHTML = `
+    <label>基準日<input type="number" class="ref-day" min="1" max="31" inputmode="numeric" placeholder="5" /></label>
+    <label>数量<input type="number" class="ref-qty" min="0" step="0.01" inputmode="decimal" placeholder="10" /></label>
+    <label>単位<input type="text" class="ref-unit" placeholder="kg" /></label>
+    <button type="button" class="text-btn reference-item-remove">削除</button>
+  `;
+
+  const dayInput = row.querySelector(".ref-day");
+  const qtyInput = row.querySelector(".ref-qty");
+  const unitInput = row.querySelector(".ref-unit");
+  const removeBtn = row.querySelector(".reference-item-remove");
+
+  if (dayInput) dayInput.value = String(item.referenceDay ?? "");
+  if (qtyInput) qtyInput.value = String(item.quantity ?? "");
+  if (unitInput) unitInput.value = String(item.unit || "");
+
+  row.dataset.standard = String(item.standard || currentStandard || "");
+  row.dataset.standard2 = String(item.standard2 || currentStandard2 || "");
+  row.dataset.quantity2 = String(item.quantity2 ?? "");
+  row.dataset.unit2 = String(item.unit2 || "");
+  row.dataset.memo = String(item.memo || "");
+
+  if (removeBtn) {
+    removeBtn.addEventListener("click", () => {
+      row.remove();
+    });
+  }
+
+  return row;
+}
+
+function addReferenceItemRow(item = {}) {
+  const list = document.getElementById("referenceItemsList");
+  if (!list) return null;
+  const row = createReferenceItemRow(item);
+  list.appendChild(row);
+  return row;
+}
+
+function clearReferenceItemRows() {
+  const list = document.getElementById("referenceItemsList");
+  if (list) list.innerHTML = "";
+}
+
+function setReferenceItemsToForm(items, fallbackRule = null) {
+  clearReferenceItemRows();
+  const arr = Array.isArray(items) ? items : [];
+  if (!arr.length) return;
+  arr.forEach((item) => addReferenceItemRow(normalizeReferenceItem(item, fallbackRule || {})));
+}
+
+function getReferenceItemsFromForm() {
+  const baseStandard = String(document.getElementById("shipmentStandard").value || "").trim();
+  const baseStandard2 = String(document.getElementById("shipmentStandard2").value || "").trim();
+  const baseUnit2 = String(document.getElementById("shipmentUnit2").value || "").trim();
+  const baseMemo = String(document.getElementById("shipmentMemo").value || "").trim();
+  return getReferenceItemRows()
+    .map((row) => {
+      const day = Number(row.querySelector(".ref-day")?.value || 0);
+      if (!Number.isFinite(day) || day < 1 || day > 31) return null;
+      const qty = Number(row.querySelector(".ref-qty")?.value || 0);
+      const unit = String(row.querySelector(".ref-unit")?.value || "").trim();
+      const standard = baseStandard || String(row.dataset.standard || "").trim();
+      const standard2 = baseStandard2 || String(row.dataset.standard2 || "").trim();
+      const quantity2 = Number(row.dataset.quantity2 || document.getElementById("shipmentQuantity2").value || 0);
+      const unit2 = baseUnit2 || String(row.dataset.unit2 || "").trim();
+      const memo = baseMemo || String(row.dataset.memo || "").trim();
+      return {
+        referenceDay: day,
+        standard,
+        quantity: qty,
+        unit,
+        standard2,
+        quantity2,
+        unit2,
+        memo,
+      };
+    })
+    .filter(Boolean);
 }
 
 function getSelectedWeekdays(containerId = "weekdayButtons") {
@@ -1549,9 +1761,15 @@ async function submitEntryForm(e) {
         referenceWeekdays: recurrenceType === "referenceDate" ? selectedRecurringWeekdays : [],
         candidateWeekdays: recurrenceType === "beforeReferenceNearestWeekday" ? selectedRecurringWeekdays : [],
         shipOffsetDays: recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday" ? shipOffsetDays : 0,
+        referenceItems: [],
         updatedAt: new Date().toISOString(),
         updatedBy: currentUpdatedBy(),
       };
+
+      const referenceItems = getReferenceItemsFromForm();
+      if (referenceItems.length) {
+        rule.referenceItems = referenceItems.map((item) => normalizeReferenceItem(item, rule));
+      }
 
       if (recurrenceType === "weekly" && rule.weekdays.length === 0) throw new Error("曜日を1つ以上選択してください");
       if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上指定してください");
@@ -1591,6 +1809,7 @@ async function submitEntryForm(e) {
           referenceWeekdays: JSON.stringify(rule.referenceWeekdays || []),
           candidateWeekdays: JSON.stringify(rule.candidateWeekdays || []),
           shipOffsetDays: rule.shipOffsetDays || 0,
+          referenceItems: JSON.stringify(rule.referenceItems || []),
           updatedAt: rule.updatedAt,
           updatedBy: rule.updatedBy,
         }, snap, "保存しました");
@@ -1700,6 +1919,7 @@ function setEntryToForm(entry) {
     document.getElementById("shipmentUnit2").value = String(rule.unit2 || "");
     toggleShipmentSpec2(Boolean(String(rule.standard2 || "").trim()));
     document.getElementById("shipmentMemo").value = rule.memo || "";
+    setReferenceItemsToForm(rule.referenceItems || [], rule);
 
     if (rule.recurrenceType === "monthlyByDate") {
       document.getElementById("recurrenceType").value = "monthlyByDate";
@@ -1778,16 +1998,17 @@ function resetEntryForm() {
   document.getElementById("startDate").value = state.selectedDate;
   document.getElementById("endDate").value = "";
 
-  document.getElementById("recurrenceType").value = "weekly_1";
-  setSelectedWeekdays([new Date(state.selectedDate).getDay()]);
-  document.getElementById("monthDays").value = "";
-  document.getElementById("referenceDay").value = "";
-  document.getElementById("shipOffsetDays").value = "-1";
+    document.getElementById("recurrenceType").value = "weekly_1";
+    setSelectedWeekdays([new Date(state.selectedDate).getDay()]);
+    document.getElementById("monthDays").value = "";
+    document.getElementById("referenceDay").value = "";
+    document.getElementById("shipOffsetDays").value = "-1";
+    clearReferenceItemRows();
 
-  switchEntryTypeFields();
-  switchShipmentKindFields();
-  switchRecurrenceTypeFields();
-}
+    switchEntryTypeFields();
+    switchShipmentKindFields();
+    switchRecurrenceTypeFields();
+  }
 
 async function submitDestinationForm(e) {
   e.preventDefault();
@@ -2185,6 +2406,34 @@ function parseJsonArray(value) {
     .split(",")
     .map((x) => Number(x.trim()))
     .filter((n) => Number.isFinite(n));
+}
+
+function parseReferenceItems(value) {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : (() => {
+    try {
+      const parsed = JSON.parse(String(value));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+  return raw.map((item) => normalizeReferenceItem(item, {})).filter((item) => Number.isFinite(item.referenceDay) && item.referenceDay >= 1 && item.referenceDay <= 31);
+}
+
+function normalizeReferenceItem(item, fallbackRule) {
+  const refDay = Number(item && item.referenceDay != null ? item.referenceDay : fallbackRule.referenceDay || 0);
+  return {
+    referenceDay: Number.isFinite(refDay) ? refDay : 0,
+    standard: String((item && item.standard) || fallbackRule.standard || ""),
+    quantity: Number((item && item.quantity) != null ? item.quantity : fallbackRule.quantity || 0),
+    unit: String((item && item.unit) || fallbackRule.unit || ""),
+    standard2: String((item && item.standard2) || fallbackRule.standard2 || ""),
+    quantity2: Number((item && item.quantity2) != null ? item.quantity2 : fallbackRule.quantity2 || 0),
+    unit2: String((item && item.unit2) || fallbackRule.unit2 || ""),
+    memo: String((item && item.memo) || fallbackRule.memo || ""),
+    shipOffsetDays: Number((item && item.shipOffsetDays) != null ? item.shipOffsetDays : fallbackRule.shipOffsetDays || 0),
+  };
 }
 
 function normalizeDateKey(value) {

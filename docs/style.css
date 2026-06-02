@@ -964,6 +964,51 @@ input[type="date"]::-webkit-date-and-time-value {
   min-width: 0;
 }
 
+.small-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.reference-items-list {
+  display: grid;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.reference-item-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) minmax(0, 0.8fr) 88px auto;
+  gap: 8px;
+  align-items: end;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.reference-item-row label {
+  min-width: 0;
+}
+
+.reference-item-row input,
+.reference-item-row select {
+  width: 100%;
+  min-width: 0;
+}
+
+.reference-item-remove {
+  align-self: end;
+  padding: 0 8px;
+  height: 38px;
+}
+
+@media (max-width: 600px) {
+  .reference-item-row {
+    grid-template-columns: 72px minmax(0, 1fr) minmax(0, 0.7fr) 72px auto;
+    gap: 6px;
+  }
+}
+
 .form-spec-row {
   display: grid;
   grid-template-columns: 1.3fr 0.9fr 0.8fr;
