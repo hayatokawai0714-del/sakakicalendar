@@ -1533,8 +1533,8 @@ function renderEntryList(ul, entries, emptyText) {
       editBtn.className = "text-btn";
       editBtn.textContent = "編集";
       editBtn.disabled = state.isBusy;
-      editBtn.addEventListener("click", () => {
-        if (setEntryToForm(entry)) scrollEntryFormIntoView_();
+      editBtn.addEventListener("click", async () => {
+        if (await setEntryToForm(entry)) scrollEntryFormIntoView_();
       });
 
       const delBtn = document.createElement("button");
@@ -1556,7 +1556,7 @@ async function deleteEntry(entry) {
   const isRecurringShipment = entry && entry.type === "shipment" && entry.shipmentType === "recurring";
   let deleteMode = "";
   if (isRecurringShipment) {
-    deleteMode = recurringChoice_("delete");
+    deleteMode = await recurringChoice_("delete");
     if (!deleteMode) return;
   } else if (!confirm("削除しますか？")) {
     return;
@@ -1879,17 +1879,76 @@ function scrollEntryFormIntoView_() {
   window.setTimeout(() => card.classList.remove("form-highlight"), 1200);
 }
 
-function recurringChoice_(kind) {
-  const title = kind === "edit" ? "この定期出荷をどうしますか？" : "この定期出荷をどうしますか？";
-  const msg =
-    kind === "edit"
-      ? "1: この日だけ編集\n2: 定期ルール編集\n0: キャンセル"
-      : "1: この日だけ削除\n2: 定期ルール削除\n0: キャンセル";
-  const raw = window.prompt(`${title}\n${msg}`, "0");
-  if (raw === null) return "";
-  const choice = String(raw || "").trim();
-  if (choice === "1") return "day";
-  if (choice === "2") return "rule";
+function openChoiceModal_(kind) {
+  const backdrop = document.getElementById("choiceModalBackdrop");
+  const titleEl = document.getElementById("choiceModalTitle");
+  const textEl = document.getElementById("choiceModalText");
+  const actionsEl = document.getElementById("choiceModalActions");
+  if (!backdrop || !titleEl || !textEl || !actionsEl) return Promise.resolve("");
+
+  const config = kind === "edit"
+    ? {
+        title: "定期出荷の編集",
+        text: "編集方法を選んでください。",
+        buttons: [
+          { label: "この日だけ編集", value: "day", primary: true },
+          { label: "定期ルール編集", value: "rule" },
+          { label: "キャンセル", value: "" },
+        ],
+      }
+    : {
+        title: "定期出荷の削除",
+        text: "削除方法を選んでください。",
+        buttons: [
+          { label: "この日だけ削除", value: "day", primary: true },
+          { label: "定期ルール削除", value: "rule" },
+          { label: "キャンセル", value: "" },
+        ],
+      };
+
+  titleEl.textContent = config.title;
+  textEl.textContent = config.text;
+  actionsEl.innerHTML = "";
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const close = (result = "") => {
+      if (settled) return;
+      settled = true;
+      backdrop.classList.add("hidden");
+      backdrop.setAttribute("aria-hidden", "true");
+      document.removeEventListener("keydown", onKeyDown);
+      resolve(result);
+    };
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape") close("");
+    };
+
+    config.buttons.forEach((btnCfg) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = btnCfg.primary ? "btn" : "btn secondary";
+      btn.textContent = btnCfg.label;
+      btn.style.minHeight = "48px";
+      btn.addEventListener("click", () => close(btnCfg.value));
+      actionsEl.appendChild(btn);
+    });
+
+    backdrop.classList.remove("hidden");
+    backdrop.setAttribute("aria-hidden", "false");
+    document.addEventListener("keydown", onKeyDown);
+    backdrop.onclick = (ev) => {
+      if (ev.target === backdrop) close("");
+    };
+    const firstBtn = actionsEl.querySelector("button");
+    if (firstBtn) firstBtn.focus();
+  });
+}
+
+async function recurringChoice_(kind) {
+  const result = await openChoiceModal_(kind);
+  if (result === "day") return "day";
+  if (result === "rule") return "rule";
   return "";
 }
 
@@ -2237,11 +2296,11 @@ async function submitEntryForm(e) {
   }
 }
 
-function setEntryToForm(entry) {
+async function setEntryToForm(entry) {
   resetEntryForm();
 
   if (entry.type === "shipment" && entry.shipmentType === "recurring") {
-    const choice = recurringChoice_("edit");
+    const choice = await recurringChoice_("edit");
     if (!choice) return false;
 
     if (choice === "day") {
