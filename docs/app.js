@@ -1,4 +1,4 @@
-﻿const STORAGE_KEYS = {
+const STORAGE_KEYS = {
   entries: "sakaki_entries_v1",
   destinations: "sakaki_destinations_v1",
   standards: "sakaki_standards_v1",
@@ -1361,7 +1361,7 @@ function renderCalendar() {
       if (dayEntries.length > 2) {
         const more = document.createElement("div");
         more.className = "entry-chip";
-        more.textContent = `+${dayEntries.length - 2}件`;
+        more.textContent = `他${dayEntries.length - 2}件`;
         cell.appendChild(more);
       }
 
