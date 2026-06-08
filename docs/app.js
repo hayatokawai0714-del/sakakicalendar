@@ -1370,6 +1370,7 @@ function renderCalendar() {
         setFormDate(dateKey);
         renderCalendar();
         renderSelectedDay();
+        scrollSelectedDayIntoView_();
       });
 
       grid.appendChild(cell);
@@ -1393,6 +1394,17 @@ function renderSelectedDay() {
     if (sample.length) console.log("[sakaki] selected day recurring count", sample.length);
   } catch {}
   renderEntryList(list, items, "この日の予定はありません");
+}
+
+function scrollSelectedDayIntoView_() {
+  const card = document.getElementById("selectedDayCard");
+  const title = document.getElementById("selectedDateLabel");
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (title) {
+    title.classList.add("section-flash");
+    window.setTimeout(() => title.classList.remove("section-flash"), 1200);
+  }
 }
 
 function renderEntryList(ul, entries, emptyText) {
