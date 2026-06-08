@@ -1221,7 +1221,7 @@ input::placeholder {
   font-size: 9px;
   line-height: 1;
   text-align: left;
-  margin-top: -1px;
+  margin-top: 0;
 }
 
 /* Admin spacing unify: avoid "stuck to form" look on mobile */

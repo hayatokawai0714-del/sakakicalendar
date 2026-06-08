@@ -1346,7 +1346,8 @@ function renderCalendar() {
       num.textContent = String(day.getDate());
       cell.appendChild(num);
 
-      dayEntries.slice(0, 2).forEach((entry) => {
+      const visibleEntries = dayEntries.length > 2 ? dayEntries.slice(0, 1) : dayEntries;
+      visibleEntries.forEach((entry) => {
         const chip = document.createElement("div");
         chip.className = "entry-chip";
         chip.classList.add(`t-${entry.type}`);
@@ -1361,7 +1362,7 @@ function renderCalendar() {
       if (dayEntries.length > 2) {
         const more = document.createElement("div");
         more.className = "entry-chip entry-chip--more";
-        more.textContent = `他${dayEntries.length - 2}件`;
+        more.textContent = "他" + (dayEntries.length - 1) + "件";
         cell.appendChild(more);
       }
 
