@@ -1360,7 +1360,7 @@ function renderCalendar() {
 
       if (dayEntries.length > 2) {
         const more = document.createElement("div");
-        more.className = "entry-chip";
+        more.className = "entry-chip entry-chip--more";
         more.textContent = `他${dayEntries.length - 2}件`;
         cell.appendChild(more);
       }

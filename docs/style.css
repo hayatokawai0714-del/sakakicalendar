@@ -1201,11 +1201,27 @@ input::placeholder {
   max-height: 80px !important;
 }
 
+
 .calendar-grid .entry-chip {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 9px;
+  padding: 1px 4px;
+  margin-bottom: 1px;
+}
+
+.calendar-grid .entry-chip.entry-chip--more {
+  display: block;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-size: 9px;
+  line-height: 1;
+  text-align: left;
+  margin-top: -1px;
 }
 
 /* Admin spacing unify: avoid "stuck to form" look on mobile */
