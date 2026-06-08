@@ -537,6 +537,11 @@ button:disabled,
   margin-bottom: 8px;
 }
 
+.form-highlight {
+  box-shadow: inset 0 0 0 2px rgba(17, 24, 39, 0.18), 0 0 0 1px rgba(17, 24, 39, 0.06);
+  transition: box-shadow 0.2s ease;
+}
+
 .mark-seen-btn {
   white-space: nowrap;
   padding: 0 10px;

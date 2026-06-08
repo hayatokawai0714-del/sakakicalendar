@@ -8,8 +8,11 @@ const SPREADSHEET_ID = "1AIv_8LDY4zSWNYil-C4Ftuz5lYciISfdLR_X5oXeM4Y";
 
 const SHEET_NAMES = {
   shipments: "shipments",
-  recurring_shipments: "recurring_shipments",
-  events: "events",
+  recurring_shipments: "recurring_shipments",
+
+  recurring_exceptions: "recurring_exceptions",
+
+  events: "events",
   memos: "memos",
   destinations: "destinations",
   settings_units: "settings_units",
@@ -36,9 +39,18 @@ function doGet(e) {
       case "getShipments":
         result = getSheetData_(SHEET_NAMES.shipments);
         break;
-      case "getRecurringShipments":
-        result = getSheetData_(SHEET_NAMES.recurring_shipments);
-        break;
+      case "getRecurringShipments":
+
+        result = getSheetData_(SHEET_NAMES.recurring_shipments);
+
+        break;
+
+      case "getRecurringExceptions":
+
+        result = getSheetData_(SHEET_NAMES.recurring_exceptions);
+
+        break;
+
       case "getEvents":
         result = getSheetData_(SHEET_NAMES.events);
         break;
@@ -62,9 +74,24 @@ function doGet(e) {
       case "saveRecurringShipment":
         result = saveRow_(SHEET_NAMES.recurring_shipments, payload);
         break;
-      case "deleteRecurringShipment":
-        result = deleteRow_(SHEET_NAMES.recurring_shipments, payload.id);
-        break;
+      case "deleteRecurringShipment":
+
+        out = deleteRow_(SHEET_NAMES.recurring_shipments, payload.id);
+
+        break;
+
+      case "saveRecurringException":
+
+        out = saveRow_(SHEET_NAMES.recurring_exceptions, payload);
+
+        break;
+
+      case "deleteRecurringException":
+
+        out = deleteRow_(SHEET_NAMES.recurring_exceptions, payload.id);
+
+        break;
+
       case "saveEvent":
         result = saveRow_(SHEET_NAMES.events, payload);
         break;
@@ -122,9 +149,24 @@ function doPost(e) {
       case "saveRecurringShipment":
         out = saveRow_(SHEET_NAMES.recurring_shipments, payload);
         break;
-      case "deleteRecurringShipment":
-        out = deleteRow_(SHEET_NAMES.recurring_shipments, payload.id);
-        break;
+      case "deleteRecurringShipment":
+
+        out = deleteRow_(SHEET_NAMES.recurring_shipments, payload.id);
+
+        break;
+
+      case "saveRecurringException":
+
+        out = saveRow_(SHEET_NAMES.recurring_exceptions, payload);
+
+        break;
+
+      case "deleteRecurringException":
+
+        out = deleteRow_(SHEET_NAMES.recurring_exceptions, payload.id);
+
+        break;
+
       case "saveEvent":
         out = saveRow_(SHEET_NAMES.events, payload);
         break;
@@ -164,11 +206,13 @@ function doPost(e) {
 
 function wrapGetResult_(action, data) {
   // Frontend expects these keys for getAll:
-  // { shipments, recurring_shipments, events, memos, destinations, settings_units }
+  // { shipments, recurring_shipments, recurring_exceptions, events, memos, destinations, settings_units }
   if (action === "getAll") return data;
   switch (action) {
     case "getShipments": return { shipments: data };
-    case "getRecurringShipments": return { recurring_shipments: data };
+    case "getRecurringShipments": return { recurring_shipments: data };
+
+    case "getRecurringExceptions": return { recurring_exceptions: data };
     case "getEvents": return { events: data };
     case "getMemos": return { memos: data };
     case "getDestinations": return { destinations: data };
@@ -180,8 +224,11 @@ function wrapGetResult_(action, data) {
 function getAllData_() {
   return {
     shipments: getSheetData_(SHEET_NAMES.shipments),
-    recurring_shipments: getSheetData_(SHEET_NAMES.recurring_shipments),
-    events: getSheetData_(SHEET_NAMES.events),
+    recurring_shipments: getSheetData_(SHEET_NAMES.recurring_shipments),
+
+    recurring_exceptions: getSheetData_(SHEET_NAMES.recurring_exceptions),
+
+    events: getSheetData_(SHEET_NAMES.events),
     memos: getSheetData_(SHEET_NAMES.memos),
     destinations: getSheetData_(SHEET_NAMES.destinations),
     settings_units: getSheetData_(SHEET_NAMES.settings_units),
@@ -314,7 +361,25 @@ function ensureHeaders_() {
     "updatedAt",
     "updatedBy",
   ]);
-  ensureHeaderRow_(SHEET_NAMES.events, ["id", "date", "time", "title", "memo", "updatedAt", "updatedBy"]);
+  ensureHeaderRow_(SHEET_NAMES.recurring_exceptions, [
+    "id",
+    "recurringId",
+    "date",
+    "action",
+    "destinationId",
+    "destinationName",
+    "standard",
+    "quantity",
+    "unit",
+    "standard2",
+    "quantity2",
+    "unit2",
+    "memo",
+    "shipOffsetDays",
+    "updatedAt",
+    "updatedBy",
+  ]);
+  ensureHeaderRow_(SHEET_NAMES.events, ["id", "date", "time", "title", "memo", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.memos, ["id", "date", "content", "priority", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.destinations, [
     "id", "name", "address", "phone", "contactPerson", "email", "note", "active", "sortOrder", "updatedAt", "updatedBy",
@@ -360,5 +425,12 @@ function parsePayload_(payloadStr) {
     return JSON.parse(decodeURIComponent(payloadStr));
   }
 }
+
+
+
+
+
+
+
 
 

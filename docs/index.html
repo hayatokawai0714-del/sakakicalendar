@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>出荷・予定管理</title>
-    <link rel="manifest" href="./manifest.json?v=2026-05-30-2" />
+    <link rel="manifest" href="./manifest.json?v=2026-06-08-1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="出荷予定" />
-    <link rel="stylesheet" href="./style.css?v=2026-06-02-02" />
+    <link rel="stylesheet" href="./style.css?v=2026-06-08-1" />
   </head>
   <body>
     <main class="container">
@@ -60,10 +60,13 @@
         <div id="calendarGrid" class="calendar-grid"></div>
       </section>
 
-      <section class="card">
+      <section class="card" id="entryCard">
         <h2>予定を追加 / 編集</h2>
         <form id="entryForm" class="form form--compact">
   <input type="hidden" id="entryId" />
+  <input type="hidden" id="entryMode" />
+  <input type="hidden" id="exceptionRecurringId" />
+  <input type="hidden" id="exceptionDate" />
 
   <div class="form-top-row">
     <label>
@@ -144,6 +147,12 @@
 
       <label>開始日<input type="date" id="startDate" /></label>
       <label>終了日（空欄可）<input type="date" id="endDate" /></label>
+    </div>
+
+    <div id="recurringOverrideFields" class="subcard hidden">
+      <div class="muted" style="margin: 0 0 6px;">この日だけ編集</div>
+      <label>出荷オフセット<input type="number" id="exceptionShipOffsetDays" step="1" inputmode="numeric" value="0" /></label>
+      <div class="muted small-note">定期ルール本体は変更しません。</div>
     </div>
 
     <div class="form-destination-row">
@@ -313,7 +322,7 @@
       </section>
     </main>
 
-    <script src="./app.js?v=2026-06-02-02"></script>
+    <script src="./app.js?v=2026-06-08-1"></script>
   </body>
 </html>
 

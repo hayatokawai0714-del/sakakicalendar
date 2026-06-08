@@ -4,6 +4,7 @@
   standards: "sakaki_standards_v1",
   units: "sakaki_units_v1",
   recurringShipments: "sakaki_recurring_shipments_v1",
+  recurringExceptions: "sakaki_recurring_exceptions_v1",
   thisWeekOpen: "sakaki_this_week_summary_open_v1",
   nextWeekOpen: "sakaki_nextweek_open_v1",
   apiUrl: "sakaki_api_url_v1",
@@ -21,8 +22,8 @@ const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
 const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-05-30.1";
-const BUILD_TIME = "2026-05-30 12:00";
+const APP_VERSION = "2026-06-08.1";
+const BUILD_TIME = "2026-06-08 00:00";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -34,6 +35,7 @@ function isDebugUiEnabled_() {
 const state = {
   entries: [], // spot shipments + events + memos
   recurringShipments: [],
+  recurringExceptions: [],
   destinations: [],
   standards: [],
   units: [],
@@ -80,6 +82,7 @@ function init() {
 function loadState() {
   state.entries = readLS(STORAGE_KEYS.entries, []);
   state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, []);
+  state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
@@ -97,6 +100,7 @@ function saveState() {
   // localStorage is used as backup cache even in API mode
   writeLS(STORAGE_KEYS.entries, state.entries);
   writeLS(STORAGE_KEYS.recurringShipments, state.recurringShipments);
+  writeLS(STORAGE_KEYS.recurringExceptions, state.recurringExceptions);
   writeLS(STORAGE_KEYS.destinations, state.destinations);
   writeLS(STORAGE_KEYS.standards, state.standards);
   writeLS(STORAGE_KEYS.units, state.units);
@@ -675,6 +679,7 @@ async function loadAllDataFromApi() {
     const recurring = Array.isArray(all.recurring_shipments) ? all.recurring_shipments : [];
     const events = Array.isArray(all.events) ? all.events : [];
     const memos = Array.isArray(all.memos) ? all.memos : [];
+    const recurringExceptions = Array.isArray(all.recurring_exceptions) ? all.recurring_exceptions : [];
     const destinations = Array.isArray(all.destinations) ? all.destinations : [];
     const settingsUnits = Array.isArray(all.settings_units) ? all.settings_units : [];
 
@@ -718,12 +723,14 @@ async function loadAllDataFromApi() {
         updatedBy: String(m.updatedBy || "未設定"),
       })),
     ];
+    state.recurringExceptions = recurringExceptions.map((ex) => normalizeRecurringException_(ex));
 
     // Debug: help diagnose "saved but not shown" cases (date format / filtering).
     try {
       console.log("[sakaki] api getAll loaded", {
         shipments: shipments.length,
         recurring: recurring.length,
+        recurringExceptions: recurringExceptions.length,
         events: events.length,
         memos: memos.length,
         today: formatDate(new Date()),
@@ -847,6 +854,142 @@ function saveRecurringShipment(rule) {
   saveState();
 }
 
+function getRecurringExceptions() {
+  return Array.isArray(state.recurringExceptions) ? state.recurringExceptions : [];
+}
+
+function recurringExceptionKey_(recurringId, date) {
+  return `${String(recurringId || "").trim()}||${normalizeDateKey(date)}`;
+}
+
+function normalizeRecurringException_(raw) {
+  const rec = raw && typeof raw === "object" ? raw : {};
+  const shipment = rec.shipment && typeof rec.shipment === "object" ? rec.shipment : rec;
+  const date = normalizeDateKey(rec.date || shipment.date || "");
+  return {
+    id: String(rec.id || createIdFrom(rec.recurringId || "recurring", date || "date")),
+    recurringId: String(rec.recurringId || ""),
+    date,
+    action: String(rec.action || "override"),
+    shipment: {
+      destinationId: String(shipment.destinationId || ""),
+      destinationName: String(shipment.destinationName || shipment.customer || ""),
+      destination: String(shipment.destinationName || shipment.customer || ""),
+      standard: String(shipment.standard || ""),
+      quantity: shipment.quantity === undefined || shipment.quantity === null || shipment.quantity === "" ? "" : Number(shipment.quantity),
+      unit: String(shipment.unit || ""),
+      standard2: String(shipment.standard2 || ""),
+      quantity2: shipment.quantity2 === undefined || shipment.quantity2 === null || shipment.quantity2 === "" ? "" : Number(shipment.quantity2),
+      unit2: String(shipment.unit2 || ""),
+      memo: String(shipment.memo || ""),
+      shipOffsetDays: shipment.shipOffsetDays === undefined || shipment.shipOffsetDays === null ? 0 : Number(shipment.shipOffsetDays),
+    },
+    updatedAt: String(rec.updatedAt || new Date().toISOString()),
+    updatedBy: String(rec.updatedBy || currentUpdatedBy()),
+  };
+}
+
+function flattenRecurringExceptionForApi_(exception) {
+  const rec = normalizeRecurringException_(exception);
+  return {
+    id: rec.id,
+    recurringId: rec.recurringId,
+    date: rec.date,
+    action: rec.action,
+    destinationId: rec.shipment.destinationId,
+    destinationName: rec.shipment.destinationName,
+    standard: rec.shipment.standard,
+    quantity: rec.shipment.quantity,
+    unit: rec.shipment.unit,
+    standard2: rec.shipment.standard2,
+    quantity2: rec.shipment.quantity2,
+    unit2: rec.shipment.unit2,
+    memo: rec.shipment.memo,
+    shipOffsetDays: rec.shipment.shipOffsetDays,
+    updatedAt: rec.updatedAt,
+    updatedBy: rec.updatedBy,
+  };
+}
+
+function saveRecurringException(exception) {
+  const rec = normalizeRecurringException_(exception);
+  upsertById(state.recurringExceptions, rec);
+  saveState();
+  return rec;
+}
+
+function deleteRecurringException(recurringId, date) {
+  const key = recurringExceptionKey_(recurringId, date);
+  state.recurringExceptions = getRecurringExceptions().filter((ex) => recurringExceptionKey_(ex.recurringId, ex.date) !== key);
+  saveState();
+}
+
+function removeRecurringExceptionsForRule(recurringId) {
+  const ruleId = String(recurringId || "").trim();
+  if (!ruleId) return [];
+  const removed = getRecurringExceptions().filter((ex) => String(ex.recurringId || "") === ruleId);
+  state.recurringExceptions = getRecurringExceptions().filter((ex) => String(ex.recurringId || "") !== ruleId);
+  saveState();
+  return removed;
+}
+
+function findRecurringException_(recurringId, date) {
+  const key = recurringExceptionKey_(recurringId, date);
+  return getRecurringExceptions().find((ex) => recurringExceptionKey_(ex.recurringId, ex.date) === key) || null;
+}
+
+function buildRecurringExceptionShipment_(sourceEntry, exception) {
+  const sh = exception.shipment || {};
+  const destName = String(sh.destinationName || sh.destination || "").trim();
+  return {
+    ...sourceEntry,
+    id: exception.id || sourceEntry.id,
+    date: normalizeDateKey(exception.date || sourceEntry.date),
+    destinationId: String(sh.destinationId || sourceEntry.destinationId || ""),
+    destinationName: destName || String(sourceEntry.destinationName || sourceEntry.destination || ""),
+    destination: destName || String(sourceEntry.destinationName || sourceEntry.destination || ""),
+    standard: String(sh.standard || sourceEntry.standard || ""),
+    quantity: sh.quantity === "" || sh.quantity === undefined || sh.quantity === null ? sourceEntry.quantity : Number(sh.quantity),
+    unit: String(sh.unit || sourceEntry.unit || ""),
+    standard2: String(sh.standard2 || sourceEntry.standard2 || ""),
+    quantity2: sh.quantity2 === "" || sh.quantity2 === undefined || sh.quantity2 === null ? sourceEntry.quantity2 : Number(sh.quantity2),
+    unit2: String(sh.unit2 || sourceEntry.unit2 || ""),
+    memo: String(sh.memo || sourceEntry.memo || ""),
+    shipOffsetDays: sh.shipOffsetDays === "" || sh.shipOffsetDays === undefined || sh.shipOffsetDays === null ? Number(sourceEntry.shipOffsetDays || 0) : Number(sh.shipOffsetDays),
+    sourceType: "recurring",
+    exceptionDate: normalizeDateKey(exception.date || sourceEntry.date),
+    exceptionAction: "override",
+    recurringId: exception.recurringId || sourceEntry.recurringId || sourceEntry._ruleId || "",
+    _ruleId: exception.recurringId || sourceEntry._ruleId,
+    updatedAt: String(exception.updatedAt || sourceEntry.updatedAt || new Date().toISOString()),
+    updatedBy: String(exception.updatedBy || sourceEntry.updatedBy || currentUpdatedBy()),
+  };
+}
+
+function applyRecurringExceptions_(entries) {
+  const list = Array.isArray(entries) ? entries.slice() : [];
+  if (!getRecurringExceptions().length) return list;
+  const out = [];
+  list.forEach((entry) => {
+    if (!entry || entry.type !== "shipment" || (entry.shipmentType || "") !== "recurring") {
+      out.push(entry);
+      return;
+    }
+    const ex = findRecurringException_(entry.recurringId || entry._ruleId || entry.id, entry.date);
+    if (!ex) {
+      out.push(entry);
+      return;
+    }
+    if (String(ex.action || "").trim() === "skip") return;
+    if (String(ex.action || "").trim() === "override") {
+      out.push(buildRecurringExceptionShipment_(entry, ex));
+      return;
+    }
+    out.push(entry);
+  });
+  return out;
+}
+
 function renderToday() {
   // Today card was removed to save vertical space.
   return;
@@ -918,11 +1061,12 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
   // Debug (requested)
   try {
     console.log("recurring rules count", getRecurringShipments().length);
+    console.log("recurring exceptions count", getRecurringExceptions().length);
     console.log("generated recurring entries count", out.length);
     console.log("render month", { year, month: monthIndex + 1 });
   } catch {}
 
-  return out;
+  return applyRecurringExceptions_(out);
 }
 
 function generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems) {
@@ -1237,8 +1381,9 @@ function renderSelectedDay() {
   const list = document.getElementById("selectedDayList");
   label.textContent = state.selectedDate;
 
-  const year = state.currentMonth.getFullYear();
-  const month = state.currentMonth.getMonth();
+  const selectedDate = parseDate(state.selectedDate) || new Date();
+  const year = selectedDate.getFullYear();
+  const month = selectedDate.getMonth();
   const generated = generateRecurringShipmentsForMonth(year, month);
 
   const items = entriesByDate(state.selectedDate, { generatedRecurring: generated });
@@ -1388,7 +1533,9 @@ function renderEntryList(ul, entries, emptyText) {
       editBtn.className = "text-btn";
       editBtn.textContent = "編集";
       editBtn.disabled = state.isBusy;
-      editBtn.addEventListener("click", () => setEntryToForm(entry));
+      editBtn.addEventListener("click", () => {
+        if (setEntryToForm(entry)) scrollEntryFormIntoView_();
+      });
 
       const delBtn = document.createElement("button");
       delBtn.className = "text-btn";
@@ -1407,8 +1554,13 @@ function renderEntryList(ul, entries, emptyText) {
 
 async function deleteEntry(entry) {
   const isRecurringShipment = entry && entry.type === "shipment" && entry.shipmentType === "recurring";
-  const msg = isRecurringShipment ? "この定期出荷ルールを削除しますか？" : "削除しますか？";
-  if (!confirm(msg)) return;
+  let deleteMode = "";
+  if (isRecurringShipment) {
+    deleteMode = recurringChoice_("delete");
+    if (!deleteMode) return;
+  } else if (!confirm("削除しますか？")) {
+    return;
+  }
   try {
     setBusy(true, "削除中…");
 
@@ -1416,29 +1568,50 @@ async function deleteEntry(entry) {
       // Optimistic UI update: remove locally first, then sync delete to API.
       const snap = snapshotLocalState_();
       if (isRecurringShipment) {
-        state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
+        if (deleteMode === "day") {
+          const exception = buildRecurringSkipException_(entry);
+          saveRecurringException(exception);
+          refreshViewFast();
+          syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, "削除しました");
+        } else {
+          state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
+          const removedExceptions = removeRecurringExceptionsForRule(entry._ruleId || entry.id);
+          saveState();
+          refreshViewFast();
+          await deleteItemFromApi("deleteRecurringShipment", entry._ruleId || entry.id);
+          for (const ex of removedExceptions) {
+            await deleteItemFromApi("deleteRecurringException", ex.id);
+          }
+        }
       } else {
         state.entries = state.entries.filter((x) => x.id !== entry.id);
-      }
-      saveState();
-      refreshViewFast();
-      if (isRecurringShipment) {
-        await deleteItemFromApi("deleteRecurringShipment", entry._ruleId || entry.id);
-      } else if (entry.type === "shipment") {
-        await deleteItemFromApi("deleteShipment", entry.id);
-      } else if (entry.type === "event") {
-        await deleteItemFromApi("deleteEvent", entry.id);
-      } else if (entry.type === "memo") {
-        await deleteItemFromApi("deleteMemo", entry.id);
+        saveState();
+        refreshViewFast();
+        if (entry.type === "shipment") {
+          await deleteItemFromApi("deleteShipment", entry.id);
+        } else if (entry.type === "event") {
+          await deleteItemFromApi("deleteEvent", entry.id);
+        } else if (entry.type === "memo") {
+          await deleteItemFromApi("deleteMemo", entry.id);
+        }
       }
       // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       if (isRecurringShipment) {
-        state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
+        if (deleteMode === "day") {
+          saveRecurringException(buildRecurringSkipException_(entry));
+        } else {
+          state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
+          const removedExceptions = removeRecurringExceptionsForRule(entry._ruleId || entry.id);
+          saveState();
+          for (const ex of removedExceptions) {
+            deleteRecurringException(ex.recurringId, ex.date);
+          }
+        }
       } else {
         state.entries = state.entries.filter((x) => x.id !== entry.id);
+        saveState();
       }
-      saveState();
     }
 
     setStatus("削除しました", "ok");
@@ -1485,6 +1658,7 @@ function switchEntryTypeFields() {
   const eventTimeRow = document.getElementById("eventTimeRow");
   const memoDateRow = document.getElementById("memoDateRow");
   const memoPriorityRow = document.getElementById("memoPriorityRow");
+  const recurringOverrideFields = document.getElementById("recurringOverrideFields");
 
   if (shipmentKindRow) shipmentKindRow.classList.toggle("hidden", type !== "shipment");
   if (spotDateRow) spotDateRow.classList.toggle("hidden", type !== "shipment" || document.getElementById("shipmentKind").value !== "spot");
@@ -1492,6 +1666,7 @@ function switchEntryTypeFields() {
   if (eventTimeRow) eventTimeRow.classList.toggle("hidden", type !== "event");
   if (memoDateRow) memoDateRow.classList.toggle("hidden", type !== "memo");
   if (memoPriorityRow) memoPriorityRow.classList.toggle("hidden", type !== "memo");
+  if (recurringOverrideFields) recurringOverrideFields.classList.toggle("hidden", type !== "shipment" || String(document.getElementById("entryMode")?.value || "") !== "recurring_override");
 }
 
 function switchShipmentKindFields() {
@@ -1674,6 +1849,7 @@ function snapshotLocalState_() {
   return {
     entries: state.entries.slice(),
     recurringShipments: state.recurringShipments.slice(),
+    recurringExceptions: state.recurringExceptions.slice(),
     destinations: state.destinations.slice(),
   };
 }
@@ -1682,6 +1858,7 @@ function restoreLocalState_(snap) {
   if (!snap) return;
   state.entries = Array.isArray(snap.entries) ? snap.entries : [];
   state.recurringShipments = Array.isArray(snap.recurringShipments) ? snap.recurringShipments : [];
+  state.recurringExceptions = Array.isArray(snap.recurringExceptions) ? snap.recurringExceptions : [];
   state.destinations = Array.isArray(snap.destinations) ? snap.destinations : [];
   saveState();
 }
@@ -1692,6 +1869,71 @@ function refreshViewFast() {
   renderCalendar();
   renderSelectedDay();
   renderDestinationList();
+}
+
+function scrollEntryFormIntoView_() {
+  const card = document.getElementById("entryCard");
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  card.classList.add("form-highlight");
+  window.setTimeout(() => card.classList.remove("form-highlight"), 1200);
+}
+
+function recurringChoice_(kind) {
+  const title = kind === "edit" ? "この定期出荷をどうしますか？" : "この定期出荷をどうしますか？";
+  const msg =
+    kind === "edit"
+      ? "1: この日だけ編集\n2: 定期ルール編集\n0: キャンセル"
+      : "1: この日だけ削除\n2: 定期ルール削除\n0: キャンセル";
+  const raw = window.prompt(`${title}\n${msg}`, "0");
+  if (raw === null) return "";
+  const choice = String(raw || "").trim();
+  if (choice === "1") return "day";
+  if (choice === "2") return "rule";
+  return "";
+}
+
+function buildRecurringSkipException_(entry) {
+  const recurringId = String(entry._ruleId || entry.recurringId || entry.id || "").trim();
+  const date = normalizeDateKey(entry.date);
+  return {
+    id: createIdFrom(`${recurringId}__skip`, date),
+    recurringId,
+    date,
+    action: "skip",
+    shipment: {},
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentUpdatedBy(),
+  };
+}
+
+function buildRecurringOverrideExceptionFromForm_() {
+  const recurringId = String(document.getElementById("exceptionRecurringId").value || "").trim();
+  const date = requiredValue("shipmentDate", "出荷日");
+  const destId = String(document.getElementById("shipmentDestination").value || "");
+  const destName = destId ? state.destinations.find((d) => String(d.id) === destId)?.name || "" : "";
+  const shipment = {
+    destinationId: destId,
+    destinationName: destName,
+    destination: destName,
+    standard: requiredValue("shipmentStandard", "規格"),
+    quantity: Number(document.getElementById("shipmentQuantity").value || 0),
+    unit: requiredValue("shipmentUnit", "単位"),
+    standard2: String(document.getElementById("shipmentStandard2").value || "").trim(),
+    quantity2: Number(document.getElementById("shipmentQuantity2").value || 0),
+    unit2: String(document.getElementById("shipmentUnit2").value || "").trim(),
+    memo: String(document.getElementById("shipmentMemo").value || "").trim(),
+    shipOffsetDays: Number(document.getElementById("exceptionShipOffsetDays").value || 0),
+  };
+  return {
+    id: createIdFrom(`${recurringId}__override`, date),
+    recurringId,
+    date,
+    action: "override",
+    shipment,
+    updatedAt: new Date().toISOString(),
+    updatedBy: currentUpdatedBy(),
+  };
 }
 
 function syncSave(action, payload, snap, label) {
@@ -1730,10 +1972,40 @@ async function submitEntryForm(e) {
 
   const submitBtn = e.submitter || document.querySelector("#entryForm button[type='submit']");
   const type = document.getElementById("entryType").value;
+  const entryMode = String(document.getElementById("entryMode")?.value || "");
 
   try {
     setButtonLoading(submitBtn, "保存中...");
     setBusy(true, "保存中...");
+
+    if (type === "shipment" && entryMode === "recurring_override") {
+      const exception = buildRecurringOverrideExceptionFromForm_();
+      const payload = {
+        id: exception.id,
+        recurringId: exception.recurringId,
+        date: exception.date,
+        action: exception.action,
+        shipment: exception.shipment,
+        updatedAt: exception.updatedAt,
+        updatedBy: exception.updatedBy,
+      };
+
+      if (isApiEnabled()) {
+        const snap = snapshotLocalState_();
+        saveRecurringException(exception);
+        refreshViewFast();
+        syncSave("saveRecurringException", flattenRecurringExceptionForApi_(payload), snap, "保存しました");
+      } else {
+        saveRecurringException(exception);
+      }
+
+      state.selectedDate = exception.date;
+      setStatus("保存しました", "ok");
+      showToast("保存しました", "success");
+      resetEntryForm();
+      renderAll();
+      return;
+    }
 
     if (type === "shipment") {
       const kind = document.getElementById("shipmentKind").value;
@@ -1969,10 +2241,41 @@ function setEntryToForm(entry) {
   resetEntryForm();
 
   if (entry.type === "shipment" && entry.shipmentType === "recurring") {
-    const ok = confirm("この出荷は定期出荷です。\n定期出荷ルールを編集しますか？");
-    if (!ok) return;
+    const choice = recurringChoice_("edit");
+    if (!choice) return false;
+
+    if (choice === "day") {
+      document.getElementById("entryMode").value = "recurring_override";
+      document.getElementById("exceptionRecurringId").value = String(entry._ruleId || entry.recurringId || entry.id || "");
+      document.getElementById("exceptionDate").value = String(entry.date || "");
+      document.getElementById("entryId").value = String(entry.id || createId());
+
+      document.getElementById("entryType").value = "shipment";
+      switchEntryTypeFields();
+
+      document.getElementById("shipmentKind").value = "spot";
+      switchShipmentKindFields();
+
+      document.getElementById("shipmentDate").value = entry.date;
+      document.getElementById("shipmentDestination").value = String(entry.destinationId || "");
+      document.getElementById("shipmentStandard").value = entry.standard;
+      document.getElementById("shipmentQuantity").value = String(entry.quantity ?? 0);
+      document.getElementById("shipmentUnit").value = entry.unit;
+      document.getElementById("shipmentStandard2").value = String(entry.standard2 || "");
+      document.getElementById("shipmentQuantity2").value = String(entry.quantity2 ?? 0);
+      document.getElementById("shipmentUnit2").value = String(entry.unit2 || "");
+      toggleShipmentSpec2(Boolean(String(entry.standard2 || "").trim()));
+      document.getElementById("shipmentMemo").value = entry.memo || "";
+
+      const overrideBox = document.getElementById("recurringOverrideFields");
+      if (overrideBox) overrideBox.classList.remove("hidden");
+      const offsetInput = document.getElementById("exceptionShipOffsetDays");
+      if (offsetInput) offsetInput.value = String(entry.shipOffsetDays ?? 0);
+      return true;
+    }
+
     const rule = state.recurringShipments.find((r) => r.id === (entry._ruleId || entry.id)) || state.recurringShipments.find((r) => r.id === entry.id);
-    if (!rule) return;
+    if (!rule) return false;
 
     document.getElementById("entryType").value = "shipment";
     switchEntryTypeFields();
@@ -2013,7 +2316,7 @@ function setEntryToForm(entry) {
 
     document.getElementById("startDate").value = rule.startDate || "";
     document.getElementById("endDate").value = rule.endDate || "";
-    return;
+    return true;
   }
 
   if (entry.type === "shipment") {
@@ -2034,7 +2337,7 @@ function setEntryToForm(entry) {
     document.getElementById("shipmentUnit2").value = String(entry.unit2 || "");
     toggleShipmentSpec2(Boolean(String(entry.standard2 || "").trim()));
     document.getElementById("shipmentMemo").value = entry.memo || "";
-    return;
+    return true;
   }
 
   if (entry.type === "event") {
@@ -2046,7 +2349,7 @@ function setEntryToForm(entry) {
     document.getElementById("eventTime").value = entry.time || "";
     document.getElementById("eventTitle").value = entry.title || "";
     document.getElementById("eventMemo").value = entry.memo || "";
-    return;
+    return true;
   }
 
   document.getElementById("entryId").value = entry.id;
@@ -2056,11 +2359,22 @@ function setEntryToForm(entry) {
   document.getElementById("memoDate").value = entry.date;
   document.getElementById("memoContent").value = entry.content || "";
   document.getElementById("memoPriority").value = entry.priority || "medium";
+  return true;
 }
 
 function resetEntryForm() {
   document.getElementById("entryForm").reset();
   document.getElementById("entryId").value = "";
+  const entryMode = document.getElementById("entryMode");
+  if (entryMode) entryMode.value = "";
+  const exceptionRecurringId = document.getElementById("exceptionRecurringId");
+  if (exceptionRecurringId) exceptionRecurringId.value = "";
+  const exceptionDate = document.getElementById("exceptionDate");
+  if (exceptionDate) exceptionDate.value = "";
+  const exceptionShipOffsetDays = document.getElementById("exceptionShipOffsetDays");
+  if (exceptionShipOffsetDays) exceptionShipOffsetDays.value = "0";
+  const overrideBox = document.getElementById("recurringOverrideFields");
+  if (overrideBox) overrideBox.classList.add("hidden");
   document.getElementById("recurringId").value = "";
   document.getElementById("shipmentKind").value = "spot";
   document.getElementById("entryType").value = "shipment";
@@ -2415,7 +2729,7 @@ function fillSelect(id, items, placeholder) {
 function entriesByDate(date, opts = {}) {
   const key = normalizeDateKey(date);
   const base = state.entries.filter((x) => normalizeDateKey(x.date) === key);
-  const generated = (opts.generatedRecurring || []).filter((x) => normalizeDateKey(x.date) === key);
+  const generated = applyRecurringExceptions_((opts.generatedRecurring || []).filter((x) => normalizeDateKey(x.date) === key));
   // Debug: helps diagnose date-format mismatches where events are "saved but not shown".
   if (key === formatDate(new Date())) {
     try {
