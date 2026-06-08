@@ -1370,7 +1370,11 @@ function renderCalendar() {
         setFormDate(dateKey);
         renderCalendar();
         renderSelectedDay();
-        scrollSelectedDayIntoView_();
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            scrollSelectedDayIntoView_();
+          });
+        });
       });
 
       grid.appendChild(cell);
