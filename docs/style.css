@@ -1,4 +1,4 @@
-﻿html, body { max-width: 100%; overflow-x: hidden; }
+html, body { max-width: 100%; overflow-x: hidden; }
 :root {
   --bg: #ffffff;
   --text: #111111;
@@ -884,7 +884,7 @@ button {
   /* Mobile: show destination on first line, standard+qty on second line (no over-truncation) */
   .entry-line.entry-line--shipment {
     grid-template-columns: 42px minmax(0, 1fr) !important;
-    grid-auto-rows: auto;
+    grid-auto-rows: 80px;
     row-gap: 2px;
     column-gap: 8px;
     align-items: start;
@@ -961,7 +961,7 @@ form,
 .entry-line.entry-line--shipment {
   /* Override older 4-col rules */
   grid-template-columns: 42px minmax(0, 1fr) !important;
-  grid-auto-rows: auto;
+  grid-auto-rows: 80px;
   row-gap: 2px;
   column-gap: 10px;
   align-items: start;
@@ -1190,6 +1190,23 @@ input::placeholder {
   overflow: hidden;
 }
 
+/* Calendar day cells must stay fixed-height even when many entries exist */
+.calendar-grid {
+  grid-auto-rows: 80px !important;
+}
+
+.calendar-grid > .day-cell {
+  height: 80px !important;
+  min-height: 80px !important;
+  max-height: 80px !important;
+}
+
+.calendar-grid .entry-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Admin spacing unify: avoid "stuck to form" look on mobile */
 @media (max-width: 720px) {
