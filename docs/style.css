@@ -87,6 +87,10 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   gap: 6px;
 }
 
+.calendar-grid {
+  grid-auto-rows: 80px;
+}
+
 .weekday-row {
   margin: 8px 0 4px;
   color: var(--muted);
@@ -98,11 +102,13 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
-  min-height: 64px;
+  min-height: 80px;
+  height: 80px;
   padding: 6px;
   padding-top: 20px;
   background: #fff;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .day-num {
@@ -124,6 +130,7 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 2px;
+  max-width: 100%;
 }
 .entry-chip .tag {
   display: inline-block;
@@ -1180,7 +1187,7 @@ input::placeholder {
 }
 
 .day-cell {
-  overflow: visible;
+  overflow: hidden;
 }
 
 
