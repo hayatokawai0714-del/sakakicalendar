@@ -1519,3 +1519,121 @@ input::placeholder {
 /* Today badge stays black/white */
 .day-num.is-today { color: #ffffff; }
 
+/* Compact iOS-style month card on phones. */
+@media (max-width: 600px) {
+  section[aria-label="カレンダー"] {
+    padding: 10px 8px 12px;
+    border-color: #e5e5ea;
+    border-radius: 16px;
+    background: #fff;
+  }
+
+  section[aria-label="カレンダー"] .calendar-head {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr) 58px;
+    gap: 4px;
+  }
+
+  section[aria-label="カレンダー"] .calendar-head h2 {
+    margin: 0;
+    font-size: 17px;
+    line-height: 32px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  section[aria-label="カレンダー"] .calendar-head .btn {
+    min-width: 0;
+    height: 30px;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+
+  section[aria-label="カレンダー"] .weekday-row,
+  section[aria-label="カレンダー"] .calendar-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  section[aria-label="カレンダー"] .weekday-row {
+    margin: 5px 0 2px;
+    font-size: 10px;
+    line-height: 18px;
+  }
+
+  section[aria-label="カレンダー"] .calendar-grid {
+    grid-auto-rows: 56px !important;
+  }
+
+  section[aria-label="カレンダー"] .day-cell {
+    height: 56px !important;
+    min-height: 56px !important;
+    max-height: 56px !important;
+    padding: 28px 2px 2px;
+    border-color: transparent;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  section[aria-label="カレンダー"] .day-cell.outside {
+    background: #fff;
+    opacity: 0.36;
+  }
+
+  section[aria-label="カレンダー"] .day-cell.today {
+    border-color: transparent;
+    background: #fff;
+  }
+
+  section[aria-label="カレンダー"] .day-cell.selected {
+    box-shadow: none;
+  }
+
+  section[aria-label="カレンダー"] .day-num {
+    top: 3px;
+    left: 50%;
+    display: inline-flex;
+    width: 23px;
+    height: 23px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 12px;
+    line-height: 1;
+    transform: translateX(-50%);
+  }
+
+  section[aria-label="カレンダー"] .day-cell.selected .day-num {
+    box-shadow: inset 0 0 0 1.5px #111;
+  }
+
+  section[aria-label="カレンダー"] .day-cell.selected .day-num.is-today {
+    box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px #111;
+  }
+
+  section[aria-label="カレンダー"] .entry-chip {
+    display: block;
+    height: 11px;
+    margin: 0 0 1px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 3px;
+    font-size: 8px;
+    line-height: 11px;
+    text-align: left;
+  }
+
+  section[aria-label="カレンダー"] .entry-chip .tag {
+    display: none;
+  }
+
+  section[aria-label="カレンダー"] .entry-chip.entry-chip--more {
+    height: 9px;
+    padding: 0 2px;
+    font-size: 8px;
+    line-height: 9px;
+    text-align: center;
+  }
+}
+
