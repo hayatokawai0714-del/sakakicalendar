@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-06-08-7" />
+    <link rel="stylesheet" href="./style.css?v=2026-06-19-1" />
   </head>
   <body>
     <main class="container">
@@ -231,6 +231,13 @@
   </div>
 </form>
       </section>
+      <section class="card monthly-shipment-card" aria-labelledby="monthlyShipmentTitle">
+        <div class="monthly-shipment-head">
+          <h2 id="monthlyShipmentTitle">今月の出荷合計</h2>
+          <span id="monthlyShipmentMonth" class="muted"></span>
+        </div>
+        <div id="monthlyShipmentSummary" class="monthly-shipment-summary"></div>
+      </section>
       <section class="card admin-card" aria-label="管理メニュー">
         <div class="admin-bar admin-bar--bottom">
           <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
@@ -335,7 +342,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-06-08-7"></script>
+    <script src="./app.js?v=2026-06-19-1"></script>
   </body>
 </html>
 

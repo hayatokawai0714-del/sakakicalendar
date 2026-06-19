@@ -1519,6 +1519,97 @@ input::placeholder {
 /* Today badge stays black/white */
 .day-num.is-today { color: #ffffff; }
 
+/* Monthly shipment totals */
+.monthly-shipment-card {
+  background: #fff;
+}
+
+.monthly-shipment-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.monthly-shipment-head h2 {
+  margin: 0;
+}
+
+.monthly-shipment-head .muted {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.monthly-shipment-summary {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.monthly-shipment-destination {
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.monthly-shipment-destination:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.monthly-shipment-destination h3 {
+  margin: 0 0 5px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.monthly-shipment-destination ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monthly-shipment-destination li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.monthly-shipment-standard {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.monthly-shipment-quantity {
+  flex: 0 0 auto;
+  max-width: 55%;
+  overflow-wrap: anywhere;
+  color: #111;
+  font-size: 14px;
+  text-align: right;
+}
+
+.monthly-shipment-empty {
+  margin: 0;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .monthly-shipment-card {
+    padding: 12px;
+  }
+
+  .monthly-shipment-head h2 {
+    font-size: 17px;
+  }
+}
+
 /* Compact iOS-style month card on phones. */
 @media (max-width: 600px) {
   section[aria-label="カレンダー"] {

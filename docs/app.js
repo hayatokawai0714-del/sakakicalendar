@@ -235,10 +235,12 @@ function bindEvents() {
   document.getElementById("prevMonthBtn").addEventListener("click", () => {
     state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
     renderCalendar();
+    renderMonthlyShipmentSummary();
   });
   document.getElementById("nextMonthBtn").addEventListener("click", () => {
     state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() + 1, 1);
     renderCalendar();
+    renderMonthlyShipmentSummary();
   });
   const markSeenBtn = document.getElementById("markSeenBtn");
   if (markSeenBtn) markSeenBtn.addEventListener("click", () => {
@@ -355,6 +357,7 @@ function renderAll() {
   toggleShipmentSpec2(false);
   fillMasterSelects();
   renderCalendar();
+  renderMonthlyShipmentSummary();
   renderThisWeekShipmentSummary();
   renderNextWeekShipmentSummary();
   renderSelectedDay();
@@ -3335,9 +3338,10 @@ function getGeneratedRecurringForRange(startDate, endDate) {
   return out;
 }
 
-function summarizeShipmentQuantities(shipments) {
+function summarizeShipmentQuantities(shipments, opts = {}) {
   // Group by destination, then by (standard, unit) and sum numeric quantities.
   const destMap = new Map();
+  const numericOnly = Boolean(opts.numericOnly);
 
   function addLine(dest, std, qty, unit) {
     const d = String(dest || "").trim();
@@ -3345,8 +3349,10 @@ function summarizeShipmentQuantities(shipments) {
     const u = String(unit || "").trim();
     if (!d || !s || !u) return;
 
-    const qtyNum = Number.parseFloat(String(qty ?? "").trim());
-    const hasNum = Number.isFinite(qtyNum);
+    const rawQty = String(qty ?? "").trim();
+    const qtyNum = numericOnly ? Number(rawQty) : Number.parseFloat(rawQty);
+    const hasNum = rawQty !== "" && Number.isFinite(qtyNum);
+    if (numericOnly && (!hasNum || qtyNum === 0)) return;
 
     const group = destMap.get(d) || new Map();
     const key = `${s}||${u}`;
@@ -3383,6 +3389,54 @@ function summarizeShipmentQuantities(shipments) {
   // Destinations: highest weight first, then name
   out.sort((a, b) => (b.weight - a.weight) || a.destinationName.localeCompare(b.destinationName));
   return out;
+}
+
+function renderMonthlyShipmentSummary() {
+  const monthEl = document.getElementById("monthlyShipmentMonth");
+  const summaryEl = document.getElementById("monthlyShipmentSummary");
+  if (!monthEl || !summaryEl) return;
+
+  const year = state.currentMonth.getFullYear();
+  const month = state.currentMonth.getMonth();
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0);
+  const shipments = getShipmentsForRange(start, end).concat(getGeneratedRecurringForRange(start, end));
+  const groups = summarizeShipmentQuantities(shipments, { numericOnly: true });
+
+  monthEl.textContent = `${year}年${month + 1}月`;
+  summaryEl.innerHTML = "";
+
+  if (!groups.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted monthly-shipment-empty";
+    empty.textContent = "この月の出荷はありません";
+    summaryEl.appendChild(empty);
+    return;
+  }
+
+  groups.forEach((group) => {
+    const block = document.createElement("section");
+    block.className = "monthly-shipment-destination";
+
+    const destination = document.createElement("h3");
+    destination.textContent = group.destinationName;
+    block.appendChild(destination);
+
+    const list = document.createElement("ul");
+    group.specs.forEach((spec) => {
+      const item = document.createElement("li");
+      const standard = document.createElement("span");
+      standard.className = "monthly-shipment-standard";
+      standard.textContent = spec.standard;
+      const quantity = document.createElement("strong");
+      quantity.className = "monthly-shipment-quantity";
+      quantity.textContent = `${spec.qtyText}${spec.unit}`;
+      item.append(standard, quantity);
+      list.appendChild(item);
+    });
+    block.appendChild(list);
+    summaryEl.appendChild(block);
+  });
 }
 
 function trimTrailingZeros(n) {
