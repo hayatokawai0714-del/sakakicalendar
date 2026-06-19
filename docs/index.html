@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-06-19-1" />
+    <link rel="stylesheet" href="./style.css?v=2026-06-19-2" />
   </head>
   <body>
     <main class="container">
@@ -241,6 +241,7 @@
       <section class="card admin-card" aria-label="管理メニュー">
         <div class="admin-bar admin-bar--bottom">
           <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
+          <button type="button" class="admin-btn" data-panel="roadside" id="adminRoadsideBtn">道の駅</button>
           <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先＋</button>
           <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格＋</button>
         </div>
@@ -267,6 +268,34 @@
               </div>
             </form>
             <div id="statusBar" class="status hidden" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="sheet-backdrop hidden" data-sheet-backdrop="roadside">
+        <section class="sheet" role="dialog" aria-modal="true" aria-label="道の駅 作り榊 出荷数入力">
+          <header class="sheet-header">
+            <h3>道の駅 作り榊 出荷数入力</h3>
+            <button type="button" class="icon-btn" data-sheet-close="roadside" aria-label="閉じる">閉じる</button>
+          </header>
+          <div class="sheet-body">
+            <form id="roadsideShipmentForm" class="form compact roadside-shipment-form">
+              <label>日付<input id="roadsideShipmentDate" type="date" required /></label>
+              <label>道の駅名
+                <select id="roadsideShipmentDestination" required>
+                  <option value="roadside-aguriparu">アグリパル</option>
+                  <option value="roadside-meijinomori">明治の森</option>
+                </select>
+              </label>
+              <label>作り榊の数量
+                <span class="roadside-quantity-field">
+                  <input id="roadsideShipmentQuantity" type="number" min="1" step="1" inputmode="numeric" required />
+                  <span>束</span>
+                </span>
+              </label>
+              <label>メモ（任意）<textarea id="roadsideShipmentMemo" rows="2"></textarea></label>
+              <div class="actions"><button type="submit" class="btn">保存</button></div>
+            </form>
           </div>
         </section>
       </div>
@@ -342,7 +371,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-06-19-1"></script>
+    <script src="./app.js?v=2026-06-19-2"></script>
   </body>
 </html>
 

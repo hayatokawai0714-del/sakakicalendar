@@ -317,6 +317,23 @@ button:disabled,
   border-color: #d1d5db;
 }
 
+.roadside-shipment-form {
+  gap: 12px;
+}
+
+.roadside-quantity-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.roadside-quantity-field > span {
+  color: #374151;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 /* Backdrop covers entire screen */
 .sheet-backdrop {
   position: fixed;

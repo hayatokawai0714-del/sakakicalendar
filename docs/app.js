@@ -20,6 +20,10 @@ const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyDXMDE-UAyj66L
 
 const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
 const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
+const ROADSIDE_STATIONS = [
+  { id: "roadside-aguriparu", name: "アグリパル", active: true, sortOrder: 10001 },
+  { id: "roadside-meijinomori", name: "明治の森", active: true, sortOrder: 10002 },
+];
 
 // Build info (for PWA cache debugging)
 const APP_VERSION = "2026-06-08.1";
@@ -222,6 +226,8 @@ function bindEvents() {
   document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
 
   document.getElementById("entryForm").addEventListener("submit", (e) => void submitEntryForm(e));
+  document.getElementById("roadsideShipmentForm").addEventListener("submit", (e) => void submitRoadsideShipmentForm(e));
+  document.getElementById("roadsideShipmentDate").value = state.selectedDate;
   document.getElementById("addSpec2Btn").addEventListener("click", () => toggleShipmentSpec2(true));
   document.getElementById("removeSpec2Btn").addEventListener("click", () => toggleShipmentSpec2(false));
   document.getElementById("cancelEditBtn").addEventListener("click", resetEntryForm);
@@ -1887,6 +1893,7 @@ function refreshViewFast() {
   // Keep this minimal and synchronous for snappy UI.
   fillMasterSelects();
   renderCalendar();
+  renderMonthlyShipmentSummary();
   renderSelectedDay();
   renderDestinationList();
 }
@@ -2307,6 +2314,90 @@ async function submitEntryForm(e) {
     showToast("保存しました", "success");
     resetEntryForm();
     renderAll();
+  } catch (err) {
+    setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    showToast(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+  } finally {
+    setBusy(false, "");
+    resetButtonLoading(submitBtn);
+  }
+}
+
+function resetRoadsideShipmentForm_() {
+  const form = document.getElementById("roadsideShipmentForm");
+  if (form) form.reset();
+  const dateInput = document.getElementById("roadsideShipmentDate");
+  if (dateInput) dateInput.value = state.selectedDate;
+}
+
+async function submitRoadsideShipmentForm(e) {
+  e.preventDefault();
+  if (state.isBusy) return;
+
+  const submitBtn = e.submitter || document.querySelector("#roadsideShipmentForm button[type='submit']");
+  try {
+    setButtonLoading(submitBtn, "保存中...");
+    setBusy(true, "保存中...");
+
+    const stationId = requiredValue("roadsideShipmentDestination", "道の駅名");
+    const station = ROADSIDE_STATIONS.find((item) => item.id === stationId);
+    if (!station) throw new Error("道の駅名を選択してください");
+
+    const quantity = Number(requiredValue("roadsideShipmentQuantity", "作り榊の数量"));
+    if (!Number.isInteger(quantity) || quantity <= 0) throw new Error("数量は1以上の整数で入力してください");
+
+    const entry = {
+      id: createId(),
+      type: "shipment",
+      shipmentType: "spot",
+      date: requiredValue("roadsideShipmentDate", "日付"),
+      destinationId: station.id,
+      destinationName: station.name,
+      destination: station.name,
+      standard: "作り榊",
+      quantity,
+      unit: "束",
+      standard2: "",
+      quantity2: 0,
+      unit2: "",
+      memo: String(document.getElementById("roadsideShipmentMemo").value || "").trim(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUpdatedBy(),
+    };
+
+    if (isApiEnabled()) {
+      const snap = snapshotLocalState_();
+      saveSpotShipment(entry);
+      refreshViewFast();
+      syncSave("saveShipment", {
+        id: entry.id,
+        shipmentType: entry.shipmentType,
+        date: entry.date,
+        destinationId: entry.destinationId,
+        destinationName: entry.destinationName,
+        standard: entry.standard,
+        quantity: entry.quantity,
+        unit: entry.unit,
+        standard2: "",
+        quantity2: 0,
+        unit2: "",
+        memo: entry.memo,
+        recurrenceRuleId: "",
+        updatedAt: entry.updatedAt,
+        updatedBy: entry.updatedBy,
+      }, snap, "保存しました");
+    } else {
+      saveSpotShipment(entry);
+    }
+
+    state.selectedDate = entry.date;
+    const savedDate = parseDate(entry.date);
+    if (savedDate) state.currentMonth = new Date(savedDate.getFullYear(), savedDate.getMonth(), 1);
+    setStatus("保存しました", "ok");
+    showToast("保存しました", "success");
+    resetRoadsideShipmentForm_();
+    renderAll();
+    if (typeof state._closeAdminPanels === "function") state._closeAdminPanels();
   } catch (err) {
     setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
     showToast(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -2763,7 +2854,11 @@ function masterRow(value, category) {
 }
 
 function fillMasterSelects() {
-  fillDestinationSelect("shipmentDestination", state.destinations.filter((d) => d.active));
+  const activeDestinations = state.destinations.filter((d) => d.active);
+  const roadsideDestinations = ROADSIDE_STATIONS.filter(
+    (station) => !activeDestinations.some((destination) => String(destination.id) === station.id),
+  );
+  fillDestinationSelect("shipmentDestination", activeDestinations.concat(roadsideDestinations));
   applyLastDestinationToForm();
   fillSelect("shipmentStandard", state.standards, "規格を選択");
   fillSelect("shipmentStandard2", state.standards, "規格を選択");
