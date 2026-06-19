@@ -3433,29 +3433,23 @@ function getGeneratedRecurringForRange(startDate, endDate) {
   return out;
 }
 
-function summarizeShipmentQuantities(shipments, opts = {}) {
-  // Group by destination, then by (standard, unit) and sum numeric quantities.
-  const destMap = new Map();
-  const numericOnly = Boolean(opts.numericOnly);
+function summarizeShipmentQuantities(shipments) {
+  // Group by (standard, unit), while retaining destination totals for drill-down.
+  const specMap = new Map();
 
   function addLine(dest, std, qty, unit) {
-    const d = String(dest || "").trim();
-    const s = String(std || "").trim();
-    const u = String(unit || "").trim();
-    if (!d || !s || !u) return;
-
+    const destinationName = String(dest || "").trim();
+    const standard = String(std || "").trim();
+    const unitName = String(unit || "").trim();
     const rawQty = String(qty ?? "").trim();
-    const qtyNum = numericOnly ? Number(rawQty) : Number.parseFloat(rawQty);
-    const hasNum = rawQty !== "" && Number.isFinite(qtyNum);
-    if (numericOnly && (!hasNum || qtyNum === 0)) return;
+    const quantity = Number(rawQty);
+    if (!destinationName || !standard || !unitName || !rawQty || !Number.isFinite(quantity) || quantity === 0) return;
 
-    const group = destMap.get(d) || new Map();
-    const key = `${s}||${u}`;
-    const cur = group.get(key) || { standard: s, unit: u, total: 0, nonNumeric: [] };
-    if (hasNum) cur.total += qtyNum;
-    else cur.nonNumeric.push(String(qty ?? "").trim());
-    group.set(key, cur);
-    destMap.set(d, group);
+    const key = `${standard}||${unitName}`;
+    const spec = specMap.get(key) || { standard, unit: unitName, total: 0, destinations: new Map() };
+    spec.total += quantity;
+    spec.destinations.set(destinationName, (spec.destinations.get(destinationName) || 0) + quantity);
+    specMap.set(key, spec);
   }
 
   (shipments || []).forEach((sh) => {
@@ -3466,24 +3460,19 @@ function summarizeShipmentQuantities(shipments, opts = {}) {
     if (s2 && u2) addLine(dest, sh.standard2, sh.quantity2, sh.unit2);
   });
 
-  const out = [];
-  destMap.forEach((group, destinationName) => {
-    const specs = Array.from(group.values()).map((x) => {
-      const qtyText = x.nonNumeric.length ? null : String(trimTrailingZeros(x.total));
-      return { ...x, qtyText };
-    });
-
-    // Sort specs: standard then unit
-    specs.sort((a, b) => a.standard.localeCompare(b.standard) || a.unit.localeCompare(b.unit));
-
-    // Destination sort weight: sum of numeric totals across specs (non-numeric treated as 0)
-    const weight = specs.reduce((sum, x) => sum + (x.qtyText == null ? 0 : Number.parseFloat(x.qtyText)), 0);
-    out.push({ destinationName, weight, specs });
-  });
-
-  // Destinations: highest weight first, then name
-  out.sort((a, b) => (b.weight - a.weight) || a.destinationName.localeCompare(b.destinationName));
-  return out;
+  return Array.from(specMap.values())
+    .map((spec) => ({
+      standard: spec.standard,
+      unit: spec.unit,
+      total: spec.total,
+      qtyText: String(trimTrailingZeros(spec.total)),
+      destinations: Array.from(spec.destinations, ([destinationName, total]) => ({
+        destinationName,
+        total,
+        qtyText: String(trimTrailingZeros(total)),
+      })).sort((a, b) => (b.total - a.total) || a.destinationName.localeCompare(b.destinationName)),
+    }))
+    .sort((a, b) => a.standard.localeCompare(b.standard) || a.unit.localeCompare(b.unit));
 }
 
 function renderMonthlyShipmentSummary() {
@@ -3496,7 +3485,7 @@ function renderMonthlyShipmentSummary() {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0);
   const shipments = getShipmentsForRange(start, end).concat(getGeneratedRecurringForRange(start, end));
-  const groups = summarizeShipmentQuantities(shipments, { numericOnly: true });
+  const groups = summarizeShipmentQuantities(shipments);
 
   monthEl.textContent = `${year}年${month + 1}月`;
   summaryEl.innerHTML = "";
@@ -3510,27 +3499,36 @@ function renderMonthlyShipmentSummary() {
   }
 
   groups.forEach((group) => {
-    const block = document.createElement("section");
-    block.className = "monthly-shipment-destination";
+    const details = document.createElement("details");
+    details.className = "monthly-shipment-spec";
 
-    const destination = document.createElement("h3");
-    destination.textContent = group.destinationName;
-    block.appendChild(destination);
+    const summary = document.createElement("summary");
+    summary.className = "monthly-shipment-spec-summary";
+    const standard = document.createElement("span");
+    standard.className = "monthly-shipment-standard";
+    standard.textContent = group.standard;
+    const quantity = document.createElement("strong");
+    quantity.className = "monthly-shipment-quantity";
+    quantity.textContent = `${group.qtyText}${group.unit}`;
+    const toggle = document.createElement("span");
+    toggle.className = "monthly-shipment-toggle";
+    toggle.textContent = "内訳";
+    summary.append(standard, quantity, toggle);
+    details.appendChild(summary);
 
     const list = document.createElement("ul");
-    group.specs.forEach((spec) => {
+    list.className = "monthly-shipment-breakdown";
+    group.destinations.forEach((destination) => {
       const item = document.createElement("li");
-      const standard = document.createElement("span");
-      standard.className = "monthly-shipment-standard";
-      standard.textContent = spec.standard;
-      const quantity = document.createElement("strong");
-      quantity.className = "monthly-shipment-quantity";
-      quantity.textContent = `${spec.qtyText}${spec.unit}`;
-      item.append(standard, quantity);
+      const name = document.createElement("span");
+      name.textContent = destination.destinationName;
+      const destinationQuantity = document.createElement("strong");
+      destinationQuantity.textContent = `${destination.qtyText}${group.unit}`;
+      item.append(name, destinationQuantity);
       list.appendChild(item);
     });
-    block.appendChild(list);
-    summaryEl.appendChild(block);
+    details.appendChild(list);
+    summaryEl.appendChild(details);
   });
 }
 

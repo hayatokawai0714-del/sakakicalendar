@@ -1564,32 +1564,79 @@ input::placeholder {
   min-width: 0;
 }
 
-.monthly-shipment-destination {
+.monthly-shipment-spec {
   min-width: 0;
-  padding-top: 10px;
   border-top: 1px solid var(--line);
 }
 
-.monthly-shipment-destination:first-child {
-  padding-top: 0;
+.monthly-shipment-spec:first-child {
   border-top: 0;
 }
 
-.monthly-shipment-destination h3 {
-  margin: 0 0 5px;
-  overflow-wrap: anywhere;
-  font-size: 14px;
-}
-
-.monthly-shipment-destination ul {
+.monthly-shipment-spec-summary {
   display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 0;
+  cursor: pointer;
   list-style: none;
 }
 
-.monthly-shipment-destination li {
+.monthly-shipment-spec-summary::-webkit-details-marker {
+  display: none;
+}
+
+.monthly-shipment-spec-summary::marker {
+  content: "";
+}
+
+.monthly-shipment-standard {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.monthly-shipment-quantity {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #111;
+  font-size: 16px;
+  text-align: right;
+}
+
+.monthly-shipment-toggle {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.monthly-shipment-toggle::after {
+  display: inline-block;
+  margin-left: 4px;
+  content: "›";
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.monthly-shipment-spec[open] .monthly-shipment-toggle::after {
+  transform: rotate(90deg);
+}
+
+.monthly-shipment-breakdown {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f7f7f8;
+  list-style: none;
+}
+
+.monthly-shipment-breakdown li {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1598,17 +1645,15 @@ input::placeholder {
   font-size: 13px;
 }
 
-.monthly-shipment-standard {
+.monthly-shipment-breakdown li span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.monthly-shipment-quantity {
+.monthly-shipment-breakdown li strong {
   flex: 0 0 auto;
-  max-width: 55%;
+  max-width: 50%;
   overflow-wrap: anywhere;
-  color: #111;
-  font-size: 14px;
   text-align: right;
 }
 
