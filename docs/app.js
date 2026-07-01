@@ -153,28 +153,90 @@ function findLastShipmentTemplateByDestination(destinationId) {
   const destId = String(destinationId || "").trim();
   if (!destId) return null;
 
-  const byUpdatedAtDesc = (a, b) => {
-    const ta = String(a.updatedAt || "");
-    const tb = String(b.updatedAt || "");
-    if (ta && tb) return tb.localeCompare(ta);
-    if (tb) return 1;
-    if (ta) return -1;
-    return 0;
-  };
+  const history = getShipmentTemplateHistoryByDestination(destId);
+  return history.length ? history[0] : null;
+}
 
-  const shipments = state.entries
-    .filter((x) => x && x.type === "shipment" && String(x.destinationId || "") === destId)
+function shipmentTemplateDateKey_(entry) {
+  return pickNewestDateKey_(
+    (entry && (entry.date || entry.startDate || entry.endDate || entry.updatedAt)) || "",
+  );
+}
+
+function getShipmentTemplateHistoryByDestination(destinationId) {
+  const destId = String(destinationId || "").trim();
+  if (!destId) return [];
+
+  const shipments = (state.entries || []).filter((x) => x && x.type === "shipment" && String(x.destinationId || "") === destId);
+  const rules = (state.recurringShipments || []).filter((r) => r && String(r.destinationId || "") === destId);
+
+  return shipments
+    .concat(rules)
     .slice()
-    .sort(byUpdatedAtDesc);
-  if (shipments.length) return shipments[0];
+    .sort((a, b) => {
+      const da = shipmentTemplateDateKey_(a);
+      const db = shipmentTemplateDateKey_(b);
+      if (db !== da) return String(db).localeCompare(String(da));
+      return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+    });
+}
 
-  const rules = state.recurringShipments
-    .filter((r) => r && String(r.destinationId || "") === destId)
-    .slice()
-    .sort(byUpdatedAtDesc);
-  if (rules.length) return rules[0];
+function normalizeTemplateQuantity_(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw);
+  return Number.isFinite(n) ? String(trimTrailingZeros(n)) : raw;
+}
 
-  return null;
+function shipmentTemplateKey_(tpl) {
+  return [
+    String(tpl.standard || "").trim(),
+    normalizeTemplateQuantity_(tpl.quantity),
+    String(tpl.unit || "").trim(),
+    String(tpl.standard2 || "").trim(),
+    normalizeTemplateQuantity_(tpl.quantity2),
+    String(tpl.unit2 || "").trim(),
+  ].join("||");
+}
+
+function getShipmentTemplateCandidates(destinationId) {
+  const groups = new Map();
+  getShipmentTemplateHistoryByDestination(destinationId).forEach((tpl) => {
+    const key = shipmentTemplateKey_(tpl);
+    if (!key.replace(/\|/g, "")) return;
+    const dateKey = shipmentTemplateDateKey_(tpl);
+    const cur = groups.get(key) || { key, count: 0, lastUsed: "", template: tpl };
+    cur.count += 1;
+    if (!cur.lastUsed || dateKey > cur.lastUsed) {
+      cur.lastUsed = dateKey;
+      cur.template = tpl;
+    }
+    groups.set(key, cur);
+  });
+
+  return Array.from(groups.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    if (b.lastUsed !== a.lastUsed) return String(b.lastUsed).localeCompare(String(a.lastUsed));
+    return formatShipmentTemplateLabel_(a.template).localeCompare(formatShipmentTemplateLabel_(b.template));
+  });
+}
+
+function formatShipmentTemplateLabel_(tpl) {
+  const line1 = `${String(tpl.standard || "").trim()} ${normalizeTemplateQuantity_(tpl.quantity)}${String(tpl.unit || "").trim()}`.trim();
+  const s2 = String(tpl.standard2 || "").trim();
+  const u2 = String(tpl.unit2 || "").trim();
+  const q2 = normalizeTemplateQuantity_(tpl.quantity2);
+  const line2 = s2 || u2 || q2 ? `${s2} ${q2}${u2}`.trim() : "";
+  return line2 ? `${line1} / ${line2}` : line1;
+}
+
+function ensureSelectOption_(select, value) {
+  if (!select) return;
+  const v = String(value || "").trim();
+  if (!v) return;
+  if (!Array.from(select.options || []).some((o) => String(o.value) === v)) {
+    select.appendChild(new Option(v, v));
+  }
 }
 
 function applyShipmentTemplateToForm(tpl) {
@@ -182,6 +244,8 @@ function applyShipmentTemplateToForm(tpl) {
   const s1 = document.getElementById("shipmentStandard");
   const q1 = document.getElementById("shipmentQuantity");
   const u1 = document.getElementById("shipmentUnit");
+  ensureSelectOption_(s1, tpl.standard);
+  ensureSelectOption_(u1, tpl.unit);
   if (s1 && tpl.standard) s1.value = String(tpl.standard);
   if (q1) q1.value = String(tpl.quantity ?? "");
   if (u1 && tpl.unit) u1.value = String(tpl.unit);
@@ -192,14 +256,72 @@ function applyShipmentTemplateToForm(tpl) {
   const q2 = document.getElementById("shipmentQuantity2");
   const u2 = document.getElementById("shipmentUnit2");
   if (has2) {
+    ensureSelectOption_(s2, tpl.standard2);
+    ensureSelectOption_(u2, tpl.unit2);
     if (s2 && tpl.standard2) s2.value = String(tpl.standard2);
     if (q2) q2.value = String(tpl.quantity2 ?? "");
     if (u2 && tpl.unit2) u2.value = String(tpl.unit2);
   }
 }
 
+function ensureShipmentTemplateSuggestions_() {
+  let box = document.getElementById("shipmentTemplateSuggestions");
+  if (box) return box;
+
+  const anchor = document.querySelector("#shipmentFields .form-destination-row");
+  if (!anchor || !anchor.parentNode) return null;
+
+  box = document.createElement("div");
+  box.id = "shipmentTemplateSuggestions";
+  box.className = "subcard hidden";
+
+  const title = document.createElement("div");
+  title.className = "muted";
+  title.textContent = "過去履歴候補";
+
+  const list = document.createElement("div");
+  list.className = "shipment-template-suggestion-list";
+  list.style.display = "flex";
+  list.style.flexWrap = "wrap";
+  list.style.gap = "6px";
+  list.style.marginTop = "6px";
+
+  box.append(title, list);
+  anchor.parentNode.insertBefore(box, anchor.nextSibling);
+  return box;
+}
+
+function renderShipmentTemplateSuggestions(destinationId) {
+  const box = ensureShipmentTemplateSuggestions_();
+  if (!box) return;
+
+  const list = box.querySelector(".shipment-template-suggestion-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const candidates = getShipmentTemplateCandidates(destinationId).slice(0, 6);
+  box.classList.toggle("hidden", !candidates.length);
+  if (!candidates.length) return;
+
+  candidates.forEach((candidate) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn secondary small";
+    btn.textContent = formatShipmentTemplateLabel_(candidate.template);
+    btn.title = `${candidate.count}回 / 最終 ${candidate.lastUsed || "-"}`;
+    btn.style.whiteSpace = "normal";
+    btn.style.textAlign = "left";
+    btn.addEventListener("click", () => {
+      applyShipmentTemplateToForm(candidate.template);
+      showToast("過去履歴から入力しました", "info");
+    });
+    list.appendChild(btn);
+  });
+}
+
 function handleDestinationChange(e) {
   const destId = String(e && e.target ? e.target.value : "").trim();
+  renderShipmentTemplateSuggestions(destId);
   if (!destId) return;
   setLastDestinationId(destId);
 
@@ -2634,12 +2756,12 @@ function getDestinationUsageStats() {
 
   (state.entries || []).forEach((e) => {
     if (!e || e.type !== "shipment") return;
-    inc(e.destinationId, e.updatedAt || e.date);
+    inc(e.destinationId, e.date || e.updatedAt);
   });
 
   (state.recurringShipments || []).forEach((r) => {
     if (!r) return;
-    inc(r.destinationId, r.updatedAt || r.startDate || r.date);
+    inc(r.destinationId, r.startDate || r.date || r.updatedAt);
   });
 
   return stats;
@@ -2853,6 +2975,34 @@ function masterRow(value, category) {
   return li;
 }
 
+function getShipmentHistoryValues_(fields) {
+  const values = [];
+  const add = (item) => {
+    if (!item) return;
+    fields.forEach((field) => {
+      const value = String(item[field] || "").trim();
+      if (value) values.push(value);
+    });
+  };
+  (state.entries || []).forEach((entry) => {
+    if (entry && entry.type === "shipment") add(entry);
+  });
+  (state.recurringShipments || []).forEach(add);
+  return values;
+}
+
+function mergeMasterValues_(base, extra) {
+  const seen = new Set();
+  const out = [];
+  (base || []).concat(extra || []).forEach((value) => {
+    const v = String(value || "").trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push(v);
+  });
+  return out;
+}
+
 function fillMasterSelects() {
   const activeDestinations = state.destinations.filter((d) => d.active);
   const roadsideDestinations = ROADSIDE_STATIONS.filter(
@@ -2860,10 +3010,13 @@ function fillMasterSelects() {
   );
   fillDestinationSelect("shipmentDestination", activeDestinations.concat(roadsideDestinations));
   applyLastDestinationToForm();
-  fillSelect("shipmentStandard", state.standards, "規格を選択");
-  fillSelect("shipmentStandard2", state.standards, "規格を選択");
-  fillSelect("shipmentUnit", state.units, "単位を選択");
-  fillSelect("shipmentUnit2", state.units, "単位を選択");
+  renderShipmentTemplateSuggestions((document.getElementById("shipmentDestination") || {}).value || "");
+  const standardOptions = mergeMasterValues_(state.standards, getShipmentHistoryValues_(["standard", "standard2"]));
+  const unitOptions = mergeMasterValues_(state.units, getShipmentHistoryValues_(["unit", "unit2"]));
+  fillSelect("shipmentStandard", standardOptions, "規格を選択");
+  fillSelect("shipmentStandard2", standardOptions, "規格を選択");
+  fillSelect("shipmentUnit", unitOptions, "単位を選択");
+  fillSelect("shipmentUnit2", unitOptions, "単位を選択");
 }
 
 function fillDestinationSelect(id, destinations) {
