@@ -26,8 +26,8 @@ const ROADSIDE_STATIONS = [
 ];
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-06-08.1";
-const BUILD_TIME = "2026-06-08 00:00";
+const APP_VERSION = "2026-07-01.1";
+const BUILD_TIME = "2026-07-01 00:00";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
