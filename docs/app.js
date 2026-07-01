@@ -695,18 +695,25 @@ function setLastSeenUpdatedAt(dateString) {
   renderNewBadges();
 }
 
+function getLatestUpdatedAt_(entries) {
+  return (Array.isArray(entries) ? entries : []).reduce((latest, entry) => {
+    const updatedAt = String(entry && entry.updatedAt ? entry.updatedAt : "").trim();
+    if (!updatedAt) return latest;
+    return !latest || updatedAt > latest ? updatedAt : latest;
+  }, "");
+}
+
 function isNewEntry(entry) {
   if (!entry) return false;
   const updatedAt = String(entry.updatedAt || "").trim();
   if (!updatedAt) return false;
   const lastSeen = getLastSeenUpdatedAt();
-  const mine = String(entry.updatedBy || "").trim() && String(entry.updatedBy || "").trim() === currentUpdatedBy();
-  const isAfterSeen = !lastSeen ? true : updatedAt > lastSeen;
-  return isAfterSeen || !mine;
+  if (!lastSeen) return false;
+  return updatedAt > lastSeen;
 }
 
 function markAllAsSeen() {
-  setLastSeenUpdatedAt(new Date().toISOString());
+  setLastSeenUpdatedAt(getLatestUpdatedAt_([...(state.entries || []), ...(state.recurringShipments || [])]) || new Date().toISOString());
 }
 
 function newBadgeHtml(entry) {
