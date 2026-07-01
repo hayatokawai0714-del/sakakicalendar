@@ -1692,6 +1692,113 @@ input::placeholder {
   font-size: 13px;
 }
 
+.customer-yearly-card {
+  background: #fff;
+}
+
+.customer-yearly-head h2 {
+  margin: 0 0 8px;
+}
+
+.customer-yearly-controls {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.customer-yearly-controls label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.customer-yearly-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.customer-yearly-month {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.customer-yearly-month-summary {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.customer-yearly-month-summary::-webkit-details-marker {
+  display: none;
+}
+
+.customer-yearly-month-summary::marker {
+  content: "";
+}
+
+.customer-yearly-month-label {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.customer-yearly-month-preview {
+  min-width: 0;
+  color: #111;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.customer-yearly-breakdown {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--line);
+  background: #f7f7f8;
+  list-style: none;
+}
+
+.customer-yearly-breakdown li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: baseline;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.customer-yearly-spec {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.customer-yearly-breakdown strong {
+  white-space: nowrap;
+}
+
+.customer-yearly-delta {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.customer-yearly-empty {
+  margin: 0;
+}
+
 @media (max-width: 600px) {
   .monthly-shipment-card {
     padding: 12px;
@@ -1699,6 +1806,18 @@ input::placeholder {
 
   .monthly-shipment-head h2 {
     font-size: 17px;
+  }
+
+  .customer-yearly-card {
+    padding: 12px;
+  }
+
+  .customer-yearly-head h2 {
+    font-size: 17px;
+  }
+
+  .customer-yearly-controls {
+    grid-template-columns: 1fr;
   }
 }
 

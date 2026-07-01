@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-01-1" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-01-2" />
   </head>
   <body>
     <main class="container">
@@ -238,6 +238,22 @@
         </div>
         <div id="monthlyShipmentSummary" class="monthly-shipment-summary"></div>
       </section>
+      <section class="card customer-yearly-card" aria-labelledby="customerYearlySummaryTitle">
+        <div class="customer-yearly-head">
+          <h2 id="customerYearlySummaryTitle">出荷先別 年間サマリー</h2>
+        </div>
+        <div class="customer-yearly-controls">
+          <label>
+            年
+            <select id="customerYearlySummaryYear"></select>
+          </label>
+          <label>
+            出荷先
+            <select id="customerYearlySummaryDestination"></select>
+          </label>
+        </div>
+        <div id="customerYearlySummary" class="customer-yearly-summary"></div>
+      </section>
       <section class="card admin-card" aria-label="管理メニュー">
         <div class="admin-bar admin-bar--bottom">
           <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
@@ -371,7 +387,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-07-01-4"></script>
+    <script src="./app.js?v=2026-07-01-5"></script>
   </body>
 </html>
 

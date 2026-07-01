@@ -29,8 +29,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-01.4";
-const BUILD_TIME = "2026-07-01 02:00";
+const APP_VERSION = "2026-07-01.5";
+const BUILD_TIME = "2026-07-01 02:30";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -384,6 +384,10 @@ function bindEvents() {
 
   document.getElementById("standardForm").addEventListener("submit", (e) => void addStandard(e));
   document.getElementById("unitForm").addEventListener("submit", (e) => void addUnit(e));
+  const yearlySummaryYear = document.getElementById("customerYearlySummaryYear");
+  const yearlySummaryDestination = document.getElementById("customerYearlySummaryDestination");
+  if (yearlySummaryYear) yearlySummaryYear.addEventListener("change", renderCustomerYearlyShipmentSummary);
+  if (yearlySummaryDestination) yearlySummaryDestination.addEventListener("change", renderCustomerYearlyShipmentSummary);
 
   document.getElementById("prevMonthBtn").addEventListener("click", () => {
     state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -511,6 +515,7 @@ function renderAll() {
   fillMasterSelects();
   renderCalendar();
   renderMonthlyShipmentSummary();
+  renderCustomerYearlyShipmentSummary();
   renderThisWeekShipmentSummary();
   renderNextWeekShipmentSummary();
   renderSelectedDay();
@@ -3761,6 +3766,214 @@ function renderMonthlyShipmentSummary() {
       list.appendChild(item);
     });
     details.appendChild(list);
+    summaryEl.appendChild(details);
+  });
+}
+
+function getCustomerYearlyAvailableYears_() {
+  const years = new Set();
+  const addYear = (value) => {
+    if (value instanceof Date) {
+      if (Number.isFinite(value.getTime())) years.add(value.getFullYear());
+      return;
+    }
+    const key = normalizeDateKey(value);
+    const year = Number(String(key || "").slice(0, 4));
+    if (Number.isInteger(year) && year >= 2000 && year <= 2100) years.add(year);
+  };
+
+  (state.entries || []).forEach((entry) => {
+    if (entry && entry.type === "shipment") addYear(entry.date);
+  });
+  (state.recurringShipments || []).forEach((rule) => {
+    addYear(rule && rule.startDate);
+    addYear(rule && rule.endDate);
+  });
+  getRecurringExceptions().forEach((ex) => addYear(ex.date));
+  addYear(state.currentMonth);
+  addYear(new Date());
+
+  if (!years.size) return [];
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
+  const filledYears = [];
+  for (let year = maxYear; year >= minYear; year -= 1) filledYears.push(year);
+  return filledYears;
+}
+
+function getCustomerYearlyYear_() {
+  const select = document.getElementById("customerYearlySummaryYear");
+  const selected = Number(select && select.value);
+  if (Number.isInteger(selected) && selected >= 2000) return selected;
+  const month = getMonthlySummaryMonth_();
+  return month.getFullYear();
+}
+
+function getCustomerYearlyShipmentsForYear_(year) {
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31);
+  return getShipmentsForRange(start, end).concat(getGeneratedRecurringForRange(start, end));
+}
+
+function shipmentMatchesDestination_(shipment, destinationId, destinationName) {
+  const selectedId = String(destinationId || "").trim();
+  const selectedName = String(destinationName || "").trim();
+  if (!shipment) return false;
+  if (selectedId && String(shipment.destinationId || "").trim() === selectedId) return true;
+  const name = String(shipment.destinationName || shipment.destination || "").trim();
+  return Boolean(selectedName && name === selectedName);
+}
+
+function getCustomerYearlyDestinationOptions_(year) {
+  const byKey = new Map();
+  const add = (id, name, active, sortOrder) => {
+    const cleanName = String(name || "").trim();
+    if (!cleanName) return;
+    const cleanId = String(id || "").trim();
+    const key = cleanId || `name:${cleanName}`;
+    if (byKey.has(key)) return;
+    byKey.set(key, {
+      id: cleanId,
+      name: cleanName,
+      active: active !== false,
+      sortOrder: sortOrder === undefined ? null : sortOrder,
+    });
+  };
+
+  (state.destinations || []).forEach((destination) => {
+    if (!destination || destination.active === false) return;
+    add(destination.id, destination.name, destination.active, destination.sortOrder);
+  });
+
+  getCustomerYearlyShipmentsForYear_(year).forEach((shipment) => {
+    add(shipment.destinationId, shipment.destinationName || shipment.destination, true, null);
+  });
+
+  return sortDestinationsByUsage(Array.from(byKey.values()));
+}
+
+function syncCustomerYearlySummaryControls_() {
+  const yearSelect = document.getElementById("customerYearlySummaryYear");
+  const destinationSelect = document.getElementById("customerYearlySummaryDestination");
+  if (!yearSelect || !destinationSelect) return null;
+
+  const years = getCustomerYearlyAvailableYears_();
+  const previousYear = String(yearSelect.value || "");
+  const defaultYear = String(getMonthlySummaryMonth_().getFullYear());
+  yearSelect.innerHTML = "";
+  years.forEach((year) => yearSelect.appendChild(new Option(String(year), String(year))));
+  if (years.some((year) => String(year) === previousYear)) yearSelect.value = previousYear;
+  else if (years.some((year) => String(year) === defaultYear)) yearSelect.value = defaultYear;
+  else if (years.length) yearSelect.value = String(years[0]);
+
+  const year = getCustomerYearlyYear_();
+  const previousDestination = String(destinationSelect.value || "");
+  const destinations = getCustomerYearlyDestinationOptions_(year);
+  destinationSelect.innerHTML = "";
+  if (!destinations.length) {
+    destinationSelect.appendChild(new Option("出荷先なし", ""));
+    destinationSelect.disabled = true;
+    return { year, destinationId: "", destinationName: "" };
+  }
+
+  destinationSelect.disabled = false;
+  destinations.forEach((destination) => destinationSelect.appendChild(new Option(destination.name, destination.id || `name:${destination.name}`)));
+  if (destinations.some((destination) => (destination.id || `name:${destination.name}`) === previousDestination)) {
+    destinationSelect.value = previousDestination;
+  }
+
+  const selected = destinations.find((destination) => (destination.id || `name:${destination.name}`) === destinationSelect.value) || destinations[0];
+  destinationSelect.value = selected.id || `name:${selected.name}`;
+  return { year, destinationId: selected.id, destinationName: selected.name };
+}
+
+function customerYearlyGroupKey_(group) {
+  return `${String(group.standard || "").trim()}||${String(group.unit || "").trim()}`;
+}
+
+function formatCustomerYearlyGroup_(group) {
+  return `${group.standard} ${group.qtyText}${group.unit}`;
+}
+
+function formatCustomerYearlyDelta_(group, previousGroup, monthIndex) {
+  if (monthIndex <= 0) return "";
+  const previous = previousGroup ? Number(previousGroup.total || 0) : 0;
+  const delta = Number(group.total || 0) - previous;
+  if (!Number.isFinite(delta)) return "";
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "±";
+  const value = String(trimTrailingZeros(Math.abs(delta)));
+  return `前月 ${sign}${value}${group.unit}`;
+}
+
+function renderCustomerYearlyShipmentSummary() {
+  const summaryEl = document.getElementById("customerYearlySummary");
+  if (!summaryEl) return;
+
+  const controls = syncCustomerYearlySummaryControls_();
+  summaryEl.innerHTML = "";
+  if (!controls || !controls.destinationName) {
+    const empty = document.createElement("p");
+    empty.className = "muted customer-yearly-empty";
+    empty.textContent = "出荷先を選択してください";
+    summaryEl.appendChild(empty);
+    return;
+  }
+
+  const monthlyGroups = [];
+  for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
+    const start = new Date(controls.year, monthIndex, 1);
+    const end = new Date(controls.year, monthIndex + 1, 0);
+    const shipments = getShipmentsForRange(start, end)
+      .concat(getGeneratedRecurringForRange(start, end))
+      .filter((shipment) => shipmentMatchesDestination_(shipment, controls.destinationId, controls.destinationName));
+    monthlyGroups.push(summarizeShipmentQuantities(shipments));
+  }
+
+  monthlyGroups.forEach((groups, monthIndex) => {
+    const details = document.createElement("details");
+    details.className = "customer-yearly-month";
+
+    const summary = document.createElement("summary");
+    summary.className = "customer-yearly-month-summary";
+
+    const label = document.createElement("span");
+    label.className = "customer-yearly-month-label";
+    label.textContent = `${monthIndex + 1}月`;
+
+    const preview = document.createElement("span");
+    preview.className = "customer-yearly-month-preview";
+    preview.textContent = groups.length ? groups.map(formatCustomerYearlyGroup_).join(" / ") : "出荷なし";
+
+    summary.append(label, preview);
+    details.appendChild(summary);
+
+    if (groups.length) {
+      const previousMap = new Map((monthlyGroups[monthIndex - 1] || []).map((group) => [customerYearlyGroupKey_(group), group]));
+      const list = document.createElement("ul");
+      list.className = "customer-yearly-breakdown";
+      groups.forEach((group) => {
+        const item = document.createElement("li");
+        const spec = document.createElement("span");
+        spec.className = "customer-yearly-spec";
+        spec.textContent = group.standard;
+
+        const qty = document.createElement("strong");
+        qty.textContent = `${group.qtyText}${group.unit}`;
+
+        const deltaText = formatCustomerYearlyDelta_(group, previousMap.get(customerYearlyGroupKey_(group)), monthIndex);
+        if (deltaText) {
+          const delta = document.createElement("span");
+          delta.className = "customer-yearly-delta";
+          delta.textContent = `（${deltaText}）`;
+          item.append(spec, qty, delta);
+        } else {
+          item.append(spec, qty);
+        }
+        list.appendChild(item);
+      });
+      details.appendChild(list);
+    }
+
     summaryEl.appendChild(details);
   });
 }
