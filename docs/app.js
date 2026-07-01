@@ -3586,14 +3586,61 @@ function getGeneratedRecurringForRange(startDate, endDate) {
   return out;
 }
 
+const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
+const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
+
+function normalizeSummaryText_(value) {
+  return String(value || "").trim().normalize("NFKC");
+}
+
+function isQualityLikeStandardForSummary_(standard) {
+  const value = normalizeSummaryText_(standard);
+  return QUALITY_LIKE_STANDARDS_FOR_SUMMARY.has(value) || CROP_LIKE_STANDARDS_FOR_SUMMARY.has(value);
+}
+
+function normalizeSummaryUnit_(unit) {
+  const value = normalizeSummaryText_(unit);
+  if (!value) return "";
+  if (/kg/i.test(value)) return "kg";
+  if (value.includes("束")) return "束";
+  if (value.includes("本")) return "本";
+  return String(unit || "").trim();
+}
+
+function inferSummaryStandardFromUnit_(unit) {
+  const value = normalizeSummaryText_(unit);
+  if (!value) return "";
+  if (/40\s*cm/i.test(value)) return "40cm";
+  if (/45\s*cm/i.test(value)) return "45cm";
+  if (/80\s*cm/i.test(value)) return "80cm";
+  if (value.includes("束")) return "作り榊";
+  if (value.includes("本")) return "大枝";
+  if (/^kg$/i.test(value)) return "40cm";
+  return "";
+}
+
+function normalizeSummaryShipmentLine_(std, unit) {
+  const standard = String(std || "").trim();
+  const unitName = normalizeSummaryUnit_(unit);
+  if (!isQualityLikeStandardForSummary_(standard)) {
+    return { standard, unit: unitName };
+  }
+
+  return {
+    standard: inferSummaryStandardFromUnit_(unit) || "規格未設定",
+    unit: unitName,
+  };
+}
+
 function summarizeShipmentQuantities(shipments) {
-  // Group by (standard, unit), while retaining destination totals for drill-down.
+  // Group by display standard and unit, while retaining destination totals for drill-down.
   const specMap = new Map();
 
   function addLine(dest, std, qty, unit) {
     const destinationName = String(dest || "").trim();
-    const standard = String(std || "").trim();
-    const unitName = String(unit || "").trim();
+    const summaryLine = normalizeSummaryShipmentLine_(std, unit);
+    const standard = summaryLine.standard;
+    const unitName = summaryLine.unit;
     const rawQty = String(qty ?? "").trim();
     const quantity = Number(rawQty);
     if (!destinationName || !standard || !unitName || !rawQty || !Number.isFinite(quantity) || quantity === 0) return;
