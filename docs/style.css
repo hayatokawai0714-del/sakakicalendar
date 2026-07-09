@@ -142,6 +142,13 @@ details.accordion:not([open]) .accordion-summary::after { transform: rotate(0deg
 
 .form { display: grid; gap: 8px; }
 .form label { display: grid; gap: 4px; font-size: 13px; }
+.form .field-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.form .sync-key-label {
+  font-weight: 700;
+}
 .form input, .form select, .form textarea {
   width: 100%;
   border: 1px solid var(--line);

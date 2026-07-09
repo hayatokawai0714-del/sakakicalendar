@@ -28,8 +28,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-01.5";
-const BUILD_TIME = "2026-07-01 02:30";
+const APP_VERSION = "2026-07-10.1";
+const BUILD_TIME = "2026-07-10 00:00";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -451,6 +451,7 @@ function bindAdminPanels() {
 
   // Expose for other handlers if needed.
   state._closeAdminPanels = closeAll;
+  state._openAdminPanel = openPanel;
 }
 async function bootData() {
   state._didBoot = true;
@@ -467,6 +468,10 @@ async function bootData() {
   try {
     setSyncInputs();
     if (!apiUrl) return;
+    if (!state.apiKey) {
+      promptForApiKey_("同期には共有キーが必要です。共有キーを入力して保存してください。");
+      return;
+    }
 
     setStatus("同期中...", "");
     console.log("[sakaki] auto sync start");
@@ -544,7 +549,23 @@ function setFormDate(dateKey) {
 }
 
 function isApiEnabled() {
-  return Boolean(state.apiUrl);
+  return Boolean(state.apiUrl && state.apiKey);
+}
+
+function promptForApiKey_(message) {
+  setStatus(message || "同期には共有キーが必要です。", "err");
+  showToast("共有キーを入力してください", "info");
+  if (typeof state._openAdminPanel === "function") state._openAdminPanel("sync");
+  window.setTimeout(() => {
+    const keyEl = document.getElementById("apiKeyInput");
+    if (keyEl) keyEl.focus();
+  }, 0);
+}
+
+function requireApiKeyForSync_() {
+  if (state.apiKey) return true;
+  promptForApiKey_("同期には共有キーが必要です。共有キーを入力して保存してください。");
+  throw new Error("API key required");
 }
 
 function setSyncInputs() {
@@ -614,9 +635,13 @@ function resetButtonLoading(button) {
 
 async function testApiConnectionUi() {
   const btn = document.getElementById("syncTestBtn");
-  if (!isApiEnabled()) {
+  if (!state.apiUrl) {
     setStatus("API URLが未設定です（localStorageモード）", "");
     showToast("API URLが未設定です", "info");
+    return;
+  }
+  if (!state.apiKey) {
+    promptForApiKey_("接続テストには共有キーが必要です。共有キーを入力して保存してください。");
     return;
   }
   try {
@@ -752,6 +777,10 @@ function saveSyncSettings(e) {
   setSyncInputs();
 
   setStatus("設定を保存しました", "ok");
+  if (state.apiUrl && !state.apiKey) {
+    promptForApiKey_("API URLを使うには共有キーが必要です。共有キーを入力して保存してください。");
+    return;
+  }
   void bootData();
 }
 
@@ -761,6 +790,7 @@ async function testApiConnection() {
 }
 
 async function apiGet(action) {
+  requireApiKeyForSync_();
   const url = new URL(state.apiUrl);
   url.searchParams.set("action", action);
   url.searchParams.set("appKey", state.apiKey || "");
@@ -768,6 +798,7 @@ async function apiGet(action) {
 }
 
 async function apiPost(action, payload) {
+  requireApiKeyForSync_();
   // GAS Web app POST from GitHub Pages often hits CORS issues.
   // Use GET with an encoded JSON payload for write actions.
   const url = new URL(state.apiUrl);
