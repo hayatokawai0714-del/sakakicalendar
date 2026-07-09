@@ -8,15 +8,14 @@ const STORAGE_KEYS = {
   thisWeekOpen: "sakaki_this_week_summary_open_v1",
   nextWeekOpen: "sakaki_nextweek_open_v1",
   apiUrl: "sakaki_api_url_v1",
+  apiKey: "sakaki_api_key_v1",
   updatedBy: "sakaki_updated_by_v1",
   lastSeenUpdatedAt: "sakaki_last_seen_updated_at",
 };
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
 
-// Fallback API URL for iOS PWA cases where localStorage is wiped.
-// Must be the GAS Web app /exec URL.
-const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyDXMDE-UAyj66LCvNZ6Q43IaNAVRLxdFtUARDEbFWCmaKeKwQtlUf1o9X-1G3BrC4G/exec";
+const DEFAULT_API_URL = "";
 
 const DEFAULT_STANDARDS = ["40cm", "45cm", "作り榊"];
 const DEFAULT_UNITS = ["kg", "束", "ケース", "箱", "本", "袋", "個"];
@@ -47,6 +46,7 @@ const state = {
   standards: [],
   units: [],
   apiUrl: "",
+  apiKey: "",
   updatedBy: "",
   isBusy: false,
   currentMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -93,7 +93,8 @@ function loadState() {
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
-  state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim() || String(DEFAULT_API_URL || "").trim();
+  state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
+  state.apiKey = String(localStorage.getItem(STORAGE_KEYS.apiKey) || "").trim();
   console.log("[sakaki] loaded api url", state.apiUrl);
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
 
@@ -548,11 +549,13 @@ function isApiEnabled() {
 
 function setSyncInputs() {
   const apiEl = document.getElementById("apiUrlInput");
+  const keyEl = document.getElementById("apiKeyInput");
   const byEl = document.getElementById("updatedByInput");
   if (apiEl) {
-    const v = state.apiUrl || String(DEFAULT_API_URL || "").trim();
+    const v = state.apiUrl;
     if (apiEl.value !== v) apiEl.value = v;
   }
+  if (keyEl && keyEl.value !== state.apiKey) keyEl.value = state.apiKey;
   if (byEl && byEl.value !== state.updatedBy) byEl.value = state.updatedBy;
 }
 
@@ -730,18 +733,17 @@ function renderNewBadges() {
 function saveSyncSettings(e) {
   e.preventDefault();
   const apiUrl = String(document.getElementById("apiUrlInput").value || "").trim();
+  const apiKey = String(document.getElementById("apiKeyInput").value || "").trim();
   const updatedBy = String(document.getElementById("updatedByInput").value || "").trim();
 
   console.log("[sakaki] save api url", apiUrl);
 
-  // Prevent accidental clearing: if input is empty but we already have a saved URL, keep it.
-  const existing = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
-  const nextUrl = apiUrl || existing;
-
-  state.apiUrl = nextUrl;
+  state.apiUrl = apiUrl;
+  state.apiKey = apiKey;
   state.updatedBy = updatedBy;
 
-  localStorage.setItem(STORAGE_KEYS.apiUrl, nextUrl);
+  localStorage.setItem(STORAGE_KEYS.apiUrl, apiUrl);
+  localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
   localStorage.setItem(STORAGE_KEYS.updatedBy, updatedBy);
 
   console.log("[sakaki] localStorage saved api url", localStorage.getItem("sakaki_api_url_v1"));
@@ -761,6 +763,7 @@ async function testApiConnection() {
 async function apiGet(action) {
   const url = new URL(state.apiUrl);
   url.searchParams.set("action", action);
+  url.searchParams.set("appKey", state.apiKey || "");
   return await apiRequest_("GET", action, url.toString(), null);
 }
 
@@ -769,6 +772,7 @@ async function apiPost(action, payload) {
   // Use GET with an encoded JSON payload for write actions.
   const url = new URL(state.apiUrl);
   url.searchParams.set("action", action);
+  url.searchParams.set("appKey", state.apiKey || "");
     // Important: URLSearchParams will handle encoding. Do not pre-encode here,
   // otherwise the payload becomes double-encoded and GAS may fail to parse it.
   url.searchParams.set("payload", JSON.stringify(payload || {}));
@@ -801,7 +805,7 @@ async function apiRequest_(method, action, url, payload) {
       : {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, payload }),
+          body: JSON.stringify({ action, appKey: state.apiKey || "", payload }),
         };
 
   const res = await fetch(url, opts);

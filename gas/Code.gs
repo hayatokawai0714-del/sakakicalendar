@@ -18,10 +18,24 @@ const SHEET_NAMES = {
   settings_units: "settings_units",
 };
 
-function doGet(e) {
+function getAppSecret_() {
+  return String(PropertiesService.getScriptProperties().getProperty("APP_SECRET") || "").trim();
+}
+
+function requireAppKey_(appKey) {
+  const expected = getAppSecret_();
+  const actual = String(appKey || "").trim();
+  if (!expected || actual !== expected) {
+    throw new Error("Unauthorized");
+  }
+}
+
+function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action) : "getAll";
   try {
-    ensureHeaders_();
+    requireAppKey_(e && e.parameter ? e.parameter.appKey : "");
+
+    ensureHeaders_();
 
     // For GitHub Pages compatibility, allow write actions via GET with an encoded JSON payload.
     // Frontend sends: ?action=saveDestination&payload=<json>
@@ -136,7 +150,9 @@ function doPost(e) {
     const body = e && e.postData && e.postData.contents ? e.postData.contents : "";
     const parsed = body ? JSON.parse(body) : {};
     const action = String(parsed.action || "");
-    const payload = parsed.payload || {};
+    requireAppKey_(parsed.appKey || "");
+
+    const payload = parsed.payload || {};
 
     let out = null;
     switch (action) {

@@ -1211,6 +1211,7 @@ textarea {
 
 input[type="number"],
 input[type="text"],
+input[type="password"],
 input[type="date"],
 input[type="time"],
 select,
