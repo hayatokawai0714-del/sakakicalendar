@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-11-2" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-11-3" />
   </head>
   <body>
     <header class="app-header">
@@ -99,32 +99,52 @@
         </div>
         <div id="customerYearlySummary" class="customer-yearly-summary"></div>
       </section>
-      <section class="card" id="entryCard">
-        <h2>予定を追加 / 編集</h2>
+      <section class="card entry-card is-collapsed" id="entryCard">
+        <div id="entryLauncher" class="entry-launcher">
+          <button type="button" id="openEntryFormBtn" class="btn entry-launcher-btn" aria-expanded="false" aria-controls="entryPanel">＋ 予定を追加</button>
+        </div>
+        <div id="entryPanel" class="entry-panel hidden">
+        <div class="entry-panel-head">
+          <h2 id="entryFormTitle">予定を追加</h2>
+          <button type="button" id="closeEntryFormBtn" class="icon-btn entry-close-btn" aria-label="入力フォームを閉じる">閉じる</button>
+        </div>
         <form id="entryForm" class="form form--compact">
   <input type="hidden" id="entryId" />
   <input type="hidden" id="entryMode" />
   <input type="hidden" id="exceptionRecurringId" />
   <input type="hidden" id="exceptionDate" />
 
-  <div class="form-top-row">
-    <label>
-      種別
-      <select id="entryType" required>
+  <div class="form-top-row entry-control-row">
+    <div class="segment-field entry-type-field">
+      <span class="segment-field-label">種別</span>
+      <div class="entry-segments entry-segments--three" role="group" aria-label="予定の種別">
+        <button type="button" class="entry-segment is-active" data-entry-type="shipment">出荷</button>
+        <button type="button" class="entry-segment" data-entry-type="event">予定</button>
+        <button type="button" class="entry-segment" data-entry-type="memo">メモ</button>
+      </div>
+      <label class="segment-native-select">種別
+        <select id="entryType" required>
         <option value="shipment">出荷</option>
         <option value="event">予定</option>
         <option value="memo">メモ</option>
-      </select>
-    </label>
+        </select>
+      </label>
+    </div>
 
     <!-- Shipment only -->
-    <label id="shipmentKindRow">
-      出荷区分
-      <select id="shipmentKind">
-        <option value="spot">スポット</option>
-        <option value="recurring">定期</option>
-      </select>
-    </label>
+    <div id="shipmentKindRow" class="segment-field shipment-kind-field">
+      <span class="segment-field-label">出荷区分</span>
+      <div class="entry-segments entry-segments--two" role="group" aria-label="出荷区分">
+        <button type="button" class="entry-segment is-active" data-shipment-kind="spot">スポット</button>
+        <button type="button" class="entry-segment" data-shipment-kind="recurring">定期</button>
+      </div>
+      <label class="segment-native-select">出荷区分
+        <select id="shipmentKind">
+          <option value="spot">スポット</option>
+          <option value="recurring">定期</option>
+        </select>
+      </label>
+    </div>
 
     <label id="spotDateRow">日付<input type="date" id="shipmentDate" /></label>
 
@@ -145,6 +165,9 @@
   </div>
 
   <div id="shipmentFields" class="type-fields">
+    <details id="entryAdvancedDetails" class="entry-advanced-details">
+      <summary>詳細設定</summary>
+      <div class="entry-advanced-body">
     <div id="recurringFields" class="subcard hidden">
       <div class="muted" style="margin: 0 0 8px;">定期出荷ルール</div>
       <input type="hidden" id="recurringId" />
@@ -193,6 +216,8 @@
       <label>出荷オフセット<input type="number" id="exceptionShipOffsetDays" step="1" inputmode="numeric" value="0" /></label>
       <div class="muted small-note">定期ルール本体は変更しません。</div>
     </div>
+      </div>
+    </details>
 
     <div class="form-destination-row">
       <label>
@@ -216,6 +241,9 @@
       </label>
     </div>
 
+    <details id="entrySpec2Details" class="entry-advanced-details entry-spec2-details">
+      <summary>規格2</summary>
+      <div class="entry-advanced-body">
     <div class="spec2-toggle">
       <button type="button" class="btn secondary small" id="addSpec2Btn">＋ 2つ目の規格を追加</button>
     </div>
@@ -240,6 +268,8 @@
         </label>
       </div>
     </div>
+      </div>
+    </details>
 
     <div class="form-memo-row">
       <label>メモ<textarea id="shipmentMemo" rows="2"></textarea></label>
@@ -263,9 +293,10 @@
 
   <div class="actions">
     <button type="submit" class="btn">保存</button>
-    <button type="button" id="cancelEditBtn" class="btn secondary">編集キャンセル</button>
+    <button type="button" id="cancelEditBtn" class="btn secondary">キャンセル</button>
   </div>
 </form>
+        </div>
       </section>
       <!-- Panels (bottom-sheet style) -->
       <div class="sheet-backdrop hidden" data-sheet-backdrop="sync">
@@ -396,7 +427,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-07-11-2"></script>
+    <script src="./app.js?v=2026-07-11-3"></script>
   </body>
 </html>
 

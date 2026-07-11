@@ -380,6 +380,8 @@ function bindEvents() {
   document.getElementById("addSpec2Btn").addEventListener("click", () => toggleShipmentSpec2(true));
   document.getElementById("removeSpec2Btn").addEventListener("click", () => toggleShipmentSpec2(false));
   document.getElementById("cancelEditBtn").addEventListener("click", resetEntryForm);
+  document.getElementById("openEntryFormBtn").addEventListener("click", openNewEntryForm_);
+  document.getElementById("closeEntryFormBtn").addEventListener("click", resetEntryForm);
 
   document.getElementById("destinationForm").addEventListener("submit", (e) => void submitDestinationForm(e));
   document.getElementById("cancelDestinationEditBtn").addEventListener("click", resetDestinationForm);
@@ -407,10 +409,8 @@ function bindEvents() {
     renderAll();
   });
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
-  if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", () => {
-    const entryCard = document.getElementById("entryCard");
-    if (entryCard) entryCard.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
+  bindEntryControlSegments_();
   bindAdminPanels();
   bindWeekSummaries();
 }
@@ -1894,6 +1894,11 @@ function switchEntryTypeFields() {
   if (memoDateRow) memoDateRow.classList.toggle("hidden", type !== "memo");
   if (memoPriorityRow) memoPriorityRow.classList.toggle("hidden", type !== "memo");
   if (recurringOverrideFields) recurringOverrideFields.classList.toggle("hidden", type !== "shipment" || String(document.getElementById("entryMode")?.value || "") !== "recurring_override");
+  if (String(document.getElementById("entryMode")?.value || "") === "recurring_override") {
+    const advanced = document.getElementById("entryAdvancedDetails");
+    if (advanced) advanced.open = true;
+  }
+  syncEntryControlSegments_();
 }
 
 function switchShipmentKindFields() {
@@ -1901,6 +1906,11 @@ function switchShipmentKindFields() {
   const isShipment = document.getElementById("entryType").value === "shipment";
   document.getElementById("spotDateRow").classList.toggle("hidden", !isShipment || kind !== "spot");
   document.getElementById("recurringFields").classList.toggle("hidden", kind !== "recurring");
+  if (kind === "recurring") {
+    const advanced = document.getElementById("entryAdvancedDetails");
+    if (advanced) advanced.open = true;
+  }
+  syncEntryControlSegments_();
 }
 
 function switchRecurrenceTypeFields() {
@@ -1928,6 +1938,10 @@ function toggleShipmentSpec2(show) {
   box.classList.toggle("hidden", !show);
   const addBtn = document.getElementById("addSpec2Btn");
   if (addBtn) addBtn.classList.toggle("hidden", show);
+  if (show) {
+    const details = document.getElementById("entrySpec2Details");
+    if (details) details.open = true;
+  }
 
   if (!show) {
     // Clear values when removing the 2nd spec so it will not be saved.
@@ -2099,9 +2113,74 @@ function refreshViewFast() {
   renderDestinationList();
 }
 
+function syncEntryControlSegments_() {
+  const type = String(document.getElementById("entryType")?.value || "shipment");
+  const kind = String(document.getElementById("shipmentKind")?.value || "spot");
+  document.querySelectorAll("[data-entry-type]").forEach((button) => {
+    const active = button.dataset.entryType === type;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-shipment-kind]").forEach((button) => {
+    const active = button.dataset.shipmentKind === kind;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function bindEntryControlSegments_() {
+  document.querySelectorAll("[data-entry-type]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("entryType").value = button.dataset.entryType;
+      switchEntryTypeFields();
+      switchShipmentKindFields();
+    });
+  });
+  document.querySelectorAll("[data-shipment-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("shipmentKind").value = button.dataset.shipmentKind;
+      switchShipmentKindFields();
+      switchEntryTypeFields();
+    });
+  });
+  syncEntryControlSegments_();
+}
+
+function setEntryFormOpen_(open) {
+  const card = document.getElementById("entryCard");
+  const launcher = document.getElementById("entryLauncher");
+  const panel = document.getElementById("entryPanel");
+  const openButton = document.getElementById("openEntryFormBtn");
+  if (!card || !launcher || !panel) return;
+  card.classList.toggle("is-collapsed", !open);
+  launcher.classList.toggle("hidden", open);
+  panel.classList.toggle("hidden", !open);
+  if (openButton) openButton.setAttribute("aria-expanded", String(open));
+  if (open) {
+    const isEditing = Boolean(
+      String(document.getElementById("entryId")?.value || "") ||
+      String(document.getElementById("recurringId")?.value || "") ||
+      String(document.getElementById("entryMode")?.value || "")
+    );
+    const title = document.getElementById("entryFormTitle");
+    if (title) title.textContent = isEditing ? "予定を編集" : "予定を追加";
+  }
+}
+
+function openNewEntryForm_() {
+  const selected = normalizeDateKey(state.selectedDate) || formatDate(new Date());
+  state.selectedDate = selected;
+  resetEntryForm();
+  setFormDate(selected);
+  document.getElementById("startDate").value = selected;
+  setEntryFormOpen_(true);
+  scrollEntryFormIntoView_();
+}
+
 function scrollEntryFormIntoView_() {
   const card = document.getElementById("entryCard");
   if (!card) return;
+  setEntryFormOpen_(true);
   card.scrollIntoView({ behavior: "smooth", block: "start" });
   card.classList.add("form-highlight");
   window.setTimeout(() => card.classList.remove("form-highlight"), 1200);
@@ -2762,9 +2841,16 @@ function resetEntryForm() {
     document.getElementById("shipOffsetDays").value = "-1";
     clearReferenceItemRows();
 
+    const advancedDetails = document.getElementById("entryAdvancedDetails");
+    if (advancedDetails) advancedDetails.open = false;
+    const spec2Details = document.getElementById("entrySpec2Details");
+    if (spec2Details) spec2Details.open = false;
+    toggleShipmentSpec2(false);
+
     switchEntryTypeFields();
     switchShipmentKindFields();
     switchRecurrenceTypeFields();
+    setEntryFormOpen_(false);
   }
 
 async function submitDestinationForm(e) {
