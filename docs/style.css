@@ -1824,8 +1824,10 @@ input::placeholder {
     padding: 10px 2px;
   }
   .customer-yearly-destination { font-size: 14px; }
-  .customer-yearly-comparison-metric { grid-template-columns: minmax(0, 1fr) 82px 82px; gap: 8px; }
-  .customer-yearly-total { text-align: left !important; font-size: 13px; }
+  .customer-yearly-comparison-metrics { gap: 9px; }
+  .customer-yearly-comparison-metric { grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 7px 8px; border-radius: 8px; background: var(--surface-soft); }
+  .customer-yearly-comparison-metric > span { text-align: left; }
+  .customer-yearly-total { font-size: 13px; }
 }
 
 /* Compact iOS-style month card on phones. */
