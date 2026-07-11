@@ -30,7 +30,7 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.6";
+const APP_VERSION = "2026-07-11.7";
 const BUILD_TIME = "2026-07-11 00:00";
 
 function isDebugUiEnabled_() {
@@ -395,6 +395,12 @@ function bindEvents() {
   const yearlySummaryDestination = document.getElementById("customerYearlySummaryDestination");
   if (yearlySummaryYear) yearlySummaryYear.addEventListener("change", renderCustomerYearlyShipmentSummary);
   if (yearlySummaryDestination) yearlySummaryDestination.addEventListener("change", renderCustomerYearlyShipmentSummary);
+  const customerYearlyBackBtn = document.getElementById("customerYearlyBackBtn");
+  if (customerYearlyBackBtn) customerYearlyBackBtn.addEventListener("click", () => {
+    const destination = document.getElementById("customerYearlySummaryDestination");
+    if (destination) destination.value = "";
+    renderCustomerYearlyShipmentSummary();
+  });
 
   document.getElementById("prevMonthBtn").addEventListener("click", () => {
     state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -4155,14 +4161,14 @@ function syncCustomerYearlySummaryControls_() {
   }
 
   destinationSelect.disabled = false;
+  destinationSelect.appendChild(new Option("すべての出荷先", ""));
   destinations.forEach((destination) => destinationSelect.appendChild(new Option(destination.name, destination.id || `name:${destination.name}`)));
   if (destinations.some((destination) => (destination.id || `name:${destination.name}`) === previousDestination)) {
     destinationSelect.value = previousDestination;
   }
 
-  const selected = destinations.find((destination) => (destination.id || `name:${destination.name}`) === destinationSelect.value) || destinations[0];
-  destinationSelect.value = selected.id || `name:${selected.name}`;
-  return { year, destinationId: selected.id, destinationName: selected.name };
+  const selected = destinations.find((destination) => (destination.id || `name:${destination.name}`) === destinationSelect.value);
+  return selected ? { year, destinationId: selected.id, destinationName: selected.name } : { year, destinationId: "", destinationName: "" };
 }
 
 function customerYearlyGroupKey_(group) {
@@ -4190,13 +4196,115 @@ function renderCustomerYearlyShipmentSummary() {
 
   const controls = syncCustomerYearlySummaryControls_();
   summaryEl.innerHTML = "";
-  if (!controls || !controls.destinationName) {
+  const backBtn = document.getElementById("customerYearlyBackBtn");
+  if (backBtn) backBtn.classList.toggle("hidden", !controls || !controls.destinationName);
+  if (!controls) {
     const empty = document.createElement("p");
     empty.className = "muted customer-yearly-empty";
-    empty.textContent = "出荷先を選択してください";
+    empty.textContent = "出荷先データがありません";
     summaryEl.appendChild(empty);
     return;
   }
+
+  if (!controls.destinationName) {
+    renderCustomerYearlyComparison_(summaryEl, controls.year);
+    return;
+  }
+
+  renderCustomerYearlyMonthlyDetail_(summaryEl, controls);
+}
+
+function renderCustomerYearlyComparison_(summaryEl, year) {
+  const current = getCustomerYearlyShipmentsForYear_(year);
+  const previous = getCustomerYearlyShipmentsForYear_(year - 1);
+  const byDestination = new Map();
+  const keyFor = (shipment) => String(shipment.destinationId || "").trim() || `name:${String(shipment.destinationName || shipment.destination || "").trim()}`;
+  const add = (map, shipment) => {
+    const name = String(shipment.destinationName || shipment.destination || "").trim();
+    if (!name) return;
+    const key = keyFor(shipment);
+    if (!map.has(key)) map.set(key, { id: String(shipment.destinationId || "").trim(), name, current: [], previous: [] });
+    return map.get(key);
+  };
+  current.forEach((shipment) => { const item = add(byDestination, shipment); if (item) item.current.push(shipment); });
+  previous.forEach((shipment) => { const item = add(byDestination, shipment); if (item) item.previous.push(shipment); });
+
+  const rows = Array.from(byDestination.values()).filter((item) => item.current.length)
+    .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted customer-yearly-empty";
+    empty.textContent = "この年の出荷はありません";
+    summaryEl.appendChild(empty);
+    return;
+  }
+
+  const table = document.createElement("div");
+  table.className = "customer-yearly-comparison";
+  const header = document.createElement("div");
+  header.className = "customer-yearly-comparison-head";
+  header.innerHTML = "<span>出荷先</span><span>年間合計</span><span>前年差</span><span>前年比</span>";
+  table.appendChild(header);
+  rows.forEach((item) => {
+    const currentGroups = summarizeShipmentQuantities(item.current);
+    const previousMap = new Map(summarizeShipmentQuantities(item.previous).map((group) => [customerYearlyGroupKey_(group), group]));
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "customer-yearly-comparison-row";
+    const name = document.createElement("span");
+    name.className = "customer-yearly-destination";
+    name.textContent = item.name;
+    const totals = buildCustomerYearlyTokens_(currentGroups, "customer-yearly-total");
+    const deltas = document.createElement("span");
+    deltas.className = "customer-yearly-metric customer-yearly-deltas";
+    const rates = document.createElement("span");
+    rates.className = "customer-yearly-metric customer-yearly-rates";
+    currentGroups.forEach((group) => {
+      const previousGroup = previousMap.get(customerYearlyGroupKey_(group));
+      const currentTotal = Number(group.total || 0);
+      const previousTotal = Number(previousGroup && previousGroup.total || 0);
+      const delta = currentTotal - previousTotal;
+      const hasPrevious = Boolean(previousGroup) && Number.isFinite(previousTotal) && previousTotal !== 0;
+      const deltaEl = document.createElement("span");
+      const rateEl = document.createElement("span");
+      if (!hasPrevious) {
+        deltaEl.textContent = "—";
+        rateEl.textContent = "—";
+        deltaEl.className = rateEl.className = "is-neutral";
+      } else {
+        const trend = delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-neutral";
+        const sign = delta > 0 ? "+" : delta < 0 ? "-" : "±";
+        deltaEl.className = trend;
+        rateEl.className = trend;
+        deltaEl.textContent = `${sign}${trimTrailingZeros(Math.abs(delta))}${group.unit}`;
+        rateEl.textContent = `${sign}${trimTrailingZeros(Math.abs((delta / previousTotal) * 100))}% ${delta > 0 ? "↑" : delta < 0 ? "↓" : ""}`.trim();
+      }
+      deltas.appendChild(deltaEl);
+      rates.appendChild(rateEl);
+    });
+    row.append(name, totals, deltas, rates);
+    row.addEventListener("click", () => {
+      const destination = document.getElementById("customerYearlySummaryDestination");
+      if (destination) destination.value = item.id || `name:${item.name}`;
+      renderCustomerYearlyShipmentSummary();
+    });
+    table.appendChild(row);
+  });
+  summaryEl.appendChild(table);
+}
+
+function buildCustomerYearlyTokens_(groups, className) {
+  const wrap = document.createElement("span");
+  wrap.className = `customer-yearly-metric ${className}`;
+  groups.forEach((group) => {
+    const token = document.createElement("span");
+    token.textContent = formatCustomerYearlyGroup_(group);
+    wrap.appendChild(token);
+  });
+  return wrap;
+}
+
+function renderCustomerYearlyMonthlyDetail_(summaryEl, controls) {
 
   const monthlyGroups = [];
   for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {

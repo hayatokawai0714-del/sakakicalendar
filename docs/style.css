@@ -1710,6 +1710,8 @@ input::placeholder {
 .customer-yearly-head h2 {
   margin: 0 0 8px;
 }
+.customer-yearly-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.customer-yearly-back { flex: 0 0 auto; min-height: 32px; padding: 5px 10px; border: 1px solid var(--primary); border-radius: 8px; background: #fff; color: var(--primary); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 
 .customer-yearly-controls {
   display: grid;
@@ -1732,6 +1734,26 @@ input::placeholder {
   min-width: 0;
   border-top: 1px solid var(--line);
 }
+
+.customer-yearly-comparison { min-width: 0; }
+.customer-yearly-comparison-head,
+.customer-yearly-comparison-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(120px, 1.25fr) minmax(88px, .8fr) minmax(88px, .8fr);
+  gap: 10px;
+  align-items: start;
+}
+.customer-yearly-comparison-head { padding: 8px 4px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.customer-yearly-comparison-head span:not(:first-child) { text-align: right; }
+.customer-yearly-comparison-row { width: 100%; padding: 10px 4px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.customer-yearly-comparison-row:hover { background: #f7faf7; }
+.customer-yearly-destination { min-width: 0; padding-top: 2px; font-weight: 750; overflow-wrap: anywhere; }
+.customer-yearly-metric { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px 6px; min-width: 0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.customer-yearly-metric > span { white-space: nowrap; }
+.customer-yearly-total { color: var(--text); font-weight: 650; }
+.customer-yearly-deltas .is-up, .customer-yearly-rates .is-up { color: var(--primary); font-weight: 700; }
+.customer-yearly-deltas .is-down, .customer-yearly-rates .is-down { color: #c63b3b; font-weight: 700; }
+.customer-yearly-deltas .is-neutral, .customer-yearly-rates .is-neutral { color: var(--muted); }
 
 .customer-yearly-month {
   display: grid;
@@ -1795,6 +1817,17 @@ input::placeholder {
   .customer-yearly-controls {
     grid-template-columns: 1fr;
   }
+  .customer-yearly-comparison-head { display: none; }
+  .customer-yearly-comparison-row {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+    gap: 3px 10px;
+    padding: 10px 2px;
+  }
+  .customer-yearly-destination { grid-column: 1 / -1; font-size: 14px; }
+  .customer-yearly-total { justify-content: flex-start; font-size: 13px; }
+  .customer-yearly-deltas, .customer-yearly-rates { justify-content: flex-end; }
+  .customer-yearly-deltas { grid-column: 1; grid-row: 3; justify-content: flex-start; }
+  .customer-yearly-rates { grid-column: 2; grid-row: 2 / span 2; align-content: center; font-size: 13px; }
 }
 
 /* Compact iOS-style month card on phones. */
