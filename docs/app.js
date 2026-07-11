@@ -427,7 +427,6 @@ function bindEvents() {
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
   if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
   bindEntryControlSegments_();
-  bindMobileNavigation_();
   bindAdminPanels();
   bindWeekSummaries();
 }
@@ -477,20 +476,6 @@ function bindAdminPanels() {
   state._openAdminPanel = openPanel;
 }
 
-function bindMobileNavigation_() {
-  const scrollTo = (selector) => {
-    const target = document.querySelector(selector);
-    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-  document.getElementById("mobileCalendarBtn")?.addEventListener("click", () => scrollTo(".calendar-card"));
-  document.getElementById("mobileAddBtn")?.addEventListener("click", openNewEntryForm_);
-  document.getElementById("mobileSummaryBtn")?.addEventListener("click", () => scrollTo("#monthlyShipmentCard"));
-  document.getElementById("mobileSettingsBtn")?.addEventListener("click", () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    const settings = document.querySelector(".settings-menu");
-    if (settings) settings.open = true;
-  });
-}
 async function bootData() {
   state._didBoot = true;
   updateDebugBar_();

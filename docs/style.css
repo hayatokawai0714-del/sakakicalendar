@@ -2746,8 +2746,6 @@ section.calendar-card .calendar-grid > .day-cell.selected {
 .entry-panel .form-spec-row { grid-template-columns: minmax(100px, 1fr) minmax(80px, 1.2fr) minmax(66px, .55fr); }
 .entry-panel .actions { background: linear-gradient(to bottom, rgba(255,255,255,0), #fff 14px); }
 
-.mobile-bottom-nav { display: none; }
-
 @media (min-width: 1100px) {
   .container {
     width: min(1440px, calc(100% - 32px));
@@ -2796,7 +2794,7 @@ section.calendar-card .calendar-grid > .day-cell.selected {
 }
 
 @media (max-width: 767px) {
-  body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  body { padding-bottom: env(safe-area-inset-bottom); }
   .container { padding: max(8px, env(safe-area-inset-top)) 8px 24px; gap: 14px; }
   .dashboard-left, .dashboard-right { gap: 14px; }
   .app-header { position: sticky; top: max(6px, env(safe-area-inset-top)); padding: 9px 10px; border-radius: 15px; }
@@ -2882,38 +2880,6 @@ button.monthly-schedule-row:hover { background: #f7faf7; }
   .monthly-shipment-spec { padding: 2px 8px; }
   .monthly-shipment-quantity { font-size: 19px; }
   .entry-panel .form-spec-row { grid-template-columns: minmax(90px, 1fr) minmax(70px, 1fr) minmax(60px, .65fr); gap: 6px; }
-  .mobile-bottom-nav {
-    position: fixed;
-    left: 8px;
-    right: 8px;
-    bottom: max(8px, env(safe-area-inset-bottom));
-    z-index: 80;
-    min-height: 64px;
-    padding: 7px 12px;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    align-items: center;
-    border: 1px solid rgba(31,91,58,.08);
-    border-radius: 18px;
-    background: rgba(255,255,255,.96);
-    box-shadow: 0 10px 30px rgba(31,91,58,.14);
-    backdrop-filter: blur(14px);
-  }
-  .mobile-nav-item {
-    min-width: 0;
-    min-height: 48px;
-    padding: 3px;
-    display: grid;
-    place-items: center;
-    gap: 1px;
-    border: 0;
-    background: transparent;
-    color: #526158;
-    font: inherit;
-  }
-  .mobile-nav-item > span { font-size: 22px; line-height: 1; }
-  .mobile-nav-item small { font-size: 10px; font-weight: 700; }
-  .mobile-nav-add > span { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 29px; box-shadow: 0 5px 14px rgba(23,107,67,.25); }
 }
 
 @media (max-width: 390px) {
