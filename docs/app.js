@@ -920,10 +920,10 @@ async function loadAllDataFromApi() {
         id: String(s.id),
         type: "shipment",
         shipmentType: String(s.shipmentType || "spot"),
-        date: String(s.date || ""),
+        date: normalizeDateKey(s.date || s.shipmentDate || s.shipDate || ""),
         destinationId: String(s.destinationId || ""),
-        destinationName: String(s.destinationName || ""),
-        destination: String(s.destinationName || ""),
+        destinationName: String(s.destinationName || s.destination || s.customer || ""),
+        destination: String(s.destinationName || s.destination || s.customer || ""),
         standard: String(s.standard || ""),
         quantity: Number(s.quantity || 0),
         unit: String(s.unit || ""),
@@ -974,8 +974,8 @@ async function loadAllDataFromApi() {
       id: String(r.id),
       shipmentType: "recurring",
       destinationId: String(r.destinationId || ""),
-      destinationName: String(r.destinationName || ""),
-      destination: String(r.destinationName || ""),
+      destinationName: String(r.destinationName || r.destination || r.customer || ""),
+      destination: String(r.destinationName || r.destination || r.customer || ""),
       standard: String(r.standard || ""),
       quantity: Number(r.quantity || 0),
       unit: String(r.unit || ""),
@@ -984,8 +984,8 @@ async function loadAllDataFromApi() {
       unit2: String(r.unit2 || ""),
       memo: String(r.memo || ""),
       recurrenceType: String(r.recurrenceType || "weekly"),
-      startDate: String(r.startDate || ""),
-      endDate: String(r.endDate || ""),
+      startDate: normalizeDateKey(r.startDate || ""),
+      endDate: normalizeDateKey(r.endDate || ""),
       weekdays: parseJsonArray(r.weekdays),
       intervalWeeks: Number(r.intervalWeeks || 1),
       monthDays: parseJsonArray(r.monthDays),
@@ -3436,6 +3436,9 @@ function normalizeReferenceItem(item, fallbackRule) {
 }
 
 function normalizeDateKey(value) {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? formatDate(value) : "";
+  }
   const s = String(value || "").trim();
   if (!s) return "";
 
@@ -3447,11 +3450,18 @@ function normalizeDateKey(value) {
   }
 
   // Accept "YYYY-MM-DD", "YYYY/MM/DD" and ISO strings like "YYYY-MM-DDTHH:mm:ss.sssZ".
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const slash = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
-  if (slash) return `${slash[1]}-${slash[2]}-${slash[3]}`;
-  return s;
+  const plain = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\D|$)/);
+  if (plain) {
+    const year = Number(plain[1]);
+    const month = Number(plain[2]);
+    const day = Number(plain[3]);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) return formatDate(date);
+    return "";
+  }
+
+  const parsed = new Date(s);
+  return Number.isFinite(parsed.getTime()) ? formatDate(parsed) : "";
 }
 
 function normalizeTimeText(value) {
@@ -4067,7 +4077,7 @@ function getCustomerYearlyAvailableYears_() {
     }
     const key = normalizeDateKey(value);
     const year = Number(String(key || "").slice(0, 4));
-    if (Number.isInteger(year) && year >= 2000 && year <= 2100) years.add(year);
+    if (Number.isInteger(year) && year >= 1900) years.add(year);
   };
 
   (state.entries || []).forEach((entry) => {
@@ -4100,15 +4110,42 @@ function getCustomerYearlyYear_() {
 function getCustomerYearlyShipmentsForYear_(year) {
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31);
-  return getShipmentsForRange(start, end).concat(getGeneratedRecurringForRange(start, end));
+  return getShipmentsForRange(start, end)
+    .concat(getGeneratedRecurringForRange(start, end))
+    .map((shipment) => normalizeShipmentForYearlySummary_(shipment));
+}
+
+function normalizeDestinationKey_(value) {
+  return String(value || "").trim().normalize("NFKC").replace(/\s+/g, " ").toLocaleLowerCase("ja");
+}
+
+function resolveShipmentDestinationName_(shipment) {
+  const direct = String(shipment && (shipment.destinationName || shipment.destination || shipment.customer) || "").trim();
+  if (direct) return direct;
+  const id = String(shipment && shipment.destinationId || "").trim();
+  if (!id) return "";
+  const master = (state.destinations || []).find((destination) => String(destination && destination.id || "").trim() === id);
+  if (master && String(master.name || "").trim()) return String(master.name).trim();
+  const roadside = ROADSIDE_STATIONS.find((destination) => String(destination.id) === id);
+  return roadside ? roadside.name : "";
+}
+
+function normalizeShipmentForYearlySummary_(shipment) {
+  const destinationName = resolveShipmentDestinationName_(shipment);
+  return {
+    ...shipment,
+    date: normalizeDateKey(shipment && shipment.date),
+    destinationName,
+    destination: destinationName,
+  };
 }
 
 function shipmentMatchesDestination_(shipment, destinationId, destinationName) {
   const selectedId = String(destinationId || "").trim();
-  const selectedName = String(destinationName || "").trim();
+  const selectedName = normalizeDestinationKey_(destinationName);
   if (!shipment) return false;
   if (selectedId && String(shipment.destinationId || "").trim() === selectedId) return true;
-  const name = String(shipment.destinationName || shipment.destination || "").trim();
+  const name = normalizeDestinationKey_(resolveShipmentDestinationName_(shipment));
   return Boolean(selectedName && name === selectedName);
 }
 
@@ -4118,8 +4155,12 @@ function getCustomerYearlyDestinationOptions_(year) {
     const cleanName = String(name || "").trim();
     if (!cleanName) return;
     const cleanId = String(id || "").trim();
-    const key = cleanId || `name:${cleanName}`;
-    if (byKey.has(key)) return;
+    const key = `name:${normalizeDestinationKey_(cleanName)}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      if (!existing.id && cleanId) existing.id = cleanId;
+      return;
+    }
     byKey.set(key, {
       id: cleanId,
       name: cleanName,
@@ -4132,9 +4173,12 @@ function getCustomerYearlyDestinationOptions_(year) {
     if (!destination || destination.active === false) return;
     add(destination.id, destination.name, destination.active, destination.sortOrder);
   });
+  ROADSIDE_STATIONS.forEach((destination) => {
+    add(destination.id, destination.name, destination.active, destination.sortOrder);
+  });
 
   getCustomerYearlyShipmentsForYear_(year).forEach((shipment) => {
-    add(shipment.destinationId, shipment.destinationName || shipment.destination, true, null);
+    add(shipment.destinationId, resolveShipmentDestinationName_(shipment), true, null);
   });
 
   return sortDestinationsByUsage(Array.from(byKey.values()));
@@ -4222,9 +4266,12 @@ function renderCustomerYearlyComparison_(summaryEl, year) {
   const current = getCustomerYearlyShipmentsForYear_(year);
   const previous = getCustomerYearlyShipmentsForYear_(year - 1);
   const byDestination = new Map();
-  const keyFor = (shipment) => String(shipment.destinationId || "").trim() || `name:${String(shipment.destinationName || shipment.destination || "").trim()}`;
+  const keyFor = (shipment) => {
+    const name = resolveShipmentDestinationName_(shipment);
+    return name ? `name:${normalizeDestinationKey_(name)}` : `id:${String(shipment.destinationId || "").trim()}`;
+  };
   const add = (map, shipment) => {
-    const name = String(shipment.destinationName || shipment.destination || "").trim();
+    const name = resolveShipmentDestinationName_(shipment);
     if (!name) return;
     const key = keyFor(shipment);
     if (!map.has(key)) map.set(key, { id: String(shipment.destinationId || "").trim(), name, current: [], previous: [] });
@@ -4308,6 +4355,7 @@ function renderCustomerYearlyMonthlyDetail_(summaryEl, controls) {
     const end = new Date(controls.year, monthIndex + 1, 0);
     const shipments = getShipmentsForRange(start, end)
       .concat(getGeneratedRecurringForRange(start, end))
+      .map((shipment) => normalizeShipmentForYearlySummary_(shipment))
       .filter((shipment) => shipmentMatchesDestination_(shipment, controls.destinationId, controls.destinationName));
     monthlyGroups.push(summarizeShipmentQuantities(shipments));
   }
