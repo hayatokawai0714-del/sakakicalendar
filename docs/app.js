@@ -30,7 +30,7 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.8";
+const APP_VERSION = "2026-07-11.9";
 const BUILD_TIME = "2026-07-11 00:00";
 
 function isDebugUiEnabled_() {
@@ -4258,17 +4258,19 @@ function renderCustomerYearlyComparison_(summaryEl, year) {
     const name = document.createElement("span");
     name.className = "customer-yearly-destination";
     name.textContent = item.name;
-    const totals = buildCustomerYearlyTokens_(currentGroups, "customer-yearly-total");
-    const deltas = document.createElement("span");
-    deltas.className = "customer-yearly-metric customer-yearly-deltas";
-    const rates = document.createElement("span");
-    rates.className = "customer-yearly-metric customer-yearly-rates";
+    const metrics = document.createElement("span");
+    metrics.className = "customer-yearly-comparison-metrics";
     currentGroups.forEach((group) => {
       const previousGroup = previousMap.get(customerYearlyGroupKey_(group));
       const currentTotal = Number(group.total || 0);
       const previousTotal = Number(previousGroup && previousGroup.total || 0);
       const delta = currentTotal - previousTotal;
       const hasPrevious = Boolean(previousGroup) && Number.isFinite(previousTotal) && previousTotal !== 0;
+      const metric = document.createElement("span");
+      metric.className = "customer-yearly-comparison-metric";
+      const totalEl = document.createElement("span");
+      totalEl.className = "customer-yearly-total";
+      totalEl.textContent = formatCustomerYearlyGroup_(group);
       const deltaEl = document.createElement("span");
       const rateEl = document.createElement("span");
       if (!hasPrevious) {
@@ -4281,12 +4283,13 @@ function renderCustomerYearlyComparison_(summaryEl, year) {
         deltaEl.className = trend;
         rateEl.className = trend;
         deltaEl.textContent = `${sign}${trimTrailingZeros(Math.abs(delta))}${group.unit}`;
-        rateEl.textContent = `${sign}${trimTrailingZeros(Math.abs((delta / previousTotal) * 100))}% ${delta > 0 ? "↑" : delta < 0 ? "↓" : ""}`.trim();
+        const rate = Math.abs((delta / previousTotal) * 100);
+        rateEl.textContent = `${sign}${trimTrailingZeros(Number(rate.toFixed(1)))}% ${delta > 0 ? "↑" : delta < 0 ? "↓" : "—"}`;
       }
-      deltas.appendChild(deltaEl);
-      rates.appendChild(rateEl);
+      metric.append(totalEl, deltaEl, rateEl);
+      metrics.appendChild(metric);
     });
-    row.append(name, totals, deltas, rates);
+    row.append(name, metrics);
     row.addEventListener("click", () => {
       const destination = document.getElementById("customerYearlySummaryDestination");
       if (destination) destination.value = item.id || `name:${item.name}`;
@@ -4295,17 +4298,6 @@ function renderCustomerYearlyComparison_(summaryEl, year) {
     table.appendChild(row);
   });
   summaryEl.appendChild(table);
-}
-
-function buildCustomerYearlyTokens_(groups, className) {
-  const wrap = document.createElement("span");
-  wrap.className = `customer-yearly-metric ${className}`;
-  groups.forEach((group) => {
-    const token = document.createElement("span");
-    token.textContent = formatCustomerYearlyGroup_(group);
-    wrap.appendChild(token);
-  });
-  return wrap;
 }
 
 function renderCustomerYearlyMonthlyDetail_(summaryEl, controls) {
