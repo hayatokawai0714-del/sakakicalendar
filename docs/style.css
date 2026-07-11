@@ -1702,6 +1702,9 @@ input::placeholder {
 
 .customer-yearly-card {
   background: #fff;
+  border: 1px solid rgba(31, 91, 58, 0.10);
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(31, 91, 58, 0.07);
 }
 
 .customer-yearly-head h2 {
@@ -1712,7 +1715,7 @@ input::placeholder {
   display: grid;
   grid-template-columns: 0.7fr 1.3fr;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   min-width: 0;
 }
 
@@ -1722,78 +1725,43 @@ input::placeholder {
   min-width: 0;
   font-size: 13px;
 }
+.customer-yearly-controls select { min-height: 38px; padding: 6px 9px; font-size: 13px; }
 
 .customer-yearly-summary {
-  display: grid;
-  gap: 8px;
+  display: block;
   min-width: 0;
+  border-top: 1px solid var(--line);
 }
 
 .customer-yearly-month {
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-  overflow: hidden;
-}
-
-.customer-yearly-month-summary {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.customer-yearly-month-summary::-webkit-details-marker {
-  display: none;
-}
-
-.customer-yearly-month-summary::marker {
-  content: "";
+  grid-template-columns: 46px minmax(0, 1fr);
+  min-width: 0;
+  padding: 8px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
 }
 
 .customer-yearly-month-label {
+  padding: 3px 4px;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.customer-yearly-month-preview {
+.customer-yearly-month-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
   min-width: 0;
-  color: #111;
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-
-.customer-yearly-breakdown {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 8px 10px 10px;
-  border-top: 1px solid var(--line);
-  background: #f7f7f8;
-  list-style: none;
-}
-
-.customer-yearly-breakdown li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 8px;
-  align-items: baseline;
-  min-width: 0;
-  font-size: 13px;
-}
-
-.customer-yearly-spec {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.customer-yearly-breakdown strong {
-  white-space: nowrap;
-}
+.customer-yearly-month-content.is-empty { color: var(--muted); font-size: 12px; }
+.customer-yearly-token { display: inline-flex; gap: 3px; white-space: nowrap; }
+.customer-yearly-token:not(:last-child)::after { content: "・"; margin-left: 3px; color: #aab6af; }
+.customer-yearly-token strong { font-weight: 750; }
 
 .customer-yearly-delta {
   grid-column: 1 / -1;

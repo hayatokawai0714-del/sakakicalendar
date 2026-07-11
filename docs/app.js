@@ -30,7 +30,7 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.5";
+const APP_VERSION = "2026-07-11.6";
 const BUILD_TIME = "2026-07-11 00:00";
 
 function isDebugUiEnabled_() {
@@ -4209,51 +4209,32 @@ function renderCustomerYearlyShipmentSummary() {
   }
 
   monthlyGroups.forEach((groups, monthIndex) => {
-    const details = document.createElement("details");
-    details.className = "customer-yearly-month";
-
-    const summary = document.createElement("summary");
-    summary.className = "customer-yearly-month-summary";
+    const row = document.createElement("div");
+    row.className = "customer-yearly-month";
 
     const label = document.createElement("span");
     label.className = "customer-yearly-month-label";
     label.textContent = `${monthIndex + 1}月`;
 
-    const preview = document.createElement("span");
-    preview.className = "customer-yearly-month-preview";
-    preview.textContent = groups.length ? groups.map(formatCustomerYearlyGroup_).join(" / ") : "出荷なし";
-
-    summary.append(label, preview);
-    details.appendChild(summary);
-
-    if (groups.length) {
-      const previousMap = new Map((monthlyGroups[monthIndex - 1] || []).map((group) => [customerYearlyGroupKey_(group), group]));
-      const list = document.createElement("ul");
-      list.className = "customer-yearly-breakdown";
+    const content = document.createElement("span");
+    content.className = "customer-yearly-month-content";
+    if (!groups.length) {
+      content.classList.add("is-empty");
+      content.textContent = "出荷なし";
+    } else {
       groups.forEach((group) => {
-        const item = document.createElement("li");
-        const spec = document.createElement("span");
-        spec.className = "customer-yearly-spec";
+        const token = document.createElement("span");
+        token.className = "customer-yearly-token";
+        const spec = document.createElement("strong");
         spec.textContent = group.standard;
-
-        const qty = document.createElement("strong");
+        const qty = document.createElement("span");
         qty.textContent = `${group.qtyText}${group.unit}`;
-
-        const deltaText = formatCustomerYearlyDelta_(group, previousMap.get(customerYearlyGroupKey_(group)), monthIndex);
-        if (deltaText) {
-          const delta = document.createElement("span");
-          delta.className = "customer-yearly-delta";
-          delta.textContent = `（${deltaText}）`;
-          item.append(spec, qty, delta);
-        } else {
-          item.append(spec, qty);
-        }
-        list.appendChild(item);
+        token.append(spec, qty);
+        content.appendChild(token);
       });
-      details.appendChild(list);
     }
-
-    summaryEl.appendChild(details);
+    row.append(label, content);
+    summaryEl.appendChild(row);
   });
 }
 
