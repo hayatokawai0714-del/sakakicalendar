@@ -30,8 +30,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-10.1";
-const BUILD_TIME = "2026-07-10 00:00";
+const APP_VERSION = "2026-07-11.5";
+const BUILD_TIME = "2026-07-11 00:00";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
