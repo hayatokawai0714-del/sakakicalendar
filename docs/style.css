@@ -2762,7 +2762,6 @@ section.calendar-card .calendar-grid > .day-cell.selected {
   .dashboard-compact-card { display: block; }
   .dashboard-right #entryCard { order: 1; }
   .dashboard-right .compact-monthly-card { order: 2; }
-  .dashboard-right .compact-yearly-card { order: 3; }
   .app-header { position: sticky; top: 12px; z-index: 40; }
   .calendar-card .calendar-grid { grid-auto-rows: 74px !important; }
   section.calendar-card .calendar-grid > .day-cell { height: 74px !important; min-height: 74px !important; max-height: 74px !important; }

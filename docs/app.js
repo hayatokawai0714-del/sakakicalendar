@@ -30,8 +30,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.11";
-const BUILD_TIME = "2026-07-11 22:30";
+const APP_VERSION = "2026-07-11.12";
+const BUILD_TIME = "2026-07-11 23:05";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -3995,18 +3995,6 @@ function syncCompactDashboardCards_() {
   const compactMonthLabel = document.getElementById("compactMonthlyMonth");
   cloneSummaryContent_(monthSource, monthTarget);
   if (compactMonthLabel) compactMonthLabel.textContent = monthLabel?.textContent || "";
-
-  const yearlySource = document.getElementById("customerYearlySummary");
-  const yearlyTarget = document.getElementById("compactYearlySummary");
-  const yearSelect = document.getElementById("customerYearlySummaryYear");
-  const destinationSelect = document.getElementById("customerYearlySummaryDestination");
-  const yearlyContext = document.getElementById("compactYearlyContext");
-  cloneSummaryContent_(yearlySource, yearlyTarget);
-  if (yearlyContext) {
-    const year = yearSelect?.selectedOptions?.[0]?.textContent || "";
-    const destination = destinationSelect?.selectedOptions?.[0]?.textContent || "";
-    yearlyContext.textContent = [year, destination].filter(Boolean).join("・");
-  }
 }
 
 function renderMonthlyShipmentSummary() {
@@ -4239,7 +4227,6 @@ function formatCustomerYearlyDelta_(group, previousGroup, monthIndex) {
 }
 
 function renderCustomerYearlyShipmentSummary() {
-  window.requestAnimationFrame(syncCompactDashboardCards_);
   const summaryEl = document.getElementById("customerYearlySummary");
   if (!summaryEl) return;
 
