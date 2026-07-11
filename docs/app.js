@@ -30,8 +30,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.12";
-const BUILD_TIME = "2026-07-11 23:05";
+const APP_VERSION = "2026-07-11.13";
+const BUILD_TIME = "2026-07-11 23:40";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -90,7 +90,8 @@ function init() {
 }
 
 function loadState() {
-  state.entries = readLS(STORAGE_KEYS.entries, []);
+  const storedEntries = readLS(STORAGE_KEYS.entries, []);
+  state.entries = (Array.isArray(storedEntries) ? storedEntries : []).map((entry) => normalizeStoredEntry_(entry));
   state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, []);
   state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
@@ -102,10 +103,32 @@ function loadState() {
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
   state.calendarView = readLS(STORAGE_KEYS.calendarView, "calendar") === "schedule" ? "schedule" : "calendar";
 
-  // Backward compatibility: existing shipments are spot shipments.
-  state.entries.forEach((e) => {
-    if (e && e.type === "shipment" && !e.shipmentType) e.shipmentType = "spot";
-  });
+}
+
+function shipmentDateValue_(entry) {
+  return entry && (entry.date || entry.shipmentDate || entry.shipDate || "");
+}
+
+function isShipmentLikeEntry_(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  const type = String(entry.type || "").trim().toLowerCase();
+  if (type === "shipment") return true;
+  if (type === "event" || type === "memo") return false;
+  return Boolean(
+    shipmentDateValue_(entry)
+    && (entry.shipmentType || entry.destinationId || entry.destinationName || entry.destination || entry.customer
+      || entry.standard || entry.standard2 || entry.quantity !== undefined || entry.quantity2 !== undefined)
+  );
+}
+
+function normalizeStoredEntry_(entry) {
+  if (!isShipmentLikeEntry_(entry)) return entry;
+  return {
+    ...entry,
+    type: "shipment",
+    shipmentType: String(entry.shipmentType || "spot"),
+    date: normalizeDateKey(shipmentDateValue_(entry)),
+  };
 }
 
 function saveState() {
@@ -1029,6 +1052,7 @@ async function loadAllDataFromApi() {
   } catch (err) {
     console.error("[sakaki] loadAllDataFromApi failed", err);
     setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    throw err;
   } finally {
     setBusy(false, "");
   }
@@ -4058,6 +4082,7 @@ function renderMonthlyShipmentSummary() {
 
 function getCustomerYearlyAvailableYears_() {
   const years = new Set();
+  const recurringCandidateYears = new Set();
   const addYear = (value) => {
     if (value instanceof Date) {
       if (Number.isFinite(value.getTime())) years.add(value.getFullYear());
@@ -4069,8 +4094,18 @@ function getCustomerYearlyAvailableYears_() {
   };
 
   (state.entries || []).forEach((entry) => {
-    if (entry && entry.type === "shipment") addYear(entry.date || entry.shipmentDate || entry.shipDate);
+    if (isShipmentLikeEntry_(entry)) addYear(shipmentDateValue_(entry));
   });
+
+  const currentYear = new Date().getFullYear();
+  const recurringExceptions = getRecurringExceptions();
+  const explicitFutureYears = recurringExceptions
+    .filter((exception) => String(exception && exception.action || "").toLowerCase() === "override")
+    .map((exception) => Number(normalizeDateKey(exception.date).slice(0, 4)))
+    .filter((year) => Number.isInteger(year) && year >= 1900);
+  const knownYears = Array.from(years).concat(explicitFutureYears);
+  const openRuleHorizon = knownYears.length ? Math.max(currentYear, ...knownYears) : currentYear;
+
   (state.recurringShipments || []).forEach((rule) => {
     const startKey = normalizeDateKey(rule && rule.startDate);
     const endKey = normalizeDateKey(rule && rule.endDate);
@@ -4079,13 +4114,19 @@ function getCustomerYearlyAvailableYears_() {
     if (!Number.isInteger(startYear) || startYear < 1900) return;
     const lastYear = Number.isInteger(endYear) && endYear >= startYear
       ? endYear
-      : Math.max(startYear, new Date().getFullYear());
-    for (let year = startYear; year <= lastYear; year += 1) years.add(year);
+      : Math.max(startYear, openRuleHorizon);
+    for (let year = startYear; year <= lastYear; year += 1) recurringCandidateYears.add(year);
   });
-  getRecurringExceptions().forEach((ex) => addYear(ex.date));
+
+  recurringCandidateYears.forEach((year) => {
+    const generated = getGeneratedRecurringForRange(new Date(year, 0, 1), new Date(year, 11, 31));
+    if (generated.some((shipment) => normalizeDateKey(shipment.date).startsWith(`${year}-`))) years.add(year);
+  });
 
   if (!years.size) addYear(state.currentMonth || new Date());
-  return Array.from(years).sort((a, b) => b - a);
+  const result = Array.from(years).sort((a, b) => b - a);
+  if (state._debugUiEnabled) console.log("[sakaki] yearly option years", result);
+  return result;
 }
 
 function getCustomerYearlyYear_() {
