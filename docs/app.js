@@ -30,8 +30,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.10";
-const BUILD_TIME = "2026-07-11 21:55";
+const APP_VERSION = "2026-07-11.11";
+const BUILD_TIME = "2026-07-11 22:30";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -4081,22 +4081,23 @@ function getCustomerYearlyAvailableYears_() {
   };
 
   (state.entries || []).forEach((entry) => {
-    if (entry && entry.type === "shipment") addYear(entry.date);
+    if (entry && entry.type === "shipment") addYear(entry.date || entry.shipmentDate || entry.shipDate);
   });
   (state.recurringShipments || []).forEach((rule) => {
-    addYear(rule && rule.startDate);
-    addYear(rule && rule.endDate);
+    const startKey = normalizeDateKey(rule && rule.startDate);
+    const endKey = normalizeDateKey(rule && rule.endDate);
+    const startYear = Number(startKey.slice(0, 4));
+    const endYear = Number(endKey.slice(0, 4));
+    if (!Number.isInteger(startYear) || startYear < 1900) return;
+    const lastYear = Number.isInteger(endYear) && endYear >= startYear
+      ? endYear
+      : Math.max(startYear, new Date().getFullYear());
+    for (let year = startYear; year <= lastYear; year += 1) years.add(year);
   });
   getRecurringExceptions().forEach((ex) => addYear(ex.date));
-  addYear(state.currentMonth);
-  addYear(new Date());
 
-  if (!years.size) return [];
-  const minYear = Math.min(...years);
-  const maxYear = Math.max(...years);
-  const filledYears = [];
-  for (let year = maxYear; year >= minYear; year -= 1) filledYears.push(year);
-  return filledYears;
+  if (!years.size) addYear(state.currentMonth || new Date());
+  return Array.from(years).sort((a, b) => b - a);
 }
 
 function getCustomerYearlyYear_() {
