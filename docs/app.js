@@ -30,7 +30,7 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.7";
+const APP_VERSION = "2026-07-11.8";
 const BUILD_TIME = "2026-07-11 00:00";
 
 function isDebugUiEnabled_() {
@@ -1676,9 +1676,13 @@ function createMonthlyScheduleItem_(entry) {
   detail.className = "monthly-schedule-detail";
   if (entry.type === "shipment") {
     const destination = String(entry.destinationName || entry.destination || "").trim();
-    const specs = [[entry.standard, entry.quantity, entry.unit], [entry.standard2, entry.quantity2, entry.unit2]]
-      .map(([standard, quantity, unit]) => `${String(standard || "").trim()} ${String(quantity ?? "").trim()}${String(unit || "").trim()}`.trim())
-      .filter(Boolean);
+    const specs = [`${String(entry.standard || "").trim()} ${String(entry.quantity ?? "").trim()}${String(entry.unit || "").trim()}`.trim()];
+    const standard2 = String(entry.standard2 || "").trim();
+    const quantity2 = String(entry.quantity2 ?? "").trim();
+    const unit2 = String(entry.unit2 || "").trim();
+    if (standard2 && unit2 && quantity2 && Number.isFinite(Number(quantity2)) && Number(quantity2) !== 0) {
+      specs.push(`${standard2} ${quantity2}${unit2}`);
+    }
     detail.textContent = [destination, ...specs, entry.memo ? `メモ：${entry.memo}` : ""].filter(Boolean).join("\n");
   } else {
     detail.textContent = [entrySummary(entry), entry.memo ? `メモ：${entry.memo}` : ""].filter(Boolean).join("\n");
