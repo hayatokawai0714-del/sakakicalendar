@@ -11,25 +11,50 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-01-2" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-11-1" />
   </head>
   <body>
-    <main class="container">
-
-      <section class="card" aria-label="来週の出荷予定">
-        <details id="nextWeekDetails" class="nextweek-details">
-          <summary class="nextweek-summary">
-            <span class="nextweek-title">来週の出荷予定</span>
-            <span id="nextWeekRange" class="nextweek-range muted"></span>
-            <span class="nextweek-chevron" aria-hidden="true"></span>
-          </summary>
-          <div id="nextWeekSummary" class="nextweek-card">
-            <ul id="nextWeekList" class="nextweek-list"></ul>
+    <header class="app-header">
+      <div class="app-brand">
+        <span class="app-brand__mark" aria-hidden="true">◆</span>
+        <span><strong>日の出農産</strong><small>出荷カレンダー</small></span>
+      </div>
+      <nav class="header-actions" aria-label="アプリ操作">
+        <button type="button" class="admin-btn header-action" data-panel="sync" id="adminSyncBtn">同期</button>
+        <details class="settings-menu">
+          <summary class="header-action">設定</summary>
+          <div class="settings-menu__panel">
+            <button type="button" class="admin-btn" data-panel="roadside" id="adminRoadsideBtn">道の駅入力</button>
+            <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先</button>
+            <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格・単位</button>
           </div>
         </details>
+      </nav>
+    </header>
+
+    <main class="container">
+      <section class="card calendar-card" aria-label="カレンダー">
+        <div class="calendar-head">
+          <button id="prevMonthBtn" class="btn secondary month-nav" aria-label="前月">‹</button>
+          <h2 id="monthLabel"></h2>
+          <button id="nextMonthBtn" class="btn secondary month-nav" aria-label="翌月">›</button>
+        </div>
+        <div id="weekdayRow" class="weekday-row"></div>
+        <div id="calendarGrid" class="calendar-grid"></div>
       </section>
 
-      
+      <section class="card" id="selectedDayCard">
+        <div class="selected-day-head">
+          <h2 id="selectedDateLabel">本日の予定</h2>
+          <div class="selected-day-actions">
+            <button type="button" id="addEntryForSelectedBtn" class="text-btn add-entry-btn">＋予定を追加</button>
+            <button type="button" id="markSeenBtn" class="btn secondary small mark-seen-btn hidden">新着を確認済みにする</button>
+          </div>
+        </div>
+        <ul id="selectedDayList" class="list"></ul>
+      </section>
+
+      <div class="week-summary-group" aria-label="今週・来週の出荷予定">
       <section class="card" aria-label="今週の出荷予定">
         <details id="thisWeekDetails" class="nextweek-details">
           <summary class="nextweek-summary">
@@ -43,26 +68,43 @@
         </details>
       </section>
 
-      <section class="card" id="selectedDayCard">
-        <div class="selected-day-head">
-          <h2 id="selectedDateLabel">本日の予定</h2>
-          <button type="button" id="markSeenBtn" class="btn secondary small mark-seen-btn hidden">新着を確認済みにする</button>
-        </div>
-        <ul id="selectedDayList" class="list"></ul>
+      <section class="card" aria-label="来週の出荷予定">
+        <details id="nextWeekDetails" class="nextweek-details">
+          <summary class="nextweek-summary">
+            <span class="nextweek-title">来週の出荷予定</span>
+            <span id="nextWeekRange" class="nextweek-range muted"></span>
+            <span class="nextweek-chevron" aria-hidden="true"></span>
+          </summary>
+          <div id="nextWeekSummary" class="nextweek-card">
+            <ul id="nextWeekList" class="nextweek-list"></ul>
+          </div>
+        </details>
       </section>
+      </div>
 
-      
-
-      <section class="card" aria-label="カレンダー">
-        <div class="calendar-head"> 
-          <button id="prevMonthBtn" class="btn secondary">前月</button>
-          <h2 id="monthLabel"></h2>
-          <button id="nextMonthBtn" class="btn secondary">翌月</button>
+      <section class="card monthly-shipment-card" aria-labelledby="monthlyShipmentTitle">
+        <div class="monthly-shipment-head">
+          <h2 id="monthlyShipmentTitle">今月の出荷合計</h2>
+          <span id="monthlyShipmentMonth" class="muted"></span>
         </div>
-        <div id="weekdayRow" class="weekday-row"></div>
-        <div id="calendarGrid" class="calendar-grid"></div>
+        <div id="monthlyShipmentSummary" class="monthly-shipment-summary"></div>
       </section>
-
+      <section class="card customer-yearly-card" aria-labelledby="customerYearlySummaryTitle">
+        <div class="customer-yearly-head">
+          <h2 id="customerYearlySummaryTitle">出荷先別 年間サマリー</h2>
+        </div>
+        <div class="customer-yearly-controls">
+          <label>
+            年
+            <select id="customerYearlySummaryYear"></select>
+          </label>
+          <label>
+            出荷先
+            <select id="customerYearlySummaryDestination"></select>
+          </label>
+        </div>
+        <div id="customerYearlySummary" class="customer-yearly-summary"></div>
+      </section>
       <section class="card" id="entryCard">
         <h2>予定を追加 / 編集</h2>
         <form id="entryForm" class="form form--compact">
@@ -230,37 +272,6 @@
     <button type="button" id="cancelEditBtn" class="btn secondary">編集キャンセル</button>
   </div>
 </form>
-      </section>
-      <section class="card monthly-shipment-card" aria-labelledby="monthlyShipmentTitle">
-        <div class="monthly-shipment-head">
-          <h2 id="monthlyShipmentTitle">今月の出荷合計</h2>
-          <span id="monthlyShipmentMonth" class="muted"></span>
-        </div>
-        <div id="monthlyShipmentSummary" class="monthly-shipment-summary"></div>
-      </section>
-      <section class="card customer-yearly-card" aria-labelledby="customerYearlySummaryTitle">
-        <div class="customer-yearly-head">
-          <h2 id="customerYearlySummaryTitle">出荷先別 年間サマリー</h2>
-        </div>
-        <div class="customer-yearly-controls">
-          <label>
-            年
-            <select id="customerYearlySummaryYear"></select>
-          </label>
-          <label>
-            出荷先
-            <select id="customerYearlySummaryDestination"></select>
-          </label>
-        </div>
-        <div id="customerYearlySummary" class="customer-yearly-summary"></div>
-      </section>
-      <section class="card admin-card" aria-label="管理メニュー">
-        <div class="admin-bar admin-bar--bottom">
-          <button type="button" class="admin-btn" data-panel="sync" id="adminSyncBtn">同期</button>
-          <button type="button" class="admin-btn" data-panel="roadside" id="adminRoadsideBtn">道の駅</button>
-          <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先＋</button>
-          <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格＋</button>
-        </div>
       </section>
       <!-- Panels (bottom-sheet style) -->
       <div class="sheet-backdrop hidden" data-sheet-backdrop="sync">

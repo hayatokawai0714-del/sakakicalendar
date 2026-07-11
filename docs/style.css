@@ -1946,4 +1946,264 @@ input::placeholder {
     text-align: center;
   }
 }
+/* 2026-07 dashboard refresh: visual-only overrides */
+:root {
+  --bg: #f5f7f4;
+  --surface: #ffffff;
+  --surface-soft: #eef4ef;
+  --text: #26322c;
+  --muted: #748078;
+  --line: #dfe6e1;
+  --primary: #315f49;
+  --primary-dark: #244b39;
+  --primary-soft: #e3efe8;
+  --card: var(--surface);
+  --accent: var(--primary);
+  --shipment: #397457;
+  --event: #667f98;
+  --memo: #8a6d4d;
+}
+
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: min(940px, calc(100% - 20px));
+  margin: max(8px, env(safe-area-inset-top)) auto 8px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(49, 95, 73, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 18px rgba(36, 75, 57, 0.10);
+  backdrop-filter: blur(14px);
+}
+
+.app-brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.app-brand__mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 10px 3px 10px 3px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  transform: rotate(-8deg);
+}
+.app-brand strong, .app-brand small { display: block; line-height: 1.15; }
+.app-brand strong { font-size: 12px; color: var(--muted); font-weight: 650; }
+.app-brand small { margin-top: 2px; color: var(--primary-dark); font-size: 16px; font-weight: 750; }
+.header-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.header-action,
+.header-actions .admin-btn {
+  min-width: auto;
+  width: auto;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.header-action:hover, .header-actions .admin-btn:hover { background: var(--primary-soft); }
+.settings-menu { position: relative; }
+.settings-menu > summary { display: grid; place-items: center; list-style: none; }
+.settings-menu > summary::-webkit-details-marker { display: none; }
+.settings-menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 150px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(36, 75, 57, 0.16);
+}
+.settings-menu__panel .admin-btn { width: 100%; justify-content: flex-start; text-align: left; }
+
+.container {
+  max-width: 960px;
+  padding: 4px 10px calc(24px + env(safe-area-inset-bottom));
+  gap: 16px;
+}
+.container > .calendar-card { order: 1; }
+.container > #selectedDayCard { order: 2; }
+.container > .week-summary-group { order: 3; }
+.container > .monthly-shipment-card { order: 4; }
+.container > .customer-yearly-card { order: 5; }
+.container > #entryCard { order: 6; }
+.container > .sheet-backdrop, .container > .debug-bar { order: 10; }
+
+.card {
+  padding: 18px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.calendar-card {
+  box-shadow: 0 8px 28px rgba(36, 75, 57, 0.09);
+}
+.week-summary-group { display: grid; gap: 14px; min-width: 0; }
+.week-summary-group .card, .customer-yearly-card, #entryCard { background: var(--surface-soft); }
+.subcard { border-color: var(--line); background: rgba(255,255,255,.72); }
+h2 { color: var(--text); }
+
+.btn {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.btn:hover { background: var(--primary-dark); }
+.btn.secondary {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--primary);
+}
+.text-btn { color: var(--primary); }
+input, select, textarea { border-color: var(--line); color: var(--text); background: #fff; }
+input:focus, select:focus, textarea:focus { border-color: var(--primary); outline: 2px solid var(--primary-soft); }
+
+.calendar-head { grid-template-columns: 42px minmax(0, 1fr) 42px; margin-bottom: 12px; }
+.calendar-head h2 { margin: 0; text-align: center; font-size: 20px; color: var(--primary-dark); }
+.month-nav.btn {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 28px;
+  line-height: 1;
+}
+.weekday-row, .calendar-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.weekday-row { margin-bottom: 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.calendar-grid { grid-auto-rows: 80px !important; }
+.calendar-grid > .day-cell {
+  height: 80px !important;
+  min-height: 80px !important;
+  max-height: 80px !important;
+  padding: 5px 3px 3px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+.calendar-grid > .day-cell:hover { background: #f7faf7; }
+.day-cell.selected { border-color: #75a58b; background: var(--primary-soft); box-shadow: none; }
+.calendar-card .day-cell.selected {
+  border-color: #75a58b !important;
+  background: var(--primary-soft) !important;
+  box-shadow: none !important;
+}
+.calendar-card .day-cell.selected .day-num.is-today { box-shadow: none !important; }
+.day-cell.outside { background: transparent; color: var(--muted); opacity: .38; }
+.day-cell.today { border-color: transparent; }
+.day-num { width: 25px; height: 25px; margin: 0 auto 3px; display: grid; place-items: center; border-radius: 50%; font-size: 12px; }
+.day-num.is-today { background: var(--primary); color: #fff !important; font-weight: 750; }
+.calendar-grid .entry-chip {
+  border: 0;
+  border-left: 3px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+  font-size: 9px;
+  line-height: 1.35;
+}
+.calendar-grid .entry-chip.t-shipment { color: var(--shipment); background: #e8f2ec; }
+.calendar-grid .entry-chip.t-event { color: var(--event); background: #edf1f5; }
+.calendar-grid .entry-chip.t-memo { color: var(--memo); background: #f4eee7; }
+.calendar-grid .entry-chip.entry-chip--more { color: var(--muted); text-align: right; font-weight: 700; }
+
+#selectedDayCard { scroll-margin-top: 86px; }
+.selected-day-head { gap: 10px; align-items: flex-start; }
+.selected-day-head h2 { margin: 0; font-size: 18px; line-height: 1.4; }
+.selected-day-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.add-entry-btn { flex: 0 0 auto; font-weight: 700; white-space: nowrap; }
+#selectedDayList .entry-row {
+  position: relative;
+  padding: 12px 10px 12px 16px;
+  border-top: 0;
+  border-radius: 10px;
+  background: #fafcfb;
+  overflow: hidden;
+}
+#selectedDayList .entry-row + .entry-row { margin-top: 8px; }
+#selectedDayList .entry-row::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--event); }
+#selectedDayList .entry-type-shipment::before { background: var(--shipment); }
+#selectedDayList .entry-type-memo::before { background: var(--memo); }
+#selectedDayList .shipment-destination { color: var(--text); font-size: 15px; font-weight: 750; }
+#selectedDayList .shipment-specs { color: var(--muted); }
+#selectedDayList .row-actions .btn, #selectedDayList .row-actions button { font-size: 12px; }
+.list.is-empty li { padding: 18px 8px; color: var(--muted); text-align: center; }
+
+.monthly-shipment-card {
+  background: linear-gradient(145deg, var(--primary), var(--primary-dark));
+  color: #fff;
+}
+.monthly-shipment-card h2, .monthly-shipment-card .muted,
+.monthly-shipment-standard, .monthly-shipment-quantity, .monthly-shipment-toggle { color: #fff; }
+.monthly-shipment-spec { border-color: rgba(255,255,255,.18); }
+.monthly-shipment-quantity { font-size: 24px; line-height: 1; }
+.monthly-shipment-breakdown { background: rgba(255,255,255,.10); }
+
+.customer-yearly-month { border-color: var(--line); }
+.customer-yearly-month-preview { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.customer-yearly-breakdown { background: var(--surface-soft); }
+
+@media (min-width: 768px) {
+  .week-summary-group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { padding: 20px; }
+}
+
+@media (max-width: 600px) {
+  .app-header { width: calc(100% - 16px); margin-bottom: 6px; border-radius: 14px; }
+  .app-brand__mark { width: 28px; height: 28px; }
+  .app-brand small { font-size: 15px; }
+  .container { padding-inline: 8px; gap: 14px; }
+  .card, .monthly-shipment-card, .customer-yearly-card { padding: 14px; border-radius: 16px; }
+  .calendar-card { padding: 12px 6px 10px !important; }
+  .calendar-head { padding: 0 6px; }
+  .calendar-head h2 { font-size: 18px; }
+  .calendar-grid { grid-auto-rows: 72px !important; }
+  .calendar-grid > .day-cell { height: 72px !important; min-height: 72px !important; max-height: 72px !important; padding-inline: 2px; border-radius: 8px; }
+  .day-num { width: 23px; height: 23px; margin-bottom: 2px; }
+  .selected-day-head { display: flex; flex-wrap: wrap; }
+  .selected-day-head h2 { flex: 1 1 220px; font-size: 16px; }
+  .selected-day-actions { margin-left: auto; }
+}
+
+@media (max-width: 390px) {
+  .app-header { padding-inline: 9px; }
+  .app-brand strong { font-size: 10px; }
+  .app-brand small { font-size: 14px; }
+  .header-action, .header-actions .admin-btn { padding-inline: 7px; }
+  .container { padding-inline: 6px; }
+  .calendar-card { padding-inline: 4px !important; }
+  .weekday-row, .calendar-grid { gap: 2px; }
+  .calendar-grid { grid-auto-rows: 68px !important; }
+  .calendar-grid > .day-cell { height: 68px !important; min-height: 68px !important; max-height: 68px !important; }
+  .calendar-grid .entry-chip { padding-inline: 2px; font-size: 8px; }
+}
 

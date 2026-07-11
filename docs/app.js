@@ -405,6 +405,11 @@ function bindEvents() {
     markAllAsSeen();
     renderAll();
   });
+  const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
+  if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", () => {
+    const entryCard = document.getElementById("entryCard");
+    if (entryCard) entryCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   bindAdminPanels();
   bindWeekSummaries();
 }
@@ -1565,7 +1570,7 @@ function renderCalendar() {
       if (dayEntries.length > 2) {
         const more = document.createElement("div");
         more.className = "entry-chip entry-chip--more";
-        more.textContent = "他" + (dayEntries.length - 1) + "件";
+        more.textContent = "+" + (dayEntries.length - 1);
         cell.appendChild(more);
       }
 
@@ -1588,11 +1593,12 @@ function renderCalendar() {
 function renderSelectedDay() {
   const label = document.getElementById("selectedDateLabel");
   const list = document.getElementById("selectedDayList");
-  label.textContent = state.selectedDate;
 
   const selectedDate = parseDate(state.selectedDate) || new Date();
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
+  const weekday = ["日", "月", "火", "水", "木", "金", "土"][selectedDate.getDay()];
+  label.textContent = `${year}年${month + 1}月${selectedDate.getDate()}日（${weekday}）の予定`;
   const generated = generateRecurringShipmentsForMonth(year, month);
 
   const items = entriesByDate(state.selectedDate, { generatedRecurring: generated });
@@ -1631,7 +1637,7 @@ function renderEntryList(ul, entries, emptyText) {
     .sort((a, b) => (a.time || "").localeCompare(b.time || "") || String(a.updatedAt).localeCompare(String(b.updatedAt)))
     .forEach((entry) => {
       const li = document.createElement("li");
-      li.classList.add("entry-row");
+      li.classList.add("entry-row", `entry-type-${entry.type}`);
 
       const main = document.createElement("div");
       main.className = "entry-main";
