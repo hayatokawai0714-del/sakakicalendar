@@ -403,6 +403,12 @@ function bindEvents() {
     renderCalendar();
     renderMonthlyShipmentSummary();
   });
+  document.getElementById("currentMonthBtn").addEventListener("click", () => {
+    const today = new Date();
+    state.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    renderCalendar();
+    renderMonthlyShipmentSummary();
+  });
   const markSeenBtn = document.getElementById("markSeenBtn");
   if (markSeenBtn) markSeenBtn.addEventListener("click", () => {
     markAllAsSeen();
@@ -411,6 +417,7 @@ function bindEvents() {
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
   if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
   bindEntryControlSegments_();
+  bindMobileNavigation_();
   bindAdminPanels();
   bindWeekSummaries();
 }
@@ -458,6 +465,21 @@ function bindAdminPanels() {
   // Expose for other handlers if needed.
   state._closeAdminPanels = closeAll;
   state._openAdminPanel = openPanel;
+}
+
+function bindMobileNavigation_() {
+  const scrollTo = (selector) => {
+    const target = document.querySelector(selector);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  document.getElementById("mobileCalendarBtn")?.addEventListener("click", () => scrollTo(".calendar-card"));
+  document.getElementById("mobileAddBtn")?.addEventListener("click", openNewEntryForm_);
+  document.getElementById("mobileSummaryBtn")?.addEventListener("click", () => scrollTo("#monthlyShipmentCard"));
+  document.getElementById("mobileSettingsBtn")?.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    const settings = document.querySelector(".settings-menu");
+    if (settings) settings.open = true;
+  });
 }
 async function bootData() {
   state._didBoot = true;
@@ -1555,24 +1577,22 @@ function renderCalendar() {
       num.textContent = String(day.getDate());
       cell.appendChild(num);
 
-      const visibleEntries = dayEntries.length > 2 ? dayEntries.slice(0, 1) : dayEntries;
-      visibleEntries.forEach((entry) => {
-        const chip = document.createElement("div");
-        chip.className = "entry-chip";
-        chip.classList.add(`t-${entry.type}`);
-        const badge = newBadgeHtml(entry);
-        chip.innerHTML =
-          entry.type === "shipment"
-            ? `${badge}${calendarChipText(entry)}`
-            : `${badge}<span class="tag">${chipTag(entry)}</span>${calendarChipText(entry)}`;
-        cell.appendChild(chip);
-      });
-
-      if (dayEntries.length > 2) {
-        const more = document.createElement("div");
-        more.className = "entry-chip entry-chip--more";
-        more.textContent = "+" + (dayEntries.length - 1);
-        cell.appendChild(more);
+      if (dayEntries.length) {
+        const markers = document.createElement("div");
+        markers.className = "day-markers";
+        dayEntries.slice(0, 3).forEach((entry) => {
+          const dot = document.createElement("span");
+          dot.className = `day-marker day-marker--${entry.type}`;
+          dot.setAttribute("aria-hidden", "true");
+          markers.appendChild(dot);
+        });
+        if (dayEntries.length > 3) {
+          const more = document.createElement("span");
+          more.className = "day-marker-more";
+          more.textContent = `+${dayEntries.length - 3}`;
+          markers.appendChild(more);
+        }
+        cell.appendChild(markers);
       }
 
       cell.addEventListener("click", () => {
@@ -1609,6 +1629,14 @@ function renderSelectedDay() {
     if (sample.length) console.log("[sakaki] selected day recurring count", sample.length);
   } catch {}
   renderEntryList(list, items, "この日の予定はありません");
+  const updatedEl = document.getElementById("selectedDayLastUpdated");
+  if (updatedEl) {
+    const latest = getLatestUpdatedAt_(items);
+    const latestDate = latest ? new Date(latest) : null;
+    updatedEl.textContent = latestDate && Number.isFinite(latestDate.getTime())
+      ? `最終更新 ${String(latestDate.getMonth() + 1).padStart(2, "0")}/${String(latestDate.getDate()).padStart(2, "0")} ${String(latestDate.getHours()).padStart(2, "0")}:${String(latestDate.getMinutes()).padStart(2, "0")}`
+      : "";
+  }
 }
 
 function scrollSelectedDayIntoView_() {
@@ -3847,7 +3875,38 @@ function getMonthlySummaryMonth_() {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
+function cloneSummaryContent_(source, target) {
+  if (!source || !target) return;
+  target.innerHTML = "";
+  const clone = source.cloneNode(true);
+  clone.removeAttribute("id");
+  clone.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+  while (clone.firstChild) target.appendChild(clone.firstChild);
+}
+
+function syncCompactDashboardCards_() {
+  const monthSource = document.getElementById("monthlyShipmentSummary");
+  const monthTarget = document.getElementById("compactMonthlySummary");
+  const monthLabel = document.getElementById("monthlyShipmentMonth");
+  const compactMonthLabel = document.getElementById("compactMonthlyMonth");
+  cloneSummaryContent_(monthSource, monthTarget);
+  if (compactMonthLabel) compactMonthLabel.textContent = monthLabel?.textContent || "";
+
+  const yearlySource = document.getElementById("customerYearlySummary");
+  const yearlyTarget = document.getElementById("compactYearlySummary");
+  const yearSelect = document.getElementById("customerYearlySummaryYear");
+  const destinationSelect = document.getElementById("customerYearlySummaryDestination");
+  const yearlyContext = document.getElementById("compactYearlyContext");
+  cloneSummaryContent_(yearlySource, yearlyTarget);
+  if (yearlyContext) {
+    const year = yearSelect?.selectedOptions?.[0]?.textContent || "";
+    const destination = destinationSelect?.selectedOptions?.[0]?.textContent || "";
+    yearlyContext.textContent = [year, destination].filter(Boolean).join("・");
+  }
+}
+
 function renderMonthlyShipmentSummary() {
+  window.requestAnimationFrame(syncCompactDashboardCards_);
   const monthEl = document.getElementById("monthlyShipmentMonth");
   const summaryEl = document.getElementById("monthlyShipmentSummary");
   if (!monthEl || !summaryEl) return;
@@ -4041,6 +4100,7 @@ function formatCustomerYearlyDelta_(group, previousGroup, monthIndex) {
 }
 
 function renderCustomerYearlyShipmentSummary() {
+  window.requestAnimationFrame(syncCompactDashboardCards_);
   const summaryEl = document.getElementById("customerYearlySummary");
   if (!summaryEl) return;
 

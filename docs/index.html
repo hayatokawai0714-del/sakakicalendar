@@ -11,18 +11,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-11-3" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-11-4" />
   </head>
   <body>
+    <main class="container">
+      <div class="dashboard-left">
     <header class="app-header">
       <div class="app-brand">
-        <span class="app-brand__mark" aria-hidden="true">◆</span>
-        <span><strong>日の出農産</strong><small>出荷カレンダー</small></span>
+        <img class="app-brand__logo" src="./assets/hinode-farm-logo.png" alt="日の出農産 HINODE FARM" />
+        <span class="app-brand__product">出荷カレンダー</span>
       </div>
       <nav class="header-actions" aria-label="アプリ操作">
-        <button type="button" class="admin-btn header-action" data-panel="sync" id="adminSyncBtn">同期</button>
+        <button type="button" class="admin-btn header-action" data-panel="sync" id="adminSyncBtn"><span class="header-action__icon" aria-hidden="true">↻</span><span>同期</span></button>
         <details class="settings-menu">
-          <summary class="header-action">設定</summary>
+          <summary class="header-action"><span class="header-action__icon" aria-hidden="true">⚙</span><span>設定</span></summary>
           <div class="settings-menu__panel">
             <button type="button" class="admin-btn" data-panel="roadside" id="adminRoadsideBtn">道の駅入力</button>
             <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先</button>
@@ -31,16 +33,22 @@
         </details>
       </nav>
     </header>
-
-    <main class="container">
       <section class="card calendar-card" aria-label="カレンダー">
         <div class="calendar-head">
           <button id="prevMonthBtn" class="btn secondary month-nav" aria-label="前月">‹</button>
-          <h2 id="monthLabel"></h2>
+          <div class="calendar-title-group">
+            <h2 id="monthLabel"></h2>
+            <button type="button" id="currentMonthBtn" class="current-month-btn">今月へ</button>
+          </div>
           <button id="nextMonthBtn" class="btn secondary month-nav" aria-label="翌月">›</button>
         </div>
         <div id="weekdayRow" class="weekday-row"></div>
         <div id="calendarGrid" class="calendar-grid"></div>
+        <div class="calendar-legend" aria-label="予定種別の凡例">
+          <span><i class="legend-dot legend-dot--shipment"></i>出荷</span>
+          <span><i class="legend-dot legend-dot--event"></i>予定</span>
+          <span><i class="legend-dot legend-dot--memo"></i>メモ</span>
+        </div>
       </section>
 
       <section class="card" id="selectedDayCard">
@@ -48,10 +56,13 @@
           <h2 id="selectedDateLabel">本日の予定</h2>
           <div class="selected-day-actions">
             <button type="button" id="addEntryForSelectedBtn" class="text-btn add-entry-btn">＋予定を追加</button>
-            <button type="button" id="markSeenBtn" class="btn secondary small mark-seen-btn hidden">新着を確認済みにする</button>
           </div>
         </div>
         <ul id="selectedDayList" class="list"></ul>
+        <div class="selected-day-footer">
+          <button type="button" id="markSeenBtn" class="text-btn mark-seen-btn hidden">↻ 新着を確認</button>
+          <span id="selectedDayLastUpdated" class="muted selected-day-updated"></span>
+        </div>
       </section>
 
       <section class="card weekly-schedule-card" aria-labelledby="weeklyScheduleTitle">
@@ -76,14 +87,14 @@
         </div>
       </section>
 
-      <section class="card monthly-shipment-card" aria-labelledby="monthlyShipmentTitle">
+      <section class="card monthly-shipment-card" id="monthlyShipmentCard" aria-labelledby="monthlyShipmentTitle">
         <div class="monthly-shipment-head">
           <h2 id="monthlyShipmentTitle">今月の出荷合計</h2>
           <span id="monthlyShipmentMonth" class="muted"></span>
         </div>
         <div id="monthlyShipmentSummary" class="monthly-shipment-summary"></div>
       </section>
-      <section class="card customer-yearly-card" aria-labelledby="customerYearlySummaryTitle">
+      <section class="card customer-yearly-card" id="customerYearlyCard" aria-labelledby="customerYearlySummaryTitle">
         <div class="customer-yearly-head">
           <h2 id="customerYearlySummaryTitle">出荷先別 年間サマリー</h2>
         </div>
@@ -99,6 +110,22 @@
         </div>
         <div id="customerYearlySummary" class="customer-yearly-summary"></div>
       </section>
+      </div>
+      <aside class="dashboard-right" aria-label="入力と集計詳細">
+      <section class="card dashboard-compact-card compact-monthly-card" aria-label="今月の出荷合計 コンパクト表示">
+        <div class="compact-card-head">
+          <h2>今月の出荷合計</h2>
+          <span id="compactMonthlyMonth" class="muted"></span>
+        </div>
+        <div id="compactMonthlySummary" class="compact-summary-body"></div>
+      </section>
+      <section class="card dashboard-compact-card compact-yearly-card" aria-label="出荷先別年間サマリー コンパクト表示">
+        <div class="compact-card-head">
+          <h2>出荷先別 年間サマリー</h2>
+          <span id="compactYearlyContext" class="muted"></span>
+        </div>
+        <div id="compactYearlySummary" class="compact-summary-body"></div>
+      </section>
       <section class="card entry-card is-collapsed" id="entryCard">
         <div id="entryLauncher" class="entry-launcher">
           <button type="button" id="openEntryFormBtn" class="btn entry-launcher-btn" aria-expanded="false" aria-controls="entryPanel">＋ 予定を追加</button>
@@ -106,7 +133,7 @@
         <div id="entryPanel" class="entry-panel hidden">
         <div class="entry-panel-head">
           <h2 id="entryFormTitle">予定を追加</h2>
-          <button type="button" id="closeEntryFormBtn" class="icon-btn entry-close-btn" aria-label="入力フォームを閉じる">閉じる</button>
+          <button type="button" id="closeEntryFormBtn" class="icon-btn entry-close-btn" aria-label="入力フォームを閉じる">×</button>
         </div>
         <form id="entryForm" class="form form--compact">
   <input type="hidden" id="entryId" />
@@ -292,12 +319,13 @@
   </div>
 
   <div class="actions">
-    <button type="submit" class="btn">保存</button>
+    <button type="submit" class="btn">保存する</button>
     <button type="button" id="cancelEditBtn" class="btn secondary">キャンセル</button>
   </div>
 </form>
         </div>
       </section>
+      </aside>
       <!-- Panels (bottom-sheet style) -->
       <div class="sheet-backdrop hidden" data-sheet-backdrop="sync">
         <section class="sheet" role="dialog" aria-modal="true" aria-label="同期設定">
@@ -417,6 +445,13 @@
       </section>
     </main>
 
+    <nav class="mobile-bottom-nav" aria-label="画面内ナビゲーション">
+      <button type="button" id="mobileCalendarBtn" class="mobile-nav-item"><span aria-hidden="true">▣</span><small>カレンダー</small></button>
+      <button type="button" id="mobileAddBtn" class="mobile-nav-item mobile-nav-add"><span aria-hidden="true">＋</span><small>追加</small></button>
+      <button type="button" id="mobileSummaryBtn" class="mobile-nav-item"><span aria-hidden="true">▥</span><small>集計</small></button>
+      <button type="button" id="mobileSettingsBtn" class="mobile-nav-item"><span aria-hidden="true">⚙</span><small>設定</small></button>
+    </nav>
+
     <div id="choiceModalBackdrop" class="choice-backdrop hidden" aria-hidden="true">
       <div class="choice-modal" role="dialog" aria-modal="true" aria-labelledby="choiceModalTitle">
         <div class="choice-modal__body">
@@ -427,7 +462,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-07-11-3"></script>
+    <script src="./app.js?v=2026-07-11-4"></script>
   </body>
 </html>
 
