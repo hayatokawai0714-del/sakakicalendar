@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   recurringExceptions: "sakaki_recurring_exceptions_v1",
   thisWeekOpen: "sakaki_this_week_summary_open_v1",
   nextWeekOpen: "sakaki_nextweek_open_v1",
+  weeklyScheduleView: "sakaki_weekly_schedule_view_v1",
   apiUrl: "sakaki_api_url_v1",
   apiKey: "sakaki_api_key_v1",
   updatedBy: "sakaki_updated_by_v1",
@@ -4034,15 +4035,15 @@ function trimTrailingZeros(n) {
 
 function renderShipmentWeekSummary(opts) {
   const title = String((opts && opts.title) || "");
-  const detailsId = String((opts && opts.detailsId) || "");
+  const panelId = String((opts && opts.panelId) || "");
   const rangeId = String((opts && opts.rangeId) || "");
   const listId = String((opts && opts.listId) || "");
   const offsetWeeks = Number((opts && opts.offsetWeeks) || 0);
 
-  const details = document.getElementById(detailsId);
+  const panel = document.getElementById(panelId);
   const rangeEl = document.getElementById(rangeId);
   const listEl = document.getElementById(listId);
-  if (!details || !rangeEl || !listEl) return;
+  if (!panel || !rangeEl || !listEl) return;
 
   const { start, end, startKey, endKey } = getWeekRange(offsetWeeks, new Date());
   rangeEl.textContent = `${startKey.replace(/-/g, "/")}〜${endKey.replace(/-/g, "/")}`;
@@ -4111,7 +4112,16 @@ function renderShipmentWeekSummary(opts) {
 
     const head = document.createElement("div");
     head.className = "nextweek-date";
-    head.textContent = dow ? `${mmdd}(${dow})` : mmdd;
+    const dateText = document.createElement("span");
+    dateText.className = "weekly-date-main";
+    dateText.textContent = mmdd;
+    head.appendChild(dateText);
+    if (dow) {
+      const weekdayText = document.createElement("span");
+      weekdayText.className = "weekly-weekday";
+      weekdayText.textContent = dow;
+      head.appendChild(weekdayText);
+    }
 
     const items = document.createElement("div");
     items.className = "nextweek-items";
@@ -4136,20 +4146,22 @@ function renderShipmentWeekSummary(opts) {
         destLine.appendChild(badge);
       }
       const nameSpan = document.createElement("span");
-      nameSpan.textContent = `・${destName}`;
+      nameSpan.className = "weekly-destination-name";
+      nameSpan.textContent = destName;
       destLine.appendChild(nameSpan);
       destBlock.appendChild(destLine);
 
       const specList = document.createElement("div");
       specList.className = "nextweek-speclist";
 
-      specs.forEach((sp) => {
-        const row = document.createElement("div");
-        row.className = "nextweek-spec";
+      const specTexts = specs.map((sp) => {
         const qtyText = sp.nonNumeric.length ? sp.unit : `${trimTrailingZeros(sp.total)}${sp.unit}`;
-        row.textContent = `${sp.standard}　${qtyText}`.trim();
-        specList.appendChild(row);
+        return `${sp.standard} ${qtyText}`.trim();
       });
+      const row = document.createElement("div");
+      row.className = "nextweek-spec";
+      row.textContent = specTexts.join("・");
+      specList.appendChild(row);
 
       destBlock.appendChild(specList);
       items.appendChild(destBlock);
@@ -4163,7 +4175,7 @@ function renderShipmentWeekSummary(opts) {
 function renderThisWeekShipmentSummary() {
   renderShipmentWeekSummary({
     title: "今週の出荷予定",
-    detailsId: "thisWeekDetails",
+    panelId: "thisWeekDetails",
     rangeId: "thisWeekRange",
     listId: "thisWeekList",
     offsetWeeks: 0,
@@ -4173,7 +4185,7 @@ function renderThisWeekShipmentSummary() {
 function renderNextWeekShipmentSummary() {
   renderShipmentWeekSummary({
     title: "来週の出荷予定",
-    detailsId: "nextWeekDetails",
+    panelId: "nextWeekDetails",
     rangeId: "nextWeekRange",
     listId: "nextWeekList",
     offsetWeeks: 1,
@@ -4187,19 +4199,41 @@ function renderNextWeekShipmentSummary() {
 
 
 
-function bindWeekDetails(detailsId, storageKey) {
-  const details = document.getElementById(detailsId);
-  if (!details) return;
-  const saved = readLS(storageKey, false);
-  details.open = Boolean(saved);
-  details.addEventListener("toggle", () => {
-    writeLS(storageKey, Boolean(details.open));
-  });
-}
-
 function bindWeekSummaries() {
-  bindWeekDetails("thisWeekDetails", STORAGE_KEYS.thisWeekOpen);
-  bindWeekDetails("nextWeekDetails", STORAGE_KEYS.nextWeekOpen);
+  const tabs = Array.from(document.querySelectorAll(".weekly-segment[data-week-view]"));
+  const panels = {
+    thisWeek: document.getElementById("thisWeekDetails"),
+    nextWeek: document.getElementById("nextWeekDetails"),
+  };
+  if (tabs.length !== 2 || !panels.thisWeek || !panels.nextWeek) return;
+
+  function selectWeek(view, persist) {
+    const selected = view === "nextWeek" ? "nextWeek" : "thisWeek";
+    tabs.forEach((tab) => {
+      const active = tab.dataset.weekView === selected;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    Object.entries(panels).forEach(([name, panel]) => {
+      panel.classList.toggle("hidden", name !== selected);
+    });
+    if (persist) writeLS(STORAGE_KEYS.weeklyScheduleView, selected);
+  }
+
+  const saved = readLS(STORAGE_KEYS.weeklyScheduleView, "thisWeek");
+  selectWeek(saved, false);
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => selectWeek(tab.dataset.weekView, true));
+    tab.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const nextView = tab.dataset.weekView === "thisWeek" ? "nextWeek" : "thisWeek";
+      selectWeek(nextView, true);
+      const nextTab = tabs.find((candidate) => candidate.dataset.weekView === nextView);
+      if (nextTab) nextTab.focus();
+    });
+  });
 }
 
 

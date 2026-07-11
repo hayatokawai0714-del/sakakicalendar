@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-11-1" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-11-2" />
   </head>
   <body>
     <header class="app-header">
@@ -54,33 +54,27 @@
         <ul id="selectedDayList" class="list"></ul>
       </section>
 
-      <div class="week-summary-group" aria-label="今週・来週の出荷予定">
-      <section class="card" aria-label="今週の出荷予定">
-        <details id="thisWeekDetails" class="nextweek-details">
-          <summary class="nextweek-summary">
-            <span class="nextweek-title">今週の出荷予定</span>
-            <span id="thisWeekRange" class="nextweek-range muted"></span>
-            <span class="nextweek-chevron" aria-hidden="true"></span>
-          </summary>
+      <section class="card weekly-schedule-card" aria-labelledby="weeklyScheduleTitle">
+        <div class="weekly-schedule-head">
+          <h2 id="weeklyScheduleTitle">出荷予定</h2>
+        </div>
+        <div class="weekly-segments" role="tablist" aria-label="表示する週">
+          <button type="button" id="thisWeekTab" class="weekly-segment is-active" role="tab" aria-selected="true" aria-controls="thisWeekDetails" data-week-view="thisWeek">今週</button>
+          <button type="button" id="nextWeekTab" class="weekly-segment" role="tab" aria-selected="false" aria-controls="nextWeekDetails" data-week-view="nextWeek">来週</button>
+        </div>
+        <div id="thisWeekDetails" class="weekly-panel" role="tabpanel" aria-labelledby="thisWeekTab">
+          <p id="thisWeekRange" class="weekly-range muted"></p>
           <div id="thisWeekSummary" class="nextweek-card">
             <ul id="thisWeekList" class="nextweek-list"></ul>
           </div>
-        </details>
-      </section>
-
-      <section class="card" aria-label="来週の出荷予定">
-        <details id="nextWeekDetails" class="nextweek-details">
-          <summary class="nextweek-summary">
-            <span class="nextweek-title">来週の出荷予定</span>
-            <span id="nextWeekRange" class="nextweek-range muted"></span>
-            <span class="nextweek-chevron" aria-hidden="true"></span>
-          </summary>
+        </div>
+        <div id="nextWeekDetails" class="weekly-panel hidden" role="tabpanel" aria-labelledby="nextWeekTab">
+          <p id="nextWeekRange" class="weekly-range muted"></p>
           <div id="nextWeekSummary" class="nextweek-card">
             <ul id="nextWeekList" class="nextweek-list"></ul>
           </div>
-        </details>
+        </div>
       </section>
-      </div>
 
       <section class="card monthly-shipment-card" aria-labelledby="monthlyShipmentTitle">
         <div class="monthly-shipment-head">
@@ -402,7 +396,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-07-10-1"></script>
+    <script src="./app.js?v=2026-07-11-2"></script>
   </body>
 </html>
 
