@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   thisWeekOpen: "sakaki_this_week_summary_open_v1",
   nextWeekOpen: "sakaki_nextweek_open_v1",
   weeklyScheduleView: "sakaki_weekly_schedule_view_v1",
+  calendarView: "sakaki_calendar_view_v1",
   apiUrl: "sakaki_api_url_v1",
   apiKey: "sakaki_api_key_v1",
   updatedBy: "sakaki_updated_by_v1",
@@ -52,6 +53,7 @@ const state = {
   isBusy: false,
   currentMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   selectedDate: formatDate(new Date()),
+  calendarView: "calendar",
 };
 
 init();
@@ -98,6 +100,7 @@ function loadState() {
   state.apiKey = String(localStorage.getItem(STORAGE_KEYS.apiKey) || "").trim();
   console.log("[sakaki] loaded api url", state.apiUrl);
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
+  state.calendarView = readLS(STORAGE_KEYS.calendarView, "calendar") === "schedule" ? "schedule" : "calendar";
 
   // Backward compatibility: existing shipments are spot shipments.
   state.entries.forEach((e) => {
@@ -408,6 +411,13 @@ function bindEvents() {
     state.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     renderCalendar();
     renderMonthlyShipmentSummary();
+  });
+  document.querySelectorAll("[data-calendar-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.calendarView = btn.dataset.calendarView === "schedule" ? "schedule" : "calendar";
+      writeLS(STORAGE_KEYS.calendarView, state.calendarView);
+      renderCalendar();
+    });
   });
   const markSeenBtn = document.getElementById("markSeenBtn");
   if (markSeenBtn) markSeenBtn.addEventListener("click", () => {
@@ -1491,6 +1501,22 @@ function renderCalendar() {
   document.getElementById("monthLabel").textContent = `${state.currentMonth.getFullYear()}年${state.currentMonth.getMonth() + 1}月`;
 
   const weekdayRow = document.getElementById("weekdayRow");
+  const grid = document.getElementById("calendarGrid");
+  const scheduleView = document.getElementById("monthlyScheduleView");
+  const isScheduleView = state.calendarView === "schedule";
+  document.querySelectorAll("[data-calendar-view]").forEach((btn) => {
+    const active = btn.dataset.calendarView === state.calendarView;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-selected", String(active));
+  });
+  weekdayRow.classList.toggle("hidden", isScheduleView);
+  grid.classList.toggle("hidden", isScheduleView);
+  scheduleView.classList.toggle("hidden", !isScheduleView);
+
+  if (isScheduleView) {
+    renderMonthlyScheduleView();
+    return;
+  }
   weekdayRow.innerHTML = "";
   ["日", "月", "火", "水", "木", "金", "土"].forEach((d) => {
     const el = document.createElement("div");
@@ -1501,7 +1527,6 @@ function renderCalendar() {
     weekdayRow.appendChild(el);
   });
 
-  const grid = document.getElementById("calendarGrid");
   grid.innerHTML = "";
 
   const year = state.currentMonth.getFullYear();
@@ -1610,6 +1635,80 @@ function renderCalendar() {
       grid.appendChild(cell);
     });
   }}
+
+function renderMonthlyScheduleView() {
+  const view = document.getElementById("monthlyScheduleView");
+  if (!view) return;
+  view.innerHTML = "";
+  const year = state.currentMonth.getFullYear();
+  const month = state.currentMonth.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const generated = generateRecurringShipmentsForMonth(year, month);
+  const today = formatDate(new Date());
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const header = document.createElement("div");
+  header.className = "monthly-schedule-row monthly-schedule-header";
+  header.innerHTML = "<span>日</span><span>曜</span><span>予定</span>";
+  view.appendChild(header);
+
+  for (let day = 1; day <= lastDay; day += 1) {
+    const date = new Date(year, month, day);
+    const dateKey = formatDate(date);
+    const entries = entriesByDate(dateKey, { generatedRecurring: generated });
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "monthly-schedule-row";
+    if (dateKey === today) row.classList.add("is-today");
+    if (dateKey === state.selectedDate) row.classList.add("is-selected");
+    const weekday = date.getDay();
+    row.innerHTML = `<span class="monthly-schedule-day">${day}</span><span class="monthly-schedule-weekday ${weekday === 0 ? "is-sun" : weekday === 6 ? "is-sat" : ""}">${weekdays[weekday]}</span>`;
+    const content = document.createElement("span");
+    content.className = "monthly-schedule-items";
+    entries.slice().sort((a, b) => (a.time || "").localeCompare(b.time || "") || String(a.updatedAt).localeCompare(String(b.updatedAt))).forEach((entry) => {
+      content.appendChild(createMonthlyScheduleItem_(entry));
+    });
+    row.appendChild(content);
+    row.addEventListener("click", () => selectCalendarDate_(dateKey));
+    view.appendChild(row);
+  }
+}
+
+function createMonthlyScheduleItem_(entry) {
+  const item = document.createElement("span");
+  item.className = "monthly-schedule-item";
+  const tag = document.createElement("span");
+  tag.className = `monthly-schedule-tag t-${entry.type}`;
+  tag.textContent = chipTag(entry);
+  item.appendChild(tag);
+  const detail = document.createElement("span");
+  detail.className = "monthly-schedule-detail";
+  if (entry.type === "shipment") {
+    const destination = String(entry.destinationName || entry.destination || "").trim();
+    const specs = [[entry.standard, entry.quantity, entry.unit], [entry.standard2, entry.quantity2, entry.unit2]]
+      .map(([standard, quantity, unit]) => `${String(standard || "").trim()} ${String(quantity ?? "").trim()}${String(unit || "").trim()}`.trim())
+      .filter(Boolean);
+    detail.textContent = [destination, ...specs, entry.memo ? `メモ：${entry.memo}` : ""].filter(Boolean).join("\n");
+  } else {
+    detail.textContent = [entrySummary(entry), entry.memo ? `メモ：${entry.memo}` : ""].filter(Boolean).join("\n");
+  }
+  item.appendChild(detail);
+  if (isNewEntry(entry)) {
+    const badge = document.createElement("span");
+    badge.className = "new-badge";
+    badge.textContent = "新着";
+    item.appendChild(badge);
+  }
+  return item;
+}
+
+function selectCalendarDate_(dateKey) {
+  state.selectedDate = dateKey;
+  setFormDate(dateKey);
+  renderCalendar();
+  renderSelectedDay();
+  window.requestAnimationFrame(() => window.requestAnimationFrame(scrollSelectedDayIntoView_));
+}
 
 function renderSelectedDay() {
   const label = document.getElementById("selectedDateLabel");

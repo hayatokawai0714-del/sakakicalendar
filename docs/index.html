@@ -42,8 +42,13 @@
           </div>
           <button id="nextMonthBtn" class="btn secondary month-nav" aria-label="翌月">›</button>
         </div>
+        <div class="calendar-view-switch" role="tablist" aria-label="月間表示の切替">
+          <button type="button" class="calendar-view-btn is-active" id="calendarViewBtn" role="tab" aria-selected="true" data-calendar-view="calendar">カレンダー</button>
+          <button type="button" class="calendar-view-btn" id="scheduleViewBtn" role="tab" aria-selected="false" data-calendar-view="schedule">予定表</button>
+        </div>
         <div id="weekdayRow" class="weekday-row"></div>
         <div id="calendarGrid" class="calendar-grid"></div>
+        <div id="monthlyScheduleView" class="monthly-schedule-view hidden" role="tabpanel" aria-labelledby="scheduleViewBtn"></div>
         <div class="calendar-legend" aria-label="予定種別の凡例">
           <span><i class="legend-dot legend-dot--shipment"></i>出荷</span>
           <span><i class="legend-dot legend-dot--event"></i>予定</span>
