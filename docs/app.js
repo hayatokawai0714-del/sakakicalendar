@@ -2313,6 +2313,20 @@ function setEntryFormOpen_(open) {
   }
 }
 
+function showSavedDate_(dateKey) {
+  const savedDateKey = normalizeDateKey(dateKey);
+  const savedDate = parseDate(savedDateKey);
+  if (!savedDateKey || !savedDate) return;
+
+  state.selectedDate = savedDateKey;
+  state.currentMonth = new Date(savedDate.getFullYear(), savedDate.getMonth(), 1);
+  setFormDate(savedDateKey);
+  renderAll();
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(scrollSelectedDayIntoView_);
+  });
+}
+
 function openNewEntryForm_() {
   const selected = normalizeDateKey(state.selectedDate) || formatDate(new Date());
   state.selectedDate = selected;
@@ -2511,11 +2525,10 @@ async function submitEntryForm(e) {
         saveRecurringException(exception);
       }
 
-      state.selectedDate = exception.date;
       setStatus("保存しました", "ok");
       showToast("保存しました", "success");
       resetEntryForm();
-      renderAll();
+      showSavedDate_(exception.date);
       return;
     }
 
@@ -2572,11 +2585,10 @@ async function submitEntryForm(e) {
           saveSpotShipment(entry);
         }
 
-        state.selectedDate = entry.date;
         setStatus("保存しました", "ok");
         showToast("保存しました", "success");
         resetEntryForm();
-        renderAll();
+        showSavedDate_(entry.date);
         return;
       }
 
@@ -2673,11 +2685,10 @@ async function submitEntryForm(e) {
         saveRecurringShipment(rule);
       }
 
-      state.selectedDate = rule.startDate;
       setStatus("保存しました", "ok");
       showToast("保存しました", "success");
       resetEntryForm();
-      renderAll();
+      showSavedDate_(rule.startDate);
       return;
     }
 
@@ -2705,11 +2716,10 @@ async function submitEntryForm(e) {
         saveState();
       }
 
-      state.selectedDate = entry.date;
       setStatus("保存しました", "ok");
       showToast("保存しました", "success");
       resetEntryForm();
-      renderAll();
+      showSavedDate_(entry.date);
       return;
     }
 
@@ -2735,11 +2745,10 @@ async function submitEntryForm(e) {
       saveState();
     }
 
-    state.selectedDate = entry.date;
     setStatus("保存しました", "ok");
     showToast("保存しました", "success");
     resetEntryForm();
-    renderAll();
+    showSavedDate_(entry.date);
   } catch (err) {
     setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
     showToast(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -2816,13 +2825,10 @@ async function submitRoadsideShipmentForm(e) {
       saveSpotShipment(entry);
     }
 
-    state.selectedDate = entry.date;
-    const savedDate = parseDate(entry.date);
-    if (savedDate) state.currentMonth = new Date(savedDate.getFullYear(), savedDate.getMonth(), 1);
     setStatus("保存しました", "ok");
     showToast("保存しました", "success");
     resetRoadsideShipmentForm_();
-    renderAll();
+    showSavedDate_(entry.date);
     if (typeof state._closeAdminPanels === "function") state._closeAdminPanels();
   } catch (err) {
     setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
