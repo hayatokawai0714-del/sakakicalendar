@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
   lastSeenUpdatedAt: "sakaki_last_seen_updated_at",
   seenEntryUpdates: "sakaki_seen_entry_updates_v1",
   unreadTrackingInitialized: "sakaki_unread_tracking_initialized_v1",
+  ownEntryUpdates: "sakaki_own_entry_updates_v1",
+  ownUpdateTrackingInitialized: "sakaki_own_update_tracking_initialized_v1",
 };
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
@@ -32,8 +34,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-13.3";
-const BUILD_TIME = "2026-07-13 21:10";
+const APP_VERSION = "2026-07-13.4";
+const BUILD_TIME = "2026-07-13 22:06";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -53,6 +55,7 @@ const state = {
   apiKey: "",
   updatedBy: "",
   seenEntryUpdates: {},
+  ownEntryUpdates: {},
   isBusy: false,
   currentMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   selectedDate: formatDate(new Date()),
@@ -69,6 +72,7 @@ function init() {
   stripGarbageTextNodes_();
   loadState();
   initializeUnreadTracking_();
+  initializeOwnUpdateTracking_();
   state._didInit = true;
   state._debugUiEnabled = isDebugUiEnabled_();
   console.log("[sakaki] init");
@@ -112,6 +116,10 @@ function loadState() {
   const seenEntryUpdates = readLS(STORAGE_KEYS.seenEntryUpdates, {});
   state.seenEntryUpdates = seenEntryUpdates && typeof seenEntryUpdates === "object" && !Array.isArray(seenEntryUpdates)
     ? seenEntryUpdates
+    : {};
+  const ownEntryUpdates = readLS(STORAGE_KEYS.ownEntryUpdates, {});
+  state.ownEntryUpdates = ownEntryUpdates && typeof ownEntryUpdates === "object" && !Array.isArray(ownEntryUpdates)
+    ? ownEntryUpdates
     : {};
   state.calendarView = readLS(STORAGE_KEYS.calendarView, "calendar") === "schedule" ? "schedule" : "calendar";
 
@@ -840,11 +848,43 @@ function initializeUnreadTracking_() {
   } catch {}
 }
 
+function initializeOwnUpdateTracking_() {
+  try {
+    if (localStorage.getItem(STORAGE_KEYS.ownUpdateTrackingInitialized) === "1") return;
+    const currentActor = unreadActor_(state.updatedBy);
+    const baselineAt = unreadTimestamp_(getLastSeenUpdatedAt());
+    if (currentActor) {
+      unreadCandidates_().forEach((entry) => {
+        if (unreadActor_(entry.updatedBy) !== currentActor) return;
+        if (unreadTimestamp_(entry.updatedAt) > baselineAt) return;
+        const key = unreadEntryKey_(entry);
+        if (key && entry.updatedAt) state.ownEntryUpdates[key] = String(entry.updatedAt);
+      });
+      writeLS(STORAGE_KEYS.ownEntryUpdates, state.ownEntryUpdates);
+    }
+    localStorage.setItem(STORAGE_KEYS.ownUpdateTrackingInitialized, "1");
+  } catch {}
+}
+
+function rememberOwnUpdate_(entry) {
+  const key = unreadEntryKey_(entry);
+  if (!key || !entry?.updatedAt) return;
+  state.ownEntryUpdates[key] = String(entry.updatedAt);
+  writeLS(STORAGE_KEYS.ownEntryUpdates, state.ownEntryUpdates);
+}
+
+function isOwnDeviceUpdate_(entry) {
+  const key = unreadEntryKey_(entry);
+  if (!key) return false;
+  const ownUpdatedAt = unreadTimestamp_(state.ownEntryUpdates[key]);
+  const entryUpdatedAt = unreadTimestamp_(entry.updatedAt);
+  return Boolean(ownUpdatedAt && entryUpdatedAt && ownUpdatedAt >= entryUpdatedAt);
+}
+
 function isUnreadUpdate_(entry) {
   if (!entry) return false;
-  const currentActor = unreadActor_(state.updatedBy);
   const updatedActor = unreadActor_(entry.updatedBy);
-  if (!currentActor || !updatedActor || currentActor === updatedActor) return false;
+  if (!updatedActor || isOwnDeviceUpdate_(entry)) return false;
   const updatedAt = unreadTimestamp_(entry.updatedAt);
   if (!updatedAt) return false;
   const key = unreadEntryKey_(entry);
@@ -1184,6 +1224,7 @@ function getRecurringShipments() {
 function saveSpotShipment(spot) {
   spot.type = "shipment";
   spot.shipmentType = "spot";
+  rememberOwnUpdate_(spot);
   upsertById(state.entries, spot);
   saveState();
 }
@@ -1210,6 +1251,7 @@ function flattenSpotShipmentForApi_(entry) {
 
 function saveRecurringShipment(rule) {
   rule.shipmentType = "recurring";
+  rememberOwnUpdate_(rule);
   upsertById(state.recurringShipments, rule);
   saveState();
 }
@@ -1273,6 +1315,7 @@ function flattenRecurringExceptionForApi_(exception) {
 
 function saveRecurringException(exception) {
   const rec = normalizeRecurringException_(exception);
+  rememberOwnUpdate_(rec);
   const key = recurringExceptionKey_(rec.recurringId, rec.date);
   state.recurringExceptions = getRecurringExceptions().filter((item) => {
     return item.id === rec.id || recurringExceptionKey_(item.recurringId, item.date) !== key;
@@ -3308,6 +3351,7 @@ async function submitEntryForm(e) {
         updatedAt: new Date().toISOString(),
         updatedBy: currentUpdatedBy(),
       };
+      rememberOwnUpdate_(entry);
 
       if (isApiEnabled()) {
       // Optimistic UI update: reflect immediately, then sync to API (no full reload).
@@ -3337,6 +3381,7 @@ async function submitEntryForm(e) {
       updatedAt: new Date().toISOString(),
       updatedBy: currentUpdatedBy(),
     };
+    rememberOwnUpdate_(entry);
 
     if (isApiEnabled()) {
     // Optimistic UI update: reflect immediately, then sync to API (no full reload).
