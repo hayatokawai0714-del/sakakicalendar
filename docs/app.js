@@ -30,8 +30,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-13.1";
-const BUILD_TIME = "2026-07-13 16:02";
+const APP_VERSION = "2026-07-13.2";
+const BUILD_TIME = "2026-07-13 19:58";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -55,6 +55,10 @@ const state = {
   selectedDate: formatDate(new Date()),
   calendarView: "calendar",
 };
+
+let scheduleDragState_ = null;
+let scheduleTouchState_ = null;
+let scheduleSuppressClickUntil_ = 0;
 
 init();
 
@@ -455,6 +459,9 @@ function bindEvents() {
   });
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
   if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
+  document.addEventListener("touchmove", handleScheduleTouchMove_, { passive: false });
+  document.addEventListener("touchend", handleScheduleTouchEnd_, { passive: false });
+  document.addEventListener("touchcancel", cancelScheduleTouchHold_, { passive: true });
   bindEntryControlSegments_();
   bindRecurrenceControls_();
   bindAdminPanels();
@@ -1105,6 +1112,26 @@ function saveSpotShipment(spot) {
   saveState();
 }
 
+function flattenSpotShipmentForApi_(entry) {
+  return {
+    id: entry.id,
+    shipmentType: "spot",
+    date: normalizeDateKey(entry.date),
+    destinationId: String(entry.destinationId || ""),
+    destinationName: String(entry.destinationName || entry.destination || ""),
+    standard: String(entry.standard || ""),
+    quantity: Number(entry.quantity || 0),
+    unit: String(entry.unit || ""),
+    standard2: String(entry.standard2 || ""),
+    quantity2: Number(entry.quantity2 || 0),
+    unit2: String(entry.unit2 || ""),
+    memo: String(entry.memo || ""),
+    recurrenceRuleId: "",
+    updatedAt: String(entry.updatedAt || new Date().toISOString()),
+    updatedBy: String(entry.updatedBy || currentUpdatedBy()),
+  };
+}
+
 function saveRecurringShipment(rule) {
   rule.shipmentType = "recurring";
   upsertById(state.recurringShipments, rule);
@@ -1702,6 +1729,11 @@ function renderMonthlyScheduleView() {
   const today = formatDate(new Date());
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
+  const hint = document.createElement("div");
+  hint.className = "schedule-drag-hint";
+  hint.textContent = "出荷は移動ハンドルを長押し（PCはカードをドラッグ）して日付を変更できます";
+  view.appendChild(hint);
+
   const header = document.createElement("div");
   header.className = "monthly-schedule-row monthly-schedule-header";
   header.innerHTML = "<span>日</span><span>曜</span><span>予定</span>";
@@ -1711,9 +1743,12 @@ function renderMonthlyScheduleView() {
     const date = new Date(year, month, day);
     const dateKey = formatDate(date);
     const entries = entriesByDate(dateKey, { generatedRecurring: generated });
-    const row = document.createElement("button");
-    row.type = "button";
+    const row = document.createElement("div");
     row.className = "monthly-schedule-row";
+    row.dataset.date = dateKey;
+    row.tabIndex = 0;
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", `${formatDateJa_(dateKey)}の予定`);
     if (dateKey === today) row.classList.add("is-today");
     if (dateKey === state.selectedDate) row.classList.add("is-selected");
     const weekday = date.getDay();
@@ -1724,7 +1759,16 @@ function renderMonthlyScheduleView() {
       content.appendChild(createMonthlyScheduleItem_(entry));
     });
     row.appendChild(content);
-    row.addEventListener("click", () => selectCalendarDate_(dateKey));
+    row.addEventListener("click", (event) => {
+      if (Date.now() < scheduleSuppressClickUntil_ || event.target.closest(".schedule-drag-handle")) return;
+      selectCalendarDate_(dateKey);
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      selectCalendarDate_(dateKey);
+    });
+    bindScheduleDropRow_(row);
     view.appendChild(row);
   }
 }
@@ -1732,6 +1776,23 @@ function renderMonthlyScheduleView() {
 function createMonthlyScheduleItem_(entry) {
   const item = document.createElement("span");
   item.className = "monthly-schedule-item";
+  if (entry.type === "shipment") {
+    item.classList.add("is-shipment-movable");
+    item.draggable = true;
+    item.setAttribute("aria-grabbed", "false");
+    item.addEventListener("dragstart", (event) => {
+      if (state.isBusy) {
+        event.preventDefault();
+        return;
+      }
+      beginScheduleDrag_(entry, item, "mouse");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(entry.id || "shipment"));
+      }
+    });
+    item.addEventListener("dragend", cleanupScheduleDrag_);
+  }
   const tag = document.createElement("span");
   tag.className = `monthly-schedule-tag t-${entry.type}`;
   tag.textContent = chipTag(entry);
@@ -1758,7 +1819,141 @@ function createMonthlyScheduleItem_(entry) {
     badge.textContent = "新着";
     item.appendChild(badge);
   }
+  if (entry.type === "shipment") {
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "schedule-drag-handle";
+    handle.textContent = "⋮⋮";
+    handle.title = "長押しして別の日へ移動";
+    handle.setAttribute("aria-label", "この出荷予定を長押しして移動");
+    handle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    handle.addEventListener("touchstart", (event) => startScheduleTouchHold_(event, entry, item, handle), { passive: true });
+    item.appendChild(handle);
+  }
   return item;
+}
+
+function bindScheduleDropRow_(row) {
+  row.addEventListener("dragover", (event) => {
+    if (!scheduleDragState_ || row.dataset.date === normalizeDateKey(scheduleDragState_.entry.date)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    setScheduleDropTarget_(row);
+  });
+  row.addEventListener("dragleave", (event) => {
+    if (!row.contains(event.relatedTarget)) row.classList.remove("is-drop-target");
+  });
+  row.addEventListener("drop", (event) => {
+    if (!scheduleDragState_) return;
+    event.preventDefault();
+    const entry = scheduleDragState_.entry;
+    const targetDate = normalizeDateKey(row.dataset.date);
+    scheduleSuppressClickUntil_ = Date.now() + 500;
+    cleanupScheduleDrag_();
+    if (targetDate && targetDate !== normalizeDateKey(entry.date)) void moveShipmentToDate_(entry, targetDate);
+  });
+}
+
+function beginScheduleDrag_(entry, item, inputType) {
+  cleanupScheduleDrag_();
+  scheduleDragState_ = { entry, item, inputType, targetRow: null };
+  item.classList.add("is-dragging");
+  item.setAttribute("aria-grabbed", "true");
+  document.body.classList.add("is-schedule-dragging");
+  document.querySelectorAll(".monthly-schedule-row[data-date]").forEach((row) => {
+    row.classList.toggle("is-drop-zone", row.dataset.date !== normalizeDateKey(entry.date));
+  });
+}
+
+function setScheduleDropTarget_(row) {
+  document.querySelectorAll(".monthly-schedule-row.is-drop-target").forEach((item) => item.classList.remove("is-drop-target"));
+  if (!scheduleDragState_ || !row || row.dataset.date === normalizeDateKey(scheduleDragState_.entry.date)) {
+    if (scheduleDragState_) scheduleDragState_.targetRow = null;
+    return;
+  }
+  row.classList.add("is-drop-target");
+  scheduleDragState_.targetRow = row;
+}
+
+function cleanupScheduleDrag_() {
+  if (scheduleDragState_?.item) {
+    scheduleDragState_.item.classList.remove("is-dragging", "is-long-press-active");
+    scheduleDragState_.item.setAttribute("aria-grabbed", "false");
+  }
+  document.body.classList.remove("is-schedule-dragging");
+  document.querySelectorAll(".monthly-schedule-row.is-drop-zone, .monthly-schedule-row.is-drop-target")
+    .forEach((row) => row.classList.remove("is-drop-zone", "is-drop-target"));
+  scheduleDragState_ = null;
+}
+
+function startScheduleTouchHold_(event, entry, item, handle) {
+  if (state.isBusy || event.touches.length !== 1) return;
+  cancelScheduleTouchHold_();
+  const touch = event.touches[0];
+  scheduleTouchState_ = {
+    identifier: touch.identifier,
+    entry,
+    item,
+    handle,
+    startX: touch.clientX,
+    startY: touch.clientY,
+    lastX: touch.clientX,
+    lastY: touch.clientY,
+    active: false,
+    timer: window.setTimeout(() => {
+      if (!scheduleTouchState_ || scheduleTouchState_.identifier !== touch.identifier) return;
+      scheduleTouchState_.active = true;
+      beginScheduleDrag_(entry, item, "touch");
+      item.classList.add("is-long-press-active");
+      handle.classList.add("is-active");
+      const row = document.elementFromPoint(scheduleTouchState_.lastX, scheduleTouchState_.lastY)?.closest(".monthly-schedule-row[data-date]");
+      setScheduleDropTarget_(row);
+    }, 500),
+  };
+}
+
+function handleScheduleTouchMove_(event) {
+  if (!scheduleTouchState_) return;
+  const touch = Array.from(event.touches).find((item) => item.identifier === scheduleTouchState_.identifier);
+  if (!touch) return;
+  scheduleTouchState_.lastX = touch.clientX;
+  scheduleTouchState_.lastY = touch.clientY;
+  if (!scheduleTouchState_.active) {
+    const distance = Math.hypot(touch.clientX - scheduleTouchState_.startX, touch.clientY - scheduleTouchState_.startY);
+    if (distance > 10) cancelScheduleTouchHold_();
+    return;
+  }
+  event.preventDefault();
+  if (touch.clientY < 84) window.scrollBy(0, -12);
+  if (touch.clientY > window.innerHeight - 84) window.scrollBy(0, 12);
+  const row = document.elementFromPoint(touch.clientX, touch.clientY)?.closest(".monthly-schedule-row[data-date]");
+  setScheduleDropTarget_(row);
+}
+
+function handleScheduleTouchEnd_(event) {
+  if (!scheduleTouchState_) return;
+  const ended = Array.from(event.changedTouches || []).some((item) => item.identifier === scheduleTouchState_.identifier);
+  if (!ended) return;
+  const wasActive = scheduleTouchState_.active;
+  const entry = scheduleTouchState_.entry;
+  const targetDate = normalizeDateKey(scheduleDragState_?.targetRow?.dataset.date || "");
+  if (wasActive) {
+    event.preventDefault();
+    scheduleSuppressClickUntil_ = Date.now() + 500;
+  }
+  cancelScheduleTouchHold_();
+  if (wasActive && targetDate && targetDate !== normalizeDateKey(entry.date)) void moveShipmentToDate_(entry, targetDate);
+}
+
+function cancelScheduleTouchHold_() {
+  if (!scheduleTouchState_) return;
+  window.clearTimeout(scheduleTouchState_.timer);
+  scheduleTouchState_.handle?.classList.remove("is-active");
+  scheduleTouchState_ = null;
+  cleanupScheduleDrag_();
 }
 
 function selectCalendarDate_(dateKey) {
@@ -2543,12 +2738,6 @@ function scrollEntryFormIntoView_() {
 }
 
 function openChoiceModal_(kind) {
-  const backdrop = document.getElementById("choiceModalBackdrop");
-  const titleEl = document.getElementById("choiceModalTitle");
-  const textEl = document.getElementById("choiceModalText");
-  const actionsEl = document.getElementById("choiceModalActions");
-  if (!backdrop || !titleEl || !textEl || !actionsEl) return Promise.resolve("");
-
   const config = kind === "edit"
     ? {
         title: "定期出荷の編集",
@@ -2570,6 +2759,15 @@ function openChoiceModal_(kind) {
           { label: "キャンセル", value: "" },
         ],
       };
+  return openConfiguredChoiceModal_(config);
+}
+
+function openConfiguredChoiceModal_(config) {
+  const backdrop = document.getElementById("choiceModalBackdrop");
+  const titleEl = document.getElementById("choiceModalTitle");
+  const textEl = document.getElementById("choiceModalText");
+  const actionsEl = document.getElementById("choiceModalActions");
+  if (!backdrop || !titleEl || !textEl || !actionsEl) return Promise.resolve("");
 
   titleEl.textContent = config.title;
   textEl.textContent = config.text;
@@ -2638,14 +2836,12 @@ function buildRecurringOverrideExceptionFromForm_() {
   const recurringId = String(document.getElementById("exceptionRecurringId").value || "").trim();
   const sourceDate = normalizeDateKey(document.getElementById("exceptionDate").value || "");
   const displayDate = requiredValue("shipmentDate", "出荷日");
-  const source = parseDate(sourceDate);
-  const target = parseDate(displayDate);
-  if (!source || !target) throw new Error("移動元と移動先の日付を確認してください");
-  const offsetDays = Math.round((stripTime(target).getTime() - stripTime(source).getTime()) / (24 * 60 * 60 * 1000));
-  const action = offsetDays === 0 ? "override" : "move";
   const destId = String(document.getElementById("shipmentDestination").value || "");
   const destName = destId ? state.destinations.find((d) => String(d.id) === destId)?.name || "" : "";
-  const shipment = {
+  const formEntry = {
+    id: String(document.getElementById("entryId").value || ""),
+    recurringId,
+    _ruleId: recurringId,
     destinationId: destId,
     destinationName: destName,
     destination: destName,
@@ -2656,17 +2852,142 @@ function buildRecurringOverrideExceptionFromForm_() {
     quantity2: Number(document.getElementById("shipmentQuantity2").value || 0),
     unit2: String(document.getElementById("shipmentUnit2").value || "").trim(),
     memo: String(document.getElementById("shipmentMemo").value || "").trim(),
-    shipOffsetDays: action === "move" ? offsetDays : Number(document.getElementById("exceptionShipOffsetDays").value || 0),
   };
+  return buildRecurringOccurrenceException_(formEntry, sourceDate, displayDate, {
+    preferredId: formEntry.id,
+    sameDayShipOffset: Number(document.getElementById("exceptionShipOffsetDays").value || 0),
+  });
+}
+
+function buildRecurringOccurrenceException_(entry, sourceDateValue, targetDateValue, options = {}) {
+  const sourceDate = normalizeDateKey(sourceDateValue || entry.exceptionDate || entry.date);
+  const targetDate = normalizeDateKey(targetDateValue || entry.date);
+  const source = parseDate(sourceDate);
+  const target = parseDate(targetDate);
+  if (!source || !target) throw new Error("移動元と移動先の日付を確認してください");
+  const offsetDays = Math.round((stripTime(target).getTime() - stripTime(source).getTime()) / (24 * 60 * 60 * 1000));
+  const action = offsetDays === 0 ? "override" : "move";
+  const recurringId = String(entry._ruleId || entry.recurringId || "").trim();
+  const destinationName = String(entry.destinationName || entry.destination || "").trim();
   return {
-    id: String(document.getElementById("entryId").value || "") || createIdFrom(`${recurringId}__override`, sourceDate),
+    id: String(options.preferredId || "") || createIdFrom(`${recurringId}__override`, sourceDate),
     recurringId,
     date: sourceDate,
     action,
-    shipment,
+    shipment: {
+      destinationId: String(entry.destinationId || ""),
+      destinationName,
+      destination: destinationName,
+      standard: String(entry.standard || ""),
+      quantity: Number(entry.quantity || 0),
+      unit: String(entry.unit || ""),
+      standard2: String(entry.standard2 || ""),
+      quantity2: Number(entry.quantity2 || 0),
+      unit2: String(entry.unit2 || ""),
+      memo: String(entry.memo || ""),
+      shipOffsetDays: action === "move" ? offsetDays : Number(options.sameDayShipOffset || 0),
+    },
     updatedAt: new Date().toISOString(),
     updatedBy: currentUpdatedBy(),
   };
+}
+
+function buildRecurringMoveException_(entry, targetDate) {
+  const sourceDate = normalizeDateKey(entry.exceptionDate || entry.date);
+  const preferredId = entry.exceptionAction && entry.id ? String(entry.id) : "";
+  return buildRecurringOccurrenceException_(entry, sourceDate, targetDate, { preferredId });
+}
+
+async function confirmShipmentDateMove_(entry, targetDate) {
+  const isRecurring = entry.shipmentType === "recurring";
+  const targetLabel = formatDateJa_(targetDate);
+  const result = await openConfiguredChoiceModal_({
+    title: "出荷予定の日付を変更",
+    text: isRecurring
+      ? `この回だけ、${targetLabel}に移動しますか？\n定期設定自体は変更されません。`
+      : `この出荷予定を${targetLabel}に移動しますか？`,
+    buttons: [
+      { label: "移動する", value: "move", primary: true },
+      { label: "キャンセル", value: "" },
+    ],
+  });
+  return result === "move";
+}
+
+async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
+  if (!entry || entry.type !== "shipment" || state.isBusy) return false;
+  const sourceDate = normalizeDateKey(entry.date);
+  const targetDate = normalizeDateKey(targetDateValue);
+  if (!sourceDate || !targetDate || sourceDate === targetDate) return false;
+  if (options.confirm !== false && !(await confirmShipmentDateMove_(entry, targetDate))) return false;
+
+  const snap = snapshotLocalState_();
+  let syncOk = true;
+  try {
+    setBusy(true, "移動中...");
+    if (entry.shipmentType === "recurring") {
+      const exception = buildRecurringMoveException_(entry, targetDate);
+      saveRecurringException(exception);
+      if (isApiEnabled()) {
+        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, "");
+      }
+    } else {
+      const movedEntry = {
+        ...entry,
+        date: targetDate,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUpdatedBy(),
+      };
+      saveSpotShipment(movedEntry);
+      if (isApiEnabled()) syncOk = await syncSave("saveShipment", flattenSpotShipmentForApi_(movedEntry), snap, "");
+    }
+
+    if (!syncOk) {
+      setBusy(false, "");
+      refreshViewFast();
+      setStatus("移動に失敗しました。再度お試しください。", "err");
+      return false;
+    }
+
+    setStatus("移動しました", "ok");
+    showToast("出荷予定を移動しました", "success");
+    setBusy(false, "");
+    showScheduleMovedDate_(targetDate);
+    return true;
+  } catch (err) {
+    restoreLocalState_(snap);
+    setBusy(false, "");
+    refreshViewFast();
+    setStatus(`移動に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    showToast("移動に失敗しました", "error");
+    return false;
+  } finally {
+    setBusy(false, "");
+  }
+}
+
+function showScheduleMovedDate_(dateKey) {
+  const movedDateKey = normalizeDateKey(dateKey);
+  const movedDate = parseDate(movedDateKey);
+  if (!movedDateKey || !movedDate) return;
+  state.selectedDate = movedDateKey;
+  state.currentMonth = new Date(movedDate.getFullYear(), movedDate.getMonth(), 1);
+  setFormDate(movedDateKey);
+  renderAll();
+  if (state.calendarView !== "schedule") {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(scrollSelectedDayIntoView_));
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const row = document.querySelector(`.monthly-schedule-row[data-date="${movedDateKey}"]`);
+      if (!row) return;
+      row.classList.add("is-move-saved");
+      const rect = row.getBoundingClientRect();
+      if (rect.top < 72 || rect.bottom > window.innerHeight) row.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => row.classList.remove("is-move-saved"), 1200);
+    });
+  });
 }
 
 function syncSave(action, payload, snap, label) {
@@ -2779,23 +3100,7 @@ async function submitEntryForm(e) {
           // Optimistic UI update: reflect immediately, then sync to API (no full reload).
           saveSpotShipment(entry);
           refreshViewFast();
-          syncSave("saveShipment", {
-            id: entry.id,
-            shipmentType: "spot",
-            date: entry.date,
-            destinationId: entry.destinationId,
-            destinationName: entry.destinationName,
-            standard: entry.standard,
-            quantity: entry.quantity,
-            unit: entry.unit,
-            standard2: entry.standard2 || "",
-            quantity2: entry.quantity2 || 0,
-            unit2: entry.unit2 || "",
-            memo: entry.memo,
-            recurrenceRuleId: "",
-            updatedAt: entry.updatedAt,
-            updatedBy: entry.updatedBy,
-          }, snap, "保存しました");
+          syncSave("saveShipment", flattenSpotShipmentForApi_(entry), snap, "保存しました");
           // loadAllDataFromApi() removed for performance (optimistic update).
         } else {
           saveSpotShipment(entry);

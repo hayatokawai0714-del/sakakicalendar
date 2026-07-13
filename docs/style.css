@@ -2213,9 +2213,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); outlin
 .calendar-view-btn { min-height: 34px; border: 0; border-radius: 8px; background: transparent; color: #526158; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .calendar-view-btn.is-active { background: var(--primary); color: #fff; box-shadow: 0 2px 6px rgba(23,107,67,.2); }
 .monthly-schedule-view { width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.schedule-drag-hint { padding: 8px 10px; border-bottom: 1px solid var(--line); background: #f8fbf9; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .monthly-schedule-row { display: grid; grid-template-columns: 48px 42px minmax(0, 1fr); width: 100%; min-height: 43px; padding: 6px 8px; align-items: start; gap: 0; border: 0; border-bottom: 1px solid var(--line); background: #fff; color: var(--text); text-align: left; font: inherit; }
-button.monthly-schedule-row { cursor: pointer; }
-button.monthly-schedule-row:hover { background: #f7faf7; }
+.monthly-schedule-row[data-date] { cursor: pointer; transition: background-color 120ms ease, box-shadow 120ms ease; }
+.monthly-schedule-row[data-date]:hover { background: #f7faf7; }
+.monthly-schedule-row[data-date]:focus-visible { outline: 2px solid rgba(23, 107, 67, .36); outline-offset: -2px; }
 .monthly-schedule-row:last-child { border-bottom: 0; }
 .monthly-schedule-header { min-height: 32px; padding-block: 6px; background: #f2f6f2; color: var(--muted); font-size: 12px; font-weight: 700; }
 .monthly-schedule-day, .monthly-schedule-weekday { padding-top: 2px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -2225,15 +2227,36 @@ button.monthly-schedule-row:hover { background: #f7faf7; }
 .monthly-schedule-row.is-selected { box-shadow: inset 3px 0 0 var(--primary); background: #e8f2ec; }
 .monthly-schedule-items { display: grid; min-width: 0; gap: 5px; }
 .monthly-schedule-item { display: flex; min-width: 0; align-items: flex-start; gap: 6px; line-height: 1.4; }
+.monthly-schedule-item.is-shipment-movable { align-items: center; padding: 4px 3px 4px 6px; border: 1px solid transparent; border-radius: 8px; background: #f8fbf9; cursor: grab; user-select: none; transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.monthly-schedule-item.is-shipment-movable:active { cursor: grabbing; }
+.monthly-schedule-item.is-dragging { z-index: 2; opacity: .48; box-shadow: 0 8px 18px rgba(36, 75, 57, .18); transform: scale(.99); }
+.monthly-schedule-item.is-long-press-active { opacity: .62; }
 .monthly-schedule-tag { flex: 0 0 auto; margin-top: 1px; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-weight: 700; }
 .monthly-schedule-tag.t-shipment { background: #e1f0e6; color: #176b43; }
 .monthly-schedule-tag.t-event { background: #e7effb; color: #2869ad; }
 .monthly-schedule-tag.t-memo { background: #fff0db; color: #b76b10; }
 .monthly-schedule-detail { min-width: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: 13px; }
 .monthly-schedule-item .new-badge { flex: 0 0 auto; margin-left: auto; }
+.schedule-drag-handle { flex: 0 0 34px; align-self: stretch; min-width: 34px; min-height: 34px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: #52705e; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: -3px; line-height: 1; cursor: grab; touch-action: auto; }
+.schedule-drag-handle:hover, .schedule-drag-handle:focus-visible, .schedule-drag-handle.is-active { background: var(--primary-soft); color: var(--primary-dark); }
+.schedule-drag-handle:focus-visible { outline: 2px solid rgba(23, 107, 67, .35); outline-offset: 1px; }
+.is-schedule-dragging .monthly-schedule-row.is-drop-zone { background: #f1f8f3; box-shadow: inset 0 0 0 1px rgba(23, 107, 67, .18); }
+.is-schedule-dragging .monthly-schedule-row.is-drop-target { background: #dff0e4; box-shadow: inset 0 0 0 2px var(--primary); }
+.monthly-schedule-row.is-move-saved { animation: schedule-move-saved 1.2s ease; }
+@keyframes schedule-move-saved {
+  0% { background: #d9eddf; box-shadow: inset 3px 0 0 var(--primary); }
+  100% { background: #e8f2ec; box-shadow: inset 3px 0 0 var(--primary); }
+}
 @media (max-width: 767px) {
   .monthly-schedule-row { grid-template-columns: 44px 40px minmax(0, 1fr); padding-inline: 6px; }
   .monthly-schedule-detail { font-size: 13px; }
+  .monthly-schedule-item.is-shipment-movable { padding-left: 5px; }
+  .schedule-drag-handle { flex-basis: 38px; min-width: 38px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monthly-schedule-row[data-date], .monthly-schedule-item.is-shipment-movable { transition: none; }
+  .monthly-schedule-row.is-move-saved { animation: none; }
 }
 
 /* Unified weekly shipment schedule */
