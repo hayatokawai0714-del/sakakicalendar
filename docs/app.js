@@ -13,6 +13,8 @@ const STORAGE_KEYS = {
   apiKey: "sakaki_api_key_v1",
   updatedBy: "sakaki_updated_by_v1",
   lastSeenUpdatedAt: "sakaki_last_seen_updated_at",
+  seenEntryUpdates: "sakaki_seen_entry_updates_v1",
+  unreadTrackingInitialized: "sakaki_unread_tracking_initialized_v1",
 };
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
@@ -30,8 +32,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-13.2";
-const BUILD_TIME = "2026-07-13 19:58";
+const APP_VERSION = "2026-07-13.3";
+const BUILD_TIME = "2026-07-13 21:10";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -50,6 +52,7 @@ const state = {
   apiUrl: "",
   apiKey: "",
   updatedBy: "",
+  seenEntryUpdates: {},
   isBusy: false,
   currentMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   selectedDate: formatDate(new Date()),
@@ -65,6 +68,7 @@ init();
 function init() {
   stripGarbageTextNodes_();
   loadState();
+  initializeUnreadTracking_();
   state._didInit = true;
   state._debugUiEnabled = isDebugUiEnabled_();
   console.log("[sakaki] init");
@@ -105,6 +109,10 @@ function loadState() {
   state.apiKey = String(localStorage.getItem(STORAGE_KEYS.apiKey) || "").trim();
   console.log("[sakaki] loaded api url", state.apiUrl);
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
+  const seenEntryUpdates = readLS(STORAGE_KEYS.seenEntryUpdates, {});
+  state.seenEntryUpdates = seenEntryUpdates && typeof seenEntryUpdates === "object" && !Array.isArray(seenEntryUpdates)
+    ? seenEntryUpdates
+    : {};
   state.calendarView = readLS(STORAGE_KEYS.calendarView, "calendar") === "schedule" ? "schedule" : "calendar";
 
 }
@@ -775,6 +783,11 @@ function getLastSeenUpdatedAt() {
   }
 }
 
+function unreadTimestamp_(value) {
+  const time = Date.parse(String(value || ""));
+  return Number.isFinite(time) ? time : 0;
+}
+
 function setLastSeenUpdatedAt(dateString) {
   const value = String(dateString || "").trim();
   try {
@@ -791,28 +804,91 @@ function getLatestUpdatedAt_(entries) {
   }, "");
 }
 
-function isNewEntry(entry) {
+function unreadActor_(value) {
+  const actor = String(value || "").trim();
+  return actor && actor !== "未設定" ? actor.toLocaleLowerCase("ja") : "";
+}
+
+function unreadEntryKey_(entry) {
+  if (!entry || !entry.id) return "";
+  if (entry.exceptionAction || (entry.action && entry.recurringId && entry.date)) return `exception:${entry.id}`;
+  if (entry.shipmentType === "recurring" || entry._ruleId || (entry.recurringId && !entry.date)) {
+    return `recurring:${entry._ruleId || entry.recurringId || entry.id}`;
+  }
+  return `entry:${entry.id}`;
+}
+
+function unreadCandidates_() {
+  const byKey = new Map();
+  [...(state.entries || []), ...(state.recurringShipments || []), ...(state.recurringExceptions || [])].forEach((entry) => {
+    const key = unreadEntryKey_(entry);
+    if (!key) return;
+    const previous = byKey.get(key);
+    if (!previous || unreadTimestamp_(entry.updatedAt) > unreadTimestamp_(previous.updatedAt)) byKey.set(key, entry);
+  });
+  return Array.from(byKey.values());
+}
+
+function initializeUnreadTracking_() {
+  try {
+    if (localStorage.getItem(STORAGE_KEYS.unreadTrackingInitialized) === "1") return;
+    const latestCached = getLatestUpdatedAt_(unreadCandidates_());
+    const existingBaseline = getLastSeenUpdatedAt();
+    const baseline = unreadTimestamp_(latestCached) > unreadTimestamp_(existingBaseline) ? latestCached : existingBaseline;
+    localStorage.setItem(STORAGE_KEYS.lastSeenUpdatedAt, baseline || new Date().toISOString());
+    localStorage.setItem(STORAGE_KEYS.unreadTrackingInitialized, "1");
+  } catch {}
+}
+
+function isUnreadUpdate_(entry) {
   if (!entry) return false;
-  const updatedAt = String(entry.updatedAt || "").trim();
+  const currentActor = unreadActor_(state.updatedBy);
+  const updatedActor = unreadActor_(entry.updatedBy);
+  if (!currentActor || !updatedActor || currentActor === updatedActor) return false;
+  const updatedAt = unreadTimestamp_(entry.updatedAt);
   if (!updatedAt) return false;
-  const lastSeen = getLastSeenUpdatedAt();
-  if (!lastSeen) return false;
-  return updatedAt > lastSeen;
+  const key = unreadEntryKey_(entry);
+  const seenAt = unreadTimestamp_(key ? state.seenEntryUpdates[key] : "");
+  const baselineAt = unreadTimestamp_(getLastSeenUpdatedAt());
+  return updatedAt > Math.max(seenAt, baselineAt);
+}
+
+function createUnreadIndicator_() {
+  const indicator = document.createElement("span");
+  indicator.className = "unread-indicator";
+  indicator.setAttribute("aria-label", "未確認の更新");
+  indicator.title = "未確認の更新";
+  return indicator;
+}
+
+function acknowledgeUnreadEntry_(entry) {
+  if (!isUnreadUpdate_(entry)) return false;
+  const key = unreadEntryKey_(entry);
+  if (!key) return false;
+  state.seenEntryUpdates[key] = String(entry.updatedAt || new Date().toISOString());
+  writeLS(STORAGE_KEYS.seenEntryUpdates, state.seenEntryUpdates);
+  document.querySelectorAll("[data-unread-key]").forEach((card) => {
+    if (card.dataset.unreadKey !== key) return;
+    card.classList.remove("has-unread-update");
+    card.removeAttribute("data-unread-key");
+    card.querySelectorAll(".unread-indicator, .unread-updated-by").forEach((item) => item.remove());
+  });
+  renderNewBadges();
+  return true;
 }
 
 function markAllAsSeen() {
-  setLastSeenUpdatedAt(getLatestUpdatedAt_([...(state.entries || []), ...(state.recurringShipments || [])]) || new Date().toISOString());
-}
-
-function newBadgeHtml(entry) {
-  return isNewEntry(entry) ? '<span class="new-badge">新着</span>' : "";
+  state.seenEntryUpdates = {};
+  writeLS(STORAGE_KEYS.seenEntryUpdates, state.seenEntryUpdates);
+  setLastSeenUpdatedAt(getLatestUpdatedAt_(unreadCandidates_()) || new Date().toISOString());
 }
 
 function renderNewBadges() {
   const btn = document.getElementById("markSeenBtn");
   if (!btn) return;
-  const hasNew = [...state.entries, ...state.recurringShipments].some((entry) => isNewEntry(entry));
-  btn.classList.toggle("hidden", !hasNew);
+  const count = unreadCandidates_().filter((entry) => isUnreadUpdate_(entry)).length;
+  btn.textContent = count ? `未確認の更新 ${count}件・すべて確認` : "";
+  btn.classList.toggle("hidden", count === 0);
 }
 
 function saveSyncSettings(e) {
@@ -1776,6 +1852,11 @@ function renderMonthlyScheduleView() {
 function createMonthlyScheduleItem_(entry) {
   const item = document.createElement("span");
   item.className = "monthly-schedule-item";
+  const hasUnreadUpdate = isUnreadUpdate_(entry);
+  if (hasUnreadUpdate) {
+    item.classList.add("has-unread-update");
+    item.dataset.unreadKey = unreadEntryKey_(entry);
+  }
   if (entry.type === "shipment") {
     item.classList.add("is-shipment-movable");
     item.draggable = true;
@@ -1813,12 +1894,7 @@ function createMonthlyScheduleItem_(entry) {
     detail.textContent = [entrySummary(entry), entry.memo ? `メモ：${entry.memo}` : ""].filter(Boolean).join("\n");
   }
   item.appendChild(detail);
-  if (isNewEntry(entry)) {
-    const badge = document.createElement("span");
-    badge.className = "new-badge";
-    badge.textContent = "新着";
-    item.appendChild(badge);
-  }
+  if (hasUnreadUpdate) item.appendChild(createUnreadIndicator_());
   if (entry.type === "shipment") {
     const handle = document.createElement("button");
     handle.type = "button";
@@ -1833,6 +1909,10 @@ function createMonthlyScheduleItem_(entry) {
     handle.addEventListener("touchstart", (event) => startScheduleTouchHold_(event, entry, item, handle), { passive: true });
     item.appendChild(handle);
   }
+  item.addEventListener("click", (event) => {
+    if (event.target.closest(".schedule-drag-handle")) return;
+    acknowledgeUnreadEntry_(entry);
+  });
   return item;
 }
 
@@ -2020,6 +2100,11 @@ function renderEntryList(ul, entries, emptyText) {
     .forEach((entry) => {
       const li = document.createElement("li");
       li.classList.add("entry-row", `entry-type-${entry.type}`);
+      const hasUnreadUpdate = isUnreadUpdate_(entry);
+      if (hasUnreadUpdate) {
+        li.classList.add("has-unread-update");
+        li.dataset.unreadKey = unreadEntryKey_(entry);
+      }
 
       const main = document.createElement("div");
       main.className = "entry-main";
@@ -2031,12 +2116,7 @@ function renderEntryList(ul, entries, emptyText) {
       pill.className = `pill pill--${entry.type}`;
       pill.textContent = chipTag(entry);
       line1.appendChild(pill);
-      if (isNewEntry(entry)) {
-        const badge = document.createElement("span");
-        badge.className = "new-badge";
-        badge.textContent = "新着";
-        line1.appendChild(badge);
-      }
+      if (hasUnreadUpdate && entry.type !== "shipment") line1.appendChild(createUnreadIndicator_());
 
       const content = document.createElement("div");
       content.className = "entry-content";
@@ -2070,12 +2150,7 @@ function renderEntryList(ul, entries, emptyText) {
           dest.className = "shipment-destination";
           dest.textContent = String(entry.destinationName || entry.destination || "");
 
-          if (isNewEntry(entry)) {
-            const badge = document.createElement("span");
-            badge.className = "new-badge";
-            badge.textContent = "新着";
-            head.append(badge);
-          }
+          if (hasUnreadUpdate) head.append(createUnreadIndicator_());
 
           if (entry.shipmentType === "recurring") {
             const recur = document.createElement("span");
@@ -2128,9 +2203,9 @@ function renderEntryList(ul, entries, emptyText) {
         memo.textContent = `メモ：${memoText}`;
         main.appendChild(memo);
       }
-      if (isNewEntry(entry) && String(entry.updatedBy || "").trim()) {
+      if (hasUnreadUpdate && String(entry.updatedBy || "").trim()) {
         const updated = document.createElement("div");
-        updated.className = "subline one-line";
+        updated.className = "subline one-line unread-updated-by";
         updated.textContent = `更新：${String(entry.updatedBy)}`;
         main.appendChild(updated);
       }
@@ -2142,6 +2217,7 @@ function renderEntryList(ul, entries, emptyText) {
       editBtn.textContent = "編集";
       editBtn.disabled = state.isBusy;
       editBtn.addEventListener("click", async () => {
+        acknowledgeUnreadEntry_(entry);
         if (await setEntryToForm(entry)) scrollEntryFormIntoView_();
       });
 
@@ -2153,6 +2229,10 @@ function renderEntryList(ul, entries, emptyText) {
 
       actions.append(editBtn, delBtn);
       li.append(main, actions);
+      li.addEventListener("click", (event) => {
+        if (event.target.closest("button")) return;
+        acknowledgeUnreadEntry_(entry);
+      });
       ul.appendChild(li);
 
       // Debug (only when ?debug=1): dump shipment HTML + computed styles
@@ -5009,14 +5089,17 @@ function renderShipmentWeekSummary(opts) {
     const destMap = dateMap.get(dest) || new Map();
     const key = `${std}||${u}`;
 
-    const cur = destMap.get(key) || { standard: std, unit: u, total: 0, nonNumeric: [], hasNew: false };
+    const cur = destMap.get(key) || { standard: std, unit: u, total: 0, nonNumeric: [], unreadEntries: [] };
     const qtyNum = Number.parseFloat(String(qty ?? "").trim());
     if (Number.isFinite(qtyNum)) cur.total += qtyNum;
     else {
       const raw = String(qty ?? "").trim();
       if (raw) cur.nonNumeric.push(raw);
     }
-    if (sourceEntry && isNewEntry(sourceEntry)) cur.hasNew = true;
+    if (sourceEntry && isUnreadUpdate_(sourceEntry)) {
+      const unreadKey = unreadEntryKey_(sourceEntry);
+      if (!cur.unreadEntries.some((entry) => unreadEntryKey_(entry) === unreadKey)) cur.unreadEntries.push(sourceEntry);
+    }
 
     destMap.set(key, cur);
     dateMap.set(dest, destMap);
@@ -5082,11 +5165,16 @@ function renderShipmentWeekSummary(opts) {
 
       const destLine = document.createElement("div");
       destLine.className = "nextweek-dest";
-      if (specs.some((sp) => sp.hasNew)) {
-        const badge = document.createElement("span");
-        badge.className = "new-badge";
-        badge.textContent = "新着";
-        destLine.appendChild(badge);
+      const unreadEntries = specs.flatMap((sp) => sp.unreadEntries || [])
+        .filter((entry, index, list) => list.findIndex((item) => unreadEntryKey_(item) === unreadEntryKey_(entry)) === index);
+      if (unreadEntries.length) {
+        destBlock.classList.add("has-unread-update");
+        destLine.appendChild(createUnreadIndicator_());
+        destBlock.addEventListener("click", () => {
+          unreadEntries.forEach((entry) => acknowledgeUnreadEntry_(entry));
+          destBlock.classList.remove("has-unread-update");
+          destBlock.querySelectorAll(".unread-indicator").forEach((item) => item.remove());
+        });
       }
       const nameSpan = document.createElement("span");
       nameSpan.className = "weekly-destination-name";
