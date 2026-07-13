@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-11-12" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-13-01" />
   </head>
   <body>
     <main class="container">
@@ -162,18 +162,18 @@
     <div id="shipmentKindRow" class="segment-field shipment-kind-field">
       <span class="segment-field-label">出荷区分</span>
       <div class="entry-segments entry-segments--two" role="group" aria-label="出荷区分">
-        <button type="button" class="entry-segment is-active" data-shipment-kind="spot">スポット</button>
+        <button type="button" class="entry-segment is-active" data-shipment-kind="spot">1回だけ</button>
         <button type="button" class="entry-segment" data-shipment-kind="recurring">定期</button>
       </div>
       <label class="segment-native-select">出荷区分
         <select id="shipmentKind">
-          <option value="spot">スポット</option>
+          <option value="spot">1回だけ</option>
           <option value="recurring">定期</option>
         </select>
       </label>
     </div>
 
-    <label id="spotDateRow">日付<input type="date" id="shipmentDate" /></label>
+    <label id="spotDateRow"><span id="shipmentDateLabel">日付</span><input type="date" id="shipmentDate" /></label>
 
     <!-- Event only -->
     <label id="eventDateRow" class="hidden">日付<input type="date" id="eventDate" /></label>
@@ -195,26 +195,62 @@
     <details id="entryAdvancedDetails" class="entry-advanced-details">
       <summary>詳細設定</summary>
       <div class="entry-advanced-body">
-    <div id="recurringFields" class="subcard hidden">
-      <div class="muted" style="margin: 0 0 8px;">定期出荷ルール</div>
+    <div id="recurringFields" class="subcard recurring-rule-card hidden">
+      <div class="recurring-rule-head">
+        <div>
+          <div class="recurring-rule-title">定期出荷の設定</div>
+          <div class="muted small-note">いつ繰り返すかを選んでください。</div>
+        </div>
+      </div>
       <input type="hidden" id="recurringId" />
-      <label>
-        繰り返し種類
+      <div class="segment-field recurrence-family-field">
+        <span class="segment-field-label">繰り返し方</span>
+        <div class="recurrence-family-buttons" role="group" aria-label="繰り返し方">
+          <button type="button" class="recurrence-family-btn is-active" data-recurrence-family="weekly">毎週</button>
+          <button type="button" class="recurrence-family-btn" data-recurrence-family="monthly">毎月</button>
+          <button type="button" class="recurrence-family-btn" data-recurrence-family="reference">基準日から<br />自動計算</button>
+        </div>
+        <label class="segment-native-select">繰り返し種類
         <select id="recurrenceType">
           <option value="weekly_1">毎週</option>
           <option value="weekly_2">隔週</option>
-          <option value="monthlyByDate">毎月指定日</option>
-          <option value="referenceDate">基準日連動</option>
-          <option value="beforeReferenceNearestWeekday">基準日前の最寄り曜日</option>
+          <option value="monthlyByDate">毎月</option>
+          <option value="referenceDate">基準日前の対象曜日すべて</option>
+          <option value="beforeReferenceNearestWeekday">基準日前の最も近い曜日</option>
         </select>
-      </label>
-
-      <div id="referenceRuleFields" class="hidden">
-        <label>基準日<input type="number" id="referenceDay" min="1" max="31" inputmode="numeric" placeholder="例: 20" /></label>
-        <label>出荷オフセット<input type="number" id="shipOffsetDays" step="1" inputmode="numeric" placeholder="例: -1" /></label>
+        </label>
       </div>
 
-      <div id="referenceItemsSection" class="subcard hidden">
+      <div id="weeklyIntervalField" class="recurrence-detail-field">
+        <span class="segment-field-label">間隔</span>
+        <div class="recurrence-option-buttons" role="group" aria-label="繰り返す間隔">
+          <button type="button" class="recurrence-option-btn is-active" data-recurrence-value="weekly_1">毎週</button>
+          <button type="button" class="recurrence-option-btn" data-recurrence-value="weekly_2">隔週</button>
+        </div>
+      </div>
+
+      <div id="referenceModeField" class="recurrence-detail-field hidden">
+        <span class="segment-field-label">予定日の決め方</span>
+        <div class="recurrence-option-buttons recurrence-option-buttons--stack" role="group" aria-label="予定日の決め方">
+          <button type="button" class="recurrence-option-btn is-active" data-recurrence-value="beforeReferenceNearestWeekday">
+            <strong>最も近い曜日</strong><small>基準日より前で、最初に当たる曜日</small>
+          </button>
+          <button type="button" class="recurrence-option-btn" data-recurrence-value="referenceDate">
+            <strong>対象曜日すべて</strong><small>基準日より前の、選んだ曜日すべて</small>
+          </button>
+        </div>
+      </div>
+
+      <div id="referenceRuleFields" class="hidden">
+        <label>基準日<span class="input-with-suffix"><input type="number" id="referenceDay" min="1" max="31" inputmode="numeric" placeholder="20" /><span>日</span></span></label>
+        <details class="recurrence-extra-details">
+          <summary>日付をさらに調整</summary>
+          <label>計算した日からずらす日数<input type="number" id="shipOffsetDays" step="1" inputmode="numeric" placeholder="例: -1" /></label>
+        </details>
+      </div>
+
+      <details id="referenceItemsSection" class="recurrence-extra-details hidden">
+        <summary>基準日ごとに数量を変える</summary>
         <div class="spec2-head" style="margin-bottom: 6px;">
           <div>
             <div class="muted" style="margin: 0;">基準日別数量</div>
@@ -223,7 +259,7 @@
           <button type="button" class="btn secondary small" id="addReferenceItemBtn">＋ 基準日を追加</button>
         </div>
         <div id="referenceItemsList" class="reference-items-list"></div>
-      </div>
+      </details>
 
       <div id="weekdayPicker" class="weekday-picker">
         <div class="muted" id="weekdayPickerLabel" style="margin: 0 0 6px;">曜日（複数可）</div>
@@ -231,17 +267,29 @@
       </div>
 
       <div id="monthDayPicker" class="hidden">
-        <label>日付（カンマ区切り）<input type="text" id="monthDays" placeholder="例: 5,20,28" /></label>
+        <label>日にち<input type="text" id="monthDays" inputmode="numeric" placeholder="例: 5, 20, 28" /></label>
+        <div class="muted small-note">複数の日はカンマで区切ります。</div>
       </div>
 
-      <label>開始日<input type="date" id="startDate" /></label>
-      <label>終了日（空欄可）<input type="date" id="endDate" /></label>
+      <div class="recurrence-preview" aria-live="polite">
+        <span class="recurrence-preview-label">設定内容</span>
+        <strong id="recurrencePreviewText">毎週、選択した曜日に予定を作成します</strong>
+        <div id="recurrenceNextDates" class="recurrence-next-dates muted small-note"></div>
+      </div>
+
+      <details class="recurrence-extra-details recurrence-period-details">
+        <summary>期間を設定</summary>
+        <div class="recurrence-period-grid">
+          <label>開始日<input type="date" id="startDate" /></label>
+          <label>終了日（空欄可）<input type="date" id="endDate" /></label>
+        </div>
+      </details>
     </div>
 
     <div id="recurringOverrideFields" class="subcard hidden">
-      <div class="muted" style="margin: 0 0 6px;">この日だけ編集</div>
-      <label>出荷オフセット<input type="number" id="exceptionShipOffsetDays" step="1" inputmode="numeric" value="0" /></label>
-      <div class="muted small-note">定期ルール本体は変更しません。</div>
+      <div class="recurring-rule-title" id="recurringOverrideTitle">この回だけ変更</div>
+      <input type="hidden" id="exceptionShipOffsetDays" value="0" />
+      <div class="muted small-note" id="recurringOverrideHint">この回の内容だけを変更します。定期設定は変わりません。</div>
     </div>
       </div>
     </details>
@@ -455,7 +503,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-07-11-13"></script>
+    <script src="./app.js?v=2026-07-13-01"></script>
   </body>
 </html>
 

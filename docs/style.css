@@ -2462,6 +2462,81 @@ button.monthly-schedule-row:hover { background: #f7faf7; }
 .entry-advanced-details[open] > summary::after { content: "−"; }
 .entry-advanced-body { padding: 0 12px 12px; }
 .entry-advanced-body .subcard { margin-top: 8px; }
+.recurring-rule-card {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  background: #f8fbf9;
+}
+.recurring-rule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.recurring-rule-title { color: var(--primary-dark); font-size: 15px; font-weight: 800; }
+.recurrence-family-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.recurrence-family-btn,
+.recurrence-option-btn {
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  cursor: pointer;
+}
+.recurrence-family-btn.is-active,
+.recurrence-option-btn.is-active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.recurrence-family-btn:focus-visible,
+.recurrence-option-btn:focus-visible { outline: 3px solid rgba(49, 95, 73, 0.24); outline-offset: 2px; }
+.recurrence-detail-field { display: grid; gap: 6px; }
+.recurrence-option-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.recurrence-option-buttons--stack { grid-template-columns: 1fr; }
+.recurrence-option-buttons--stack .recurrence-option-btn { display: grid; gap: 3px; justify-items: start; text-align: left; }
+.recurrence-option-btn small { color: var(--muted); font-size: 11px; font-weight: 550; }
+.recurrence-option-btn.is-active small { color: var(--primary-dark); }
+.recurring-rule-card .weekday-picker,
+.recurring-rule-card #monthDayPicker,
+.recurring-rule-card #referenceRuleFields { margin: 0; }
+.recurring-rule-card .weekday-buttons { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.recurring-rule-card .weekday-btn { min-width: 0; padding: 8px 3px; }
+.input-with-suffix { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.input-with-suffix > span { color: var(--muted); font-weight: 700; }
+.recurrence-preview {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-left: 4px solid var(--primary);
+  border-radius: 4px 10px 10px 4px;
+  background: #fff;
+}
+.recurrence-preview-label { color: var(--muted); font-size: 11px; font-weight: 700; }
+.recurrence-preview strong { color: var(--primary-dark); font-size: 14px; line-height: 1.55; }
+.recurrence-next-dates { line-height: 1.55; }
+.recurrence-extra-details {
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+}
+.recurrence-extra-details > summary {
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.recurrence-extra-details[open] > summary { margin-bottom: 9px; }
+.recurrence-period-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+#recurringOverrideFields { border-left: 4px solid var(--primary); background: #f8fbf9; }
+.choice-action--danger { color: #a93434; border-color: rgba(169, 52, 52, 0.28); }
 .entry-spec2-details .spec2-toggle { margin-top: 4px; }
 .entry-panel .actions {
   position: sticky;
@@ -2486,6 +2561,7 @@ button.monthly-schedule-row:hover { background: #f7faf7; }
   .entry-card:not(.is-collapsed) { padding: 14px; }
   .entry-control-row { grid-template-columns: 1fr; }
   .entry-panel .actions { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .recurrence-period-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

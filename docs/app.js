@@ -30,8 +30,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-11.13";
-const BUILD_TIME = "2026-07-11 23:40";
+const APP_VERSION = "2026-07-13.1";
+const BUILD_TIME = "2026-07-13 16:02";
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -456,6 +456,7 @@ function bindEvents() {
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
   if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
   bindEntryControlSegments_();
+  bindRecurrenceControls_();
   bindAdminPanels();
   bindWeekSummaries();
 }
@@ -1169,6 +1170,10 @@ function flattenRecurringExceptionForApi_(exception) {
 
 function saveRecurringException(exception) {
   const rec = normalizeRecurringException_(exception);
+  const key = recurringExceptionKey_(rec.recurringId, rec.date);
+  state.recurringExceptions = getRecurringExceptions().filter((item) => {
+    return item.id === rec.id || recurringExceptionKey_(item.recurringId, item.date) !== key;
+  });
   upsertById(state.recurringExceptions, rec);
   saveState();
   return rec;
@@ -1197,10 +1202,13 @@ function findRecurringException_(recurringId, date) {
 function buildRecurringExceptionShipment_(sourceEntry, exception) {
   const sh = exception.shipment || {};
   const destName = String(sh.destinationName || sh.destination || "").trim();
+  const sourceDate = normalizeDateKey(exception.date || sourceEntry.date);
+  const isMove = String(exception.action || "").trim() === "move";
+  const movedDate = isMove ? addDaysToDateKey_(sourceDate, Number(sh.shipOffsetDays || 0)) : sourceDate;
   return {
     ...sourceEntry,
     id: exception.id || sourceEntry.id,
-    date: normalizeDateKey(exception.date || sourceEntry.date),
+    date: movedDate,
     destinationId: String(sh.destinationId || sourceEntry.destinationId || ""),
     destinationName: destName || String(sourceEntry.destinationName || sourceEntry.destination || ""),
     destination: destName || String(sourceEntry.destinationName || sourceEntry.destination || ""),
@@ -1213,8 +1221,8 @@ function buildRecurringExceptionShipment_(sourceEntry, exception) {
     memo: String(sh.memo || sourceEntry.memo || ""),
     shipOffsetDays: sh.shipOffsetDays === "" || sh.shipOffsetDays === undefined || sh.shipOffsetDays === null ? Number(sourceEntry.shipOffsetDays || 0) : Number(sh.shipOffsetDays),
     sourceType: "recurring",
-    exceptionDate: normalizeDateKey(exception.date || sourceEntry.date),
-    exceptionAction: "override",
+    exceptionDate: sourceDate,
+    exceptionAction: isMove ? "move" : "override",
     recurringId: exception.recurringId || sourceEntry.recurringId || sourceEntry._ruleId || "",
     _ruleId: exception.recurringId || sourceEntry._ruleId,
     updatedAt: String(exception.updatedAt || sourceEntry.updatedAt || new Date().toISOString()),
@@ -1237,7 +1245,7 @@ function applyRecurringExceptions_(entries) {
       return;
     }
     if (String(ex.action || "").trim() === "skip") return;
-    if (String(ex.action || "").trim() === "override") {
+    if (["override", "move"].includes(String(ex.action || "").trim())) {
       out.push(buildRecurringExceptionShipment_(entry, ex));
       return;
     }
@@ -1252,11 +1260,11 @@ function renderToday() {
 }
 
 
-function generateRecurringShipmentsForMonth(year, monthIndex) {
+function generateRecurringShipmentsForMonthBase_(year, monthIndex, rules = getRecurringShipments()) {
   const end = new Date(year, monthIndex + 1, 0);
   const out = [];
 
-  getRecurringShipments().forEach((rule) => {
+  rules.forEach((rule) => {
     const referenceItems = Array.isArray(rule.referenceItems) ? rule.referenceItems.filter(Boolean) : [];
     if (referenceItems.length && ["monthlyByDate", "referenceDate", "beforeReferenceNearestWeekday"].includes(rule.recurrenceType)) {
       out.push(...generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems));
@@ -1314,15 +1322,47 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
     }
   });
 
-  // Debug (requested)
+  return out;
+}
+
+function addDaysToDateKey_(dateKey, days) {
+  const date = parseDate(normalizeDateKey(dateKey));
+  if (!date) return normalizeDateKey(dateKey);
+  date.setDate(date.getDate() + Number(days || 0));
+  return formatDate(date);
+}
+
+function generateRecurringShipmentsForMonth(year, monthIndex) {
+  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  const raw = generateRecurringShipmentsForMonthBase_(year, monthIndex);
+  const seen = new Set(raw.map((entry) => entry.id));
+
+  // A moved occurrence can cross a month boundary. Pull in only the source month
+  // needed for moves that land in the month currently being rendered.
+  getRecurringExceptions().forEach((exception) => {
+    if (String(exception.action || "").trim() !== "move") return;
+    const targetDate = addDaysToDateKey_(exception.date, Number(exception.shipment?.shipOffsetDays || 0));
+    if (!targetDate.startsWith(monthKey) || normalizeDateKey(exception.date).startsWith(monthKey)) return;
+    const source = parseDate(normalizeDateKey(exception.date));
+    if (!source) return;
+    generateRecurringShipmentsForMonthBase_(source.getFullYear(), source.getMonth())
+      .filter((entry) => String(entry.recurringId || entry._ruleId || "") === String(exception.recurringId || ""))
+      .filter((entry) => normalizeDateKey(entry.date) === normalizeDateKey(exception.date))
+      .forEach((entry) => {
+        if (seen.has(entry.id)) return;
+        seen.add(entry.id);
+        raw.push(entry);
+      });
+  });
+
+  const out = applyRecurringExceptions_(raw).filter((entry) => normalizeDateKey(entry.date).startsWith(monthKey));
   try {
     console.log("recurring rules count", getRecurringShipments().length);
     console.log("recurring exceptions count", getRecurringExceptions().length);
     console.log("generated recurring entries count", out.length);
     console.log("render month", { year, month: monthIndex + 1 });
   } catch {}
-
-  return applyRecurringExceptions_(out);
+  return out;
 }
 
 function generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems) {
@@ -1925,11 +1965,11 @@ function renderEntryList(ul, entries, emptyText) {
     });
 }
 
-async function deleteEntry(entry) {
+async function deleteEntry(entry, forcedRecurringMode = "") {
   const isRecurringShipment = entry && entry.type === "shipment" && entry.shipmentType === "recurring";
-  let deleteMode = "";
+  let deleteMode = forcedRecurringMode;
   if (isRecurringShipment) {
-    deleteMode = await recurringChoice_("delete");
+    if (!deleteMode) deleteMode = await recurringChoice_("delete");
     if (!deleteMode) return;
   } else if (!confirm("削除しますか？")) {
     return;
@@ -2019,6 +2059,8 @@ function calendarChipText(entry) {
 
 function switchEntryTypeFields() {
   const type = document.getElementById("entryType").value;
+  const entryMode = String(document.getElementById("entryMode")?.value || "");
+  const isRecurringOccurrenceEdit = entryMode === "recurring_override" || entryMode === "recurring_move";
 
   document.getElementById("shipmentFields").classList.toggle("hidden", type !== "shipment");
   document.getElementById("eventFields").classList.toggle("hidden", type !== "event");
@@ -2039,8 +2081,8 @@ function switchEntryTypeFields() {
   if (eventTimeRow) eventTimeRow.classList.toggle("hidden", type !== "event");
   if (memoDateRow) memoDateRow.classList.toggle("hidden", type !== "memo");
   if (memoPriorityRow) memoPriorityRow.classList.toggle("hidden", type !== "memo");
-  if (recurringOverrideFields) recurringOverrideFields.classList.toggle("hidden", type !== "shipment" || String(document.getElementById("entryMode")?.value || "") !== "recurring_override");
-  if (String(document.getElementById("entryMode")?.value || "") === "recurring_override") {
+  if (recurringOverrideFields) recurringOverrideFields.classList.toggle("hidden", type !== "shipment" || !isRecurringOccurrenceEdit);
+  if (isRecurringOccurrenceEdit) {
     const advanced = document.getElementById("entryAdvancedDetails");
     if (advanced) advanced.open = true;
   }
@@ -2057,6 +2099,7 @@ function switchShipmentKindFields() {
     if (advanced) advanced.open = true;
   }
   syncEntryControlSegments_();
+  updateRecurrencePreview_();
 }
 
 function switchRecurrenceTypeFields() {
@@ -2076,6 +2119,154 @@ function switchRecurrenceTypeFields() {
   if (referenceItemsSection && !referenceItemsSection.classList.contains("hidden") && getReferenceItemRows().length === 0) {
     addReferenceItemRow();
   }
+  syncRecurrenceControls_();
+  updateRecurrencePreview_();
+}
+
+function recurrenceFamilyFromValue_(value) {
+  if (value === "monthlyByDate") return "monthly";
+  if (value === "referenceDate" || value === "beforeReferenceNearestWeekday") return "reference";
+  return "weekly";
+}
+
+function syncRecurrenceControls_() {
+  const value = String(document.getElementById("recurrenceType")?.value || "weekly_1");
+  const family = recurrenceFamilyFromValue_(value);
+  document.querySelectorAll("[data-recurrence-family]").forEach((button) => {
+    const active = button.dataset.recurrenceFamily === family;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-recurrence-value]").forEach((button) => {
+    const active = button.dataset.recurrenceValue === value;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  const weeklyInterval = document.getElementById("weeklyIntervalField");
+  const referenceMode = document.getElementById("referenceModeField");
+  if (weeklyInterval) weeklyInterval.classList.toggle("hidden", family !== "weekly");
+  if (referenceMode) referenceMode.classList.toggle("hidden", family !== "reference");
+}
+
+function bindRecurrenceControls_() {
+  document.querySelectorAll("[data-recurrence-family]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const select = document.getElementById("recurrenceType");
+      const family = button.dataset.recurrenceFamily;
+      if (family === "weekly") select.value = select.value === "weekly_2" ? "weekly_2" : "weekly_1";
+      if (family === "monthly") select.value = "monthlyByDate";
+      if (family === "reference") {
+        select.value = ["referenceDate", "beforeReferenceNearestWeekday"].includes(select.value)
+          ? select.value
+          : "beforeReferenceNearestWeekday";
+      }
+      switchRecurrenceTypeFields();
+    });
+  });
+  document.querySelectorAll("[data-recurrence-value]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("recurrenceType").value = button.dataset.recurrenceValue;
+      switchRecurrenceTypeFields();
+    });
+  });
+  const recurringFields = document.getElementById("recurringFields");
+  if (recurringFields) recurringFields.addEventListener("input", updateRecurrencePreview_);
+  syncRecurrenceControls_();
+}
+
+function formatDateJa_(dateKey, compact = false) {
+  const date = parseDate(normalizeDateKey(dateKey));
+  if (!date) return "";
+  const weekday = ["日", "月", "火", "水", "木", "金", "土"][date.getDay()];
+  return compact
+    ? `${date.getMonth() + 1}月${date.getDate()}日（${weekday}）`
+    : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日（${weekday}）`;
+}
+
+function buildRecurringPreviewRule_() {
+  const raw = String(document.getElementById("recurrenceType")?.value || "weekly_1");
+  const recurrenceType = ["monthlyByDate", "referenceDate", "beforeReferenceNearestWeekday"].includes(raw) ? raw : "weekly";
+  const weekdays = getSelectedWeekdays();
+  const startDate = normalizeDateKey(document.getElementById("startDate")?.value || state.selectedDate || formatDate(new Date()));
+  return {
+    id: "__recurrence_preview__",
+    recurrenceType,
+    startDate,
+    endDate: normalizeDateKey(document.getElementById("endDate")?.value || ""),
+    weekdays: recurrenceType === "weekly" ? weekdays : [],
+    intervalWeeks: raw === "weekly_2" ? 2 : 1,
+    monthDays: recurrenceType === "monthlyByDate" ? parseMonthDays(document.getElementById("monthDays")?.value || "") : [],
+    referenceDay: Number(document.getElementById("referenceDay")?.value || 0),
+    referenceWeekdays: recurrenceType === "referenceDate" ? weekdays : [],
+    candidateWeekdays: recurrenceType === "beforeReferenceNearestWeekday" ? weekdays : [],
+    shipOffsetDays: ["referenceDate", "beforeReferenceNearestWeekday"].includes(recurrenceType)
+      ? Number(document.getElementById("shipOffsetDays")?.value || 0)
+      : 0,
+    referenceItems: getReferenceItemsFromForm(),
+    destinationId: "",
+    destinationName: "",
+    standard: "",
+    quantity: 0,
+    unit: "",
+    memo: "",
+    updatedAt: "",
+    updatedBy: "",
+  };
+}
+
+function recurrenceSentence_(rule) {
+  const weekdayNames = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+  const weekdaySource = rule.recurrenceType === "referenceDate"
+    ? rule.referenceWeekdays
+    : rule.recurrenceType === "beforeReferenceNearestWeekday"
+      ? rule.candidateWeekdays
+      : rule.weekdays;
+  const weekdays = parseNumberList(weekdaySource).map((day) => weekdayNames[day]).filter(Boolean);
+  const weekdayText = weekdays.length ? weekdays.join("・") : "曜日を選択すると";
+  if (rule.recurrenceType === "weekly") {
+    return `${Number(rule.intervalWeeks || 1) === 2 ? "隔週" : "毎週"} ${weekdayText}に予定を作成します`;
+  }
+  if (rule.recurrenceType === "monthlyByDate") {
+    const days = parseNumberList(rule.monthDays).map((day) => `${day}日`);
+    return days.length ? `毎月${days.join("・")}に予定を作成します` : "日にちを入力すると、毎月予定を作成します";
+  }
+  const referenceDay = Number(rule.referenceDay || 0);
+  const referenceText = referenceDay ? `毎月${referenceDay}日より前の` : "基準日より前の";
+  const modeText = rule.recurrenceType === "beforeReferenceNearestWeekday" ? `最も近い${weekdayText}` : weekdayText;
+  const offset = Number(rule.shipOffsetDays || 0);
+  const offsetText = offset ? `（そこから${Math.abs(offset)}日${offset < 0 ? "前" : "後"}）` : "";
+  return `${referenceText}${modeText}${offsetText}に予定を作成します`;
+}
+
+function nextRecurringPreviewDates_(rule, limit = 3) {
+  const todayKey = formatDate(new Date());
+  const fromKey = [todayKey, normalizeDateKey(rule.startDate)].filter(Boolean).sort().pop();
+  const fromDate = parseDate(fromKey);
+  if (!fromDate) return [];
+  const found = [];
+  const seen = new Set();
+  for (let offset = 0; offset < 18 && found.length < limit; offset += 1) {
+    const month = new Date(fromDate.getFullYear(), fromDate.getMonth() + offset, 1);
+    generateRecurringShipmentsForMonthBase_(month.getFullYear(), month.getMonth(), [rule]).forEach((entry) => {
+      const date = normalizeDateKey(entry.date);
+      if (!date || date < fromKey || seen.has(date)) return;
+      if (rule.endDate && date > normalizeDateKey(rule.endDate)) return;
+      seen.add(date);
+      found.push(date);
+    });
+    found.sort();
+  }
+  return found.slice(0, limit);
+}
+
+function updateRecurrencePreview_() {
+  const text = document.getElementById("recurrencePreviewText");
+  const dates = document.getElementById("recurrenceNextDates");
+  if (!text || !dates) return;
+  const rule = buildRecurringPreviewRule_();
+  text.textContent = recurrenceSentence_(rule);
+  const next = nextRecurringPreviewDates_(rule);
+  dates.textContent = next.length ? `次回予定：${next.map((date) => formatDateJa_(date, true)).join("、")}` : "曜日や日にちを選ぶと、次回予定を表示します。";
 }
 
 function toggleShipmentSpec2(show) {
@@ -2112,6 +2303,7 @@ function initWeekdayButtons() {
     btn.dataset.value = String(i);
     btn.addEventListener("click", () => {
       btn.classList.toggle("on");
+      updateRecurrencePreview_();
     });
     container.appendChild(btn);
   });
@@ -2120,7 +2312,10 @@ function initWeekdayButtons() {
 function initReferenceItemSection() {
   const btn = document.getElementById("addReferenceItemBtn");
   if (btn) {
-    btn.addEventListener("click", () => addReferenceItemRow());
+    btn.addEventListener("click", () => {
+      addReferenceItemRow();
+      updateRecurrencePreview_();
+    });
   }
   const list = document.getElementById("referenceItemsList");
   if (list && !list.children.length) {
@@ -2165,6 +2360,7 @@ function createReferenceItemRow(item = {}) {
   if (removeBtn) {
     removeBtn.addEventListener("click", () => {
       row.remove();
+      updateRecurrencePreview_();
     });
   }
 
@@ -2356,10 +2552,12 @@ function openChoiceModal_(kind) {
   const config = kind === "edit"
     ? {
         title: "定期出荷の編集",
-        text: "編集方法を選んでください。",
+        text: "変更する範囲を選んでください。定期設定全体を変える操作は最後に表示しています。",
         buttons: [
-          { label: "この日だけ編集", value: "day", primary: true },
-          { label: "定期ルール編集", value: "rule" },
+          { label: "この回だけ変更", value: "day", primary: true },
+          { label: "この回だけ別日に移動", value: "move" },
+          { label: "定期設定全体を変更", value: "rule" },
+          { label: "この回だけ削除", value: "delete_day", danger: true },
           { label: "キャンセル", value: "" },
         ],
       }
@@ -2367,8 +2565,8 @@ function openChoiceModal_(kind) {
         title: "定期出荷の削除",
         text: "削除方法を選んでください。",
         buttons: [
-          { label: "この日だけ削除", value: "day", primary: true },
-          { label: "定期ルール削除", value: "rule" },
+          { label: "この回だけ削除", value: "day", primary: true },
+          { label: "定期設定全体を削除", value: "rule", danger: true },
           { label: "キャンセル", value: "" },
         ],
       };
@@ -2395,6 +2593,7 @@ function openChoiceModal_(kind) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = btnCfg.primary ? "btn" : "btn secondary";
+      if (btnCfg.danger) btn.classList.add("choice-action--danger");
       btn.textContent = btnCfg.label;
       btn.style.minHeight = "48px";
       btn.addEventListener("click", () => close(btnCfg.value));
@@ -2415,15 +2614,17 @@ function openChoiceModal_(kind) {
 async function recurringChoice_(kind) {
   const result = await openChoiceModal_(kind);
   if (result === "day") return "day";
+  if (result === "move") return "move";
+  if (result === "delete_day") return "delete_day";
   if (result === "rule") return "rule";
   return "";
 }
 
 function buildRecurringSkipException_(entry) {
   const recurringId = String(entry._ruleId || entry.recurringId || entry.id || "").trim();
-  const date = normalizeDateKey(entry.date);
+  const date = normalizeDateKey(entry.exceptionDate || entry.date);
   return {
-    id: createIdFrom(`${recurringId}__skip`, date),
+    id: entry.exceptionAction && entry.id ? String(entry.id) : createIdFrom(`${recurringId}__skip`, date),
     recurringId,
     date,
     action: "skip",
@@ -2435,7 +2636,13 @@ function buildRecurringSkipException_(entry) {
 
 function buildRecurringOverrideExceptionFromForm_() {
   const recurringId = String(document.getElementById("exceptionRecurringId").value || "").trim();
-  const date = requiredValue("shipmentDate", "出荷日");
+  const sourceDate = normalizeDateKey(document.getElementById("exceptionDate").value || "");
+  const displayDate = requiredValue("shipmentDate", "出荷日");
+  const source = parseDate(sourceDate);
+  const target = parseDate(displayDate);
+  if (!source || !target) throw new Error("移動元と移動先の日付を確認してください");
+  const offsetDays = Math.round((stripTime(target).getTime() - stripTime(source).getTime()) / (24 * 60 * 60 * 1000));
+  const action = offsetDays === 0 ? "override" : "move";
   const destId = String(document.getElementById("shipmentDestination").value || "");
   const destName = destId ? state.destinations.find((d) => String(d.id) === destId)?.name || "" : "";
   const shipment = {
@@ -2449,13 +2656,13 @@ function buildRecurringOverrideExceptionFromForm_() {
     quantity2: Number(document.getElementById("shipmentQuantity2").value || 0),
     unit2: String(document.getElementById("shipmentUnit2").value || "").trim(),
     memo: String(document.getElementById("shipmentMemo").value || "").trim(),
-    shipOffsetDays: Number(document.getElementById("exceptionShipOffsetDays").value || 0),
+    shipOffsetDays: action === "move" ? offsetDays : Number(document.getElementById("exceptionShipOffsetDays").value || 0),
   };
   return {
-    id: createIdFrom(`${recurringId}__override`, date),
+    id: String(document.getElementById("entryId").value || "") || createIdFrom(`${recurringId}__override`, sourceDate),
     recurringId,
-    date,
-    action: "override",
+    date: sourceDate,
+    action,
     shipment,
     updatedAt: new Date().toISOString(),
     updatedBy: currentUpdatedBy(),
@@ -2463,16 +2670,18 @@ function buildRecurringOverrideExceptionFromForm_() {
 }
 
 function syncSave(action, payload, snap, label) {
-  if (!isApiEnabled()) return;
-  (async () => {
+  if (!isApiEnabled()) return Promise.resolve(true);
+  return (async () => {
     try {
       await apiPost(action, payload);
       if (label) showToast(label, "success");
+      return true;
     } catch (err) {
       console.error("[sakaki] sync save failed", { action, payload, err });
       restoreLocalState_(snap);
       refreshViewFast();
       showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+      return false;
     }
   })();
 }
@@ -2504,8 +2713,10 @@ async function submitEntryForm(e) {
     setButtonLoading(submitBtn, "保存中...");
     setBusy(true, "保存中...");
 
-    if (type === "shipment" && entryMode === "recurring_override") {
+    if (type === "shipment" && (entryMode === "recurring_override" || entryMode === "recurring_move")) {
       const exception = buildRecurringOverrideExceptionFromForm_();
+      const savedDate = addDaysToDateKey_(exception.date, exception.action === "move" ? Number(exception.shipment.shipOffsetDays || 0) : 0);
+      let syncOk = true;
       const payload = {
         id: exception.id,
         recurringId: exception.recurringId,
@@ -2520,15 +2731,20 @@ async function submitEntryForm(e) {
         const snap = snapshotLocalState_();
         saveRecurringException(exception);
         refreshViewFast();
-        syncSave("saveRecurringException", flattenRecurringExceptionForApi_(payload), snap, "保存しました");
+        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(payload), snap, "保存しました");
       } else {
         saveRecurringException(exception);
+      }
+
+      if (!syncOk) {
+        setStatus("保存に失敗しました。入力内容を確認して再度お試しください。", "err");
+        return;
       }
 
       setStatus("保存しました", "ok");
       showToast("保存しました", "success");
       resetEntryForm();
-      showSavedDate_(exception.date);
+      showSavedDate_(savedDate);
       return;
     }
 
@@ -2655,7 +2871,7 @@ async function submitEntryForm(e) {
         // Optimistic UI update: reflect immediately, then sync to API (no full reload).
         saveRecurringShipment(rule);
         refreshViewFast();
-        syncSave("saveRecurringShipment", {
+        const syncOk = await syncSave("saveRecurringShipment", {
           id: rule.id,
           destinationId: rule.destinationId,
           destinationName: rule.destinationName,
@@ -2680,6 +2896,10 @@ async function submitEntryForm(e) {
           updatedAt: rule.updatedAt,
           updatedBy: rule.updatedBy,
         }, snap, "保存しました");
+        if (!syncOk) {
+          setStatus("保存に失敗しました。入力内容を確認して再度お試しください。", "err");
+          return;
+        }
         // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
         saveRecurringShipment(rule);
@@ -2688,7 +2908,7 @@ async function submitEntryForm(e) {
       setStatus("保存しました", "ok");
       showToast("保存しました", "success");
       resetEntryForm();
-      showSavedDate_(rule.startDate);
+      showSavedDate_(nextRecurringPreviewDates_(rule, 1)[0] || rule.startDate);
       return;
     }
 
@@ -2846,10 +3066,15 @@ async function setEntryToForm(entry) {
     const choice = await recurringChoice_("edit");
     if (!choice) return false;
 
-    if (choice === "day") {
-      document.getElementById("entryMode").value = "recurring_override";
+    if (choice === "delete_day") {
+      await deleteEntry(entry, "day");
+      return false;
+    }
+
+    if (choice === "day" || choice === "move") {
+      document.getElementById("entryMode").value = choice === "move" ? "recurring_move" : "recurring_override";
       document.getElementById("exceptionRecurringId").value = String(entry._ruleId || entry.recurringId || entry.id || "");
-      document.getElementById("exceptionDate").value = String(entry.date || "");
+      document.getElementById("exceptionDate").value = String(entry.exceptionDate || entry.date || "");
       document.getElementById("entryId").value = String(entry.id || createId());
 
       document.getElementById("entryType").value = "shipment";
@@ -2859,6 +3084,9 @@ async function setEntryToForm(entry) {
       switchShipmentKindFields();
 
       document.getElementById("shipmentDate").value = entry.date;
+      document.getElementById("shipmentDate").disabled = choice === "day";
+      const dateLabel = document.getElementById("shipmentDateLabel");
+      if (dateLabel) dateLabel.textContent = choice === "move" ? "移動先の日付" : "日付（この回のみ）";
       document.getElementById("shipmentDestination").value = String(entry.destinationId || "");
       document.getElementById("shipmentStandard").value = entry.standard;
       document.getElementById("shipmentQuantity").value = String(entry.quantity ?? 0);
@@ -2871,6 +3099,14 @@ async function setEntryToForm(entry) {
 
       const overrideBox = document.getElementById("recurringOverrideFields");
       if (overrideBox) overrideBox.classList.remove("hidden");
+      const overrideTitle = document.getElementById("recurringOverrideTitle");
+      if (overrideTitle) overrideTitle.textContent = choice === "move" ? "この回だけ別日に移動" : "この回だけ変更";
+      const overrideHint = document.getElementById("recurringOverrideHint");
+      if (overrideHint) {
+        overrideHint.textContent = choice === "move"
+          ? `元の日付（${formatDateJa_(entry.exceptionDate || entry.date)}）は表示せず、移動先に表示します。定期設定は変わりません。`
+          : "この回の内容だけを変更します。定期設定は変わりません。";
+      }
       const offsetInput = document.getElementById("exceptionShipOffsetDays");
       if (offsetInput) offsetInput.value = String(entry.shipOffsetDays ?? 0);
       return true;
@@ -2981,6 +3217,10 @@ function resetEntryForm() {
   document.getElementById("recurringId").value = "";
   document.getElementById("shipmentKind").value = "spot";
   document.getElementById("entryType").value = "shipment";
+  const shipmentDate = document.getElementById("shipmentDate");
+  if (shipmentDate) shipmentDate.disabled = false;
+  const shipmentDateLabel = document.getElementById("shipmentDateLabel");
+  if (shipmentDateLabel) shipmentDateLabel.textContent = "日付";
 
   setFormDate(state.selectedDate);
   document.getElementById("startDate").value = state.selectedDate;
@@ -2990,7 +3230,7 @@ function resetEntryForm() {
     setSelectedWeekdays([new Date(state.selectedDate).getDay()]);
     document.getElementById("monthDays").value = "";
     document.getElementById("referenceDay").value = "";
-    document.getElementById("shipOffsetDays").value = "-1";
+    document.getElementById("shipOffsetDays").value = "0";
     clearReferenceItemRows();
 
     const advancedDetails = document.getElementById("entryAdvancedDetails");
