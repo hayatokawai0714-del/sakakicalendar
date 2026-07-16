@@ -34,8 +34,13 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-13.4";
-const BUILD_TIME = "2026-07-13 22:06";
+const APP_VERSION = "2026-07-16.1";
+const BUILD_TIME = "2026-07-16 12:47";
+
+const SCHEDULE_LONG_PRESS_MS = 425;
+const SCHEDULE_MOVE_CANCEL_THRESHOLD = 12;
+const SCHEDULE_AUTO_SCROLL_EDGE_PX = 96;
+const SCHEDULE_AUTO_SCROLL_MAX_PX = 10;
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -63,7 +68,8 @@ const state = {
 };
 
 let scheduleDragState_ = null;
-let scheduleTouchState_ = null;
+let schedulePointerState_ = null;
+let scheduleNativeTouchState_ = null;
 let scheduleSuppressClickUntil_ = 0;
 
 init();
@@ -475,9 +481,10 @@ function bindEvents() {
   });
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
   if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
-  document.addEventListener("touchmove", handleScheduleTouchMove_, { passive: false });
-  document.addEventListener("touchend", handleScheduleTouchEnd_, { passive: false });
-  document.addEventListener("touchcancel", cancelScheduleTouchHold_, { passive: true });
+  window.addEventListener("blur", cancelScheduleInteraction_);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) cancelScheduleInteraction_();
+  });
   bindEntryControlSegments_();
   bindRecurrenceControls_();
   bindAdminPanels();
@@ -1840,6 +1847,7 @@ function renderCalendar() {
 function renderMonthlyScheduleView() {
   const view = document.getElementById("monthlyScheduleView");
   if (!view) return;
+  cancelScheduleInteraction_();
   view.innerHTML = "";
   const year = state.currentMonth.getFullYear();
   const month = state.currentMonth.getMonth();
@@ -1904,6 +1912,7 @@ function createMonthlyScheduleItem_(entry) {
     item.classList.add("is-shipment-movable");
     item.draggable = true;
     item.setAttribute("aria-grabbed", "false");
+    item.addEventListener("pointerdown", (event) => suspendNativeScheduleDragForTouch_(event, item));
     item.addEventListener("dragstart", (event) => {
       if (state.isBusy) {
         event.preventDefault();
@@ -1944,12 +1953,18 @@ function createMonthlyScheduleItem_(entry) {
     handle.className = "schedule-drag-handle";
     handle.textContent = "⋮⋮";
     handle.title = "長押しして別の日へ移動";
-    handle.setAttribute("aria-label", "この出荷予定を長押しして移動");
+    const destination = String(entry.destinationName || entry.destination || "").trim() || "この出荷";
+    handle.setAttribute("aria-label", `${destination}の出荷予定を別の日へ移動`);
     handle.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
     });
-    handle.addEventListener("touchstart", (event) => startScheduleTouchHold_(event, entry, item, handle), { passive: true });
+    handle.addEventListener("contextmenu", (event) => event.preventDefault());
+    handle.addEventListener("pointerdown", (event) => startSchedulePointerHold_(event, entry, item, handle));
+    handle.addEventListener("pointermove", handleSchedulePointerMove_);
+    handle.addEventListener("pointerup", handleSchedulePointerEnd_);
+    handle.addEventListener("pointercancel", handleSchedulePointerCancel_);
+    handle.addEventListener("lostpointercapture", handleSchedulePointerCaptureLost_);
     item.appendChild(handle);
   }
   item.addEventListener("click", (event) => {
@@ -1957,6 +1972,26 @@ function createMonthlyScheduleItem_(entry) {
     acknowledgeUnreadEntry_(entry);
   });
   return item;
+}
+
+function suspendNativeScheduleDragForTouch_(event, item) {
+  if (!event.isPrimary || event.pointerType === "mouse") return;
+  restoreNativeScheduleDrag_();
+  item.draggable = false;
+  scheduleNativeTouchState_ = { pointerId: event.pointerId, item };
+  window.addEventListener("pointerup", restoreNativeScheduleDrag_);
+  window.addEventListener("pointercancel", restoreNativeScheduleDrag_);
+}
+
+function restoreNativeScheduleDrag_(event) {
+  if (!scheduleNativeTouchState_ || (event && event.pointerId !== scheduleNativeTouchState_.pointerId)) return;
+  const { item } = scheduleNativeTouchState_;
+  scheduleNativeTouchState_ = null;
+  window.removeEventListener("pointerup", restoreNativeScheduleDrag_);
+  window.removeEventListener("pointercancel", restoreNativeScheduleDrag_);
+  if (item) {
+    item.draggable = true;
+  }
 }
 
 function bindScheduleDropRow_(row) {
@@ -2009,74 +2044,194 @@ function cleanupScheduleDrag_() {
   document.body.classList.remove("is-schedule-dragging");
   document.querySelectorAll(".monthly-schedule-row.is-drop-zone, .monthly-schedule-row.is-drop-target")
     .forEach((row) => row.classList.remove("is-drop-zone", "is-drop-target"));
+  document.querySelectorAll(".schedule-drag-ghost").forEach((ghost) => ghost.remove());
   scheduleDragState_ = null;
 }
 
-function startScheduleTouchHold_(event, entry, item, handle) {
-  if (state.isBusy || event.touches.length !== 1) return;
-  cancelScheduleTouchHold_();
-  const touch = event.touches[0];
-  scheduleTouchState_ = {
-    identifier: touch.identifier,
+function startSchedulePointerHold_(event, entry, item, handle) {
+  if (state.isBusy || !event.isPrimary || event.pointerType === "mouse") return;
+  cancelScheduleInteraction_();
+  schedulePointerState_ = {
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
     entry,
     item,
     handle,
-    startX: touch.clientX,
-    startY: touch.clientY,
-    lastX: touch.clientX,
-    lastY: touch.clientY,
+    startX: event.clientX,
+    startY: event.clientY,
+    lastX: event.clientX,
+    lastY: event.clientY,
     active: false,
+    autoScrollFrame: 0,
+    autoScrollSpeed: 0,
+    ghost: null,
+    originalDraggable: item.draggable,
     timer: window.setTimeout(() => {
-      if (!scheduleTouchState_ || scheduleTouchState_.identifier !== touch.identifier) return;
-      scheduleTouchState_.active = true;
-      beginScheduleDrag_(entry, item, "touch");
+      if (!schedulePointerState_ || schedulePointerState_.pointerId !== event.pointerId) return;
+      if (!handle.isConnected) {
+        cancelScheduleInteraction_();
+        return;
+      }
+      schedulePointerState_.active = true;
+      beginScheduleDrag_(entry, item, schedulePointerState_.pointerType || "pointer");
       item.classList.add("is-long-press-active");
       handle.classList.add("is-active");
-      const row = document.elementFromPoint(scheduleTouchState_.lastX, scheduleTouchState_.lastY)?.closest(".monthly-schedule-row[data-date]");
-      setScheduleDropTarget_(row);
-    }, 500),
+      schedulePointerState_.ghost = createScheduleDragGhost_(item);
+      document.addEventListener("touchmove", preventScheduleDragScroll_, { passive: false });
+      updateSchedulePointerPosition_(schedulePointerState_.lastX, schedulePointerState_.lastY);
+      if (typeof navigator.vibrate === "function") navigator.vibrate(15);
+    }, SCHEDULE_LONG_PRESS_MS),
   };
+  item.draggable = false;
+  try {
+    handle.setPointerCapture(event.pointerId);
+  } catch {}
 }
 
-function handleScheduleTouchMove_(event) {
-  if (!scheduleTouchState_) return;
-  const touch = Array.from(event.touches).find((item) => item.identifier === scheduleTouchState_.identifier);
-  if (!touch) return;
-  scheduleTouchState_.lastX = touch.clientX;
-  scheduleTouchState_.lastY = touch.clientY;
-  if (!scheduleTouchState_.active) {
-    const distance = Math.hypot(touch.clientX - scheduleTouchState_.startX, touch.clientY - scheduleTouchState_.startY);
-    if (distance > 10) cancelScheduleTouchHold_();
+function handleSchedulePointerMove_(event) {
+  if (!schedulePointerState_ || event.pointerId !== schedulePointerState_.pointerId) return;
+  schedulePointerState_.lastX = event.clientX;
+  schedulePointerState_.lastY = event.clientY;
+  if (!schedulePointerState_.active) {
+    const distance = Math.hypot(
+      event.clientX - schedulePointerState_.startX,
+      event.clientY - schedulePointerState_.startY,
+    );
+    if (distance > SCHEDULE_MOVE_CANCEL_THRESHOLD) cancelScheduleInteraction_();
     return;
   }
   event.preventDefault();
-  if (touch.clientY < 84) window.scrollBy(0, -12);
-  if (touch.clientY > window.innerHeight - 84) window.scrollBy(0, 12);
-  const row = document.elementFromPoint(touch.clientX, touch.clientY)?.closest(".monthly-schedule-row[data-date]");
-  setScheduleDropTarget_(row);
+  updateSchedulePointerPosition_(event.clientX, event.clientY);
 }
 
-function handleScheduleTouchEnd_(event) {
-  if (!scheduleTouchState_) return;
-  const ended = Array.from(event.changedTouches || []).some((item) => item.identifier === scheduleTouchState_.identifier);
-  if (!ended) return;
-  const wasActive = scheduleTouchState_.active;
-  const entry = scheduleTouchState_.entry;
+function handleSchedulePointerEnd_(event) {
+  if (!schedulePointerState_ || event.pointerId !== schedulePointerState_.pointerId) return;
+  const wasActive = schedulePointerState_.active;
+  const entry = schedulePointerState_.entry;
   const targetDate = normalizeDateKey(scheduleDragState_?.targetRow?.dataset.date || "");
   if (wasActive) {
     event.preventDefault();
     scheduleSuppressClickUntil_ = Date.now() + 500;
   }
-  cancelScheduleTouchHold_();
+  cancelScheduleInteraction_();
   if (wasActive && targetDate && targetDate !== normalizeDateKey(entry.date)) void moveShipmentToDate_(entry, targetDate);
 }
 
-function cancelScheduleTouchHold_() {
-  if (!scheduleTouchState_) return;
-  window.clearTimeout(scheduleTouchState_.timer);
-  scheduleTouchState_.handle?.classList.remove("is-active");
-  scheduleTouchState_ = null;
+function handleSchedulePointerCancel_(event) {
+  if (schedulePointerState_ && event.pointerId === schedulePointerState_.pointerId) cancelScheduleInteraction_();
+}
+
+function handleSchedulePointerCaptureLost_(event) {
+  if (!schedulePointerState_ || event.pointerId !== schedulePointerState_.pointerId) return;
+  cancelSchedulePointerHold_({ releaseCapture: false });
+  restoreNativeScheduleDrag_();
+}
+
+function createScheduleDragGhost_(item) {
+  const rect = item.getBoundingClientRect();
+  const viewportWidth = window.visualViewport?.width || window.innerWidth;
+  const ghost = item.cloneNode(true);
+  ghost.className = "monthly-schedule-item is-shipment-movable schedule-drag-ghost";
+  ghost.removeAttribute("draggable");
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.querySelectorAll("button").forEach((button) => {
+    button.tabIndex = -1;
+    button.disabled = true;
+  });
+  ghost.style.width = `${Math.min(rect.width, Math.max(120, viewportWidth - 24))}px`;
+  document.body.appendChild(ghost);
+  return ghost;
+}
+
+function updateSchedulePointerPosition_(clientX, clientY) {
+  if (!schedulePointerState_?.active) return;
+  positionScheduleDragGhost_(schedulePointerState_.ghost, clientX, clientY);
+  const target = document.elementFromPoint(clientX, clientY);
+  const row = target instanceof Element ? target.closest(".monthly-schedule-row[data-date]") : null;
+  setScheduleDropTarget_(row);
+  updateScheduleAutoScroll_(clientY);
+}
+
+function positionScheduleDragGhost_(ghost, clientX, clientY) {
+  if (!ghost) return;
+  const rect = ghost.getBoundingClientRect();
+  const viewportWidth = window.visualViewport?.width || window.innerWidth;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const margin = 8;
+  const maxLeft = Math.max(margin, viewportWidth - rect.width - margin);
+  const maxTop = Math.max(margin, viewportHeight - rect.height - margin);
+  const left = Math.min(maxLeft, Math.max(margin, clientX + 14));
+  const top = Math.min(maxTop, Math.max(margin, clientY + 14));
+  ghost.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0) scale(.98)`;
+}
+
+function updateScheduleAutoScroll_(clientY) {
+  if (!schedulePointerState_?.active) return;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  let speed = 0;
+  if (clientY < SCHEDULE_AUTO_SCROLL_EDGE_PX) {
+    speed = -SCHEDULE_AUTO_SCROLL_MAX_PX * (1 - Math.max(0, clientY) / SCHEDULE_AUTO_SCROLL_EDGE_PX);
+  } else if (clientY > viewportHeight - SCHEDULE_AUTO_SCROLL_EDGE_PX) {
+    speed = SCHEDULE_AUTO_SCROLL_MAX_PX
+      * (1 - Math.max(0, viewportHeight - clientY) / SCHEDULE_AUTO_SCROLL_EDGE_PX);
+  }
+  schedulePointerState_.autoScrollSpeed = speed;
+  if (!speed) {
+    stopScheduleAutoScroll_();
+    return;
+  }
+  if (!schedulePointerState_.autoScrollFrame) {
+    schedulePointerState_.autoScrollFrame = window.requestAnimationFrame(runScheduleAutoScroll_);
+  }
+}
+
+function runScheduleAutoScroll_() {
+  if (!schedulePointerState_?.active || !schedulePointerState_.autoScrollSpeed) {
+    stopScheduleAutoScroll_();
+    return;
+  }
+  schedulePointerState_.autoScrollFrame = 0;
+  window.scrollBy(0, schedulePointerState_.autoScrollSpeed);
+  const target = document.elementFromPoint(schedulePointerState_.lastX, schedulePointerState_.lastY);
+  const row = target instanceof Element ? target.closest(".monthly-schedule-row[data-date]") : null;
+  setScheduleDropTarget_(row);
+  schedulePointerState_.autoScrollFrame = window.requestAnimationFrame(runScheduleAutoScroll_);
+}
+
+function stopScheduleAutoScroll_() {
+  if (!schedulePointerState_?.autoScrollFrame) return;
+  window.cancelAnimationFrame(schedulePointerState_.autoScrollFrame);
+  schedulePointerState_.autoScrollFrame = 0;
+}
+
+function preventScheduleDragScroll_(event) {
+  if (schedulePointerState_?.active) event.preventDefault();
+}
+
+function cancelSchedulePointerHold_(options = {}) {
+  if (!schedulePointerState_) return;
+  const pointerState = schedulePointerState_;
+  window.clearTimeout(pointerState.timer);
+  stopScheduleAutoScroll_();
+  document.removeEventListener("touchmove", preventScheduleDragScroll_, { passive: false });
+  pointerState.handle?.classList.remove("is-active");
+  pointerState.ghost?.remove();
+  if (pointerState.item && scheduleNativeTouchState_?.item !== pointerState.item) {
+    pointerState.item.draggable = pointerState.originalDraggable;
+  }
+  schedulePointerState_ = null;
+  if (options.releaseCapture !== false && pointerState.handle?.hasPointerCapture?.(pointerState.pointerId)) {
+    try {
+      pointerState.handle.releasePointerCapture(pointerState.pointerId);
+    } catch {}
+  }
   cleanupScheduleDrag_();
+}
+
+function cancelScheduleInteraction_() {
+  if (schedulePointerState_) cancelSchedulePointerHold_();
+  else cleanupScheduleDrag_();
+  restoreNativeScheduleDrag_();
 }
 
 function selectCalendarDate_(dateKey) {
