@@ -2241,7 +2241,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); outlin
 .monthly-schedule-row.is-selected { box-shadow: inset 3px 0 0 var(--primary); background: #e8f2ec; }
 .monthly-schedule-items { display: grid; min-width: 0; gap: 5px; }
 .monthly-schedule-item { display: flex; min-width: 0; align-items: flex-start; gap: 6px; line-height: 1.4; }
-.monthly-schedule-item.is-shipment-movable { align-items: center; padding: 4px 3px 4px 6px; border: 1px solid transparent; border-radius: 8px; background: #f8fbf9; cursor: grab; user-select: none; transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.monthly-schedule-item.is-shipment-movable { align-items: center; padding: 4px 3px 4px 6px; border: 1px solid transparent; border-radius: 8px; background: #f8fbf9; cursor: grab; transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
 .monthly-schedule-item.is-shipment-movable:active { cursor: grabbing; }
 .monthly-schedule-item.is-dragging { z-index: 2; opacity: .48; box-shadow: 0 8px 18px rgba(36, 75, 57, .18); transform: scale(.99); }
 .monthly-schedule-item.is-long-press-active { opacity: .62; }
@@ -2252,11 +2252,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); outlin
 .monthly-schedule-detail { min-width: 0; white-space: pre-line; overflow-wrap: anywhere; font-size: 13px; }
 .monthly-schedule-item.has-unread-update { border-left: 3px solid var(--primary-dark); padding-left: 6px; }
 .monthly-schedule-item .unread-indicator { margin-left: auto; }
-.schedule-drag-handle { flex: 0 0 34px; align-self: stretch; min-width: 34px; min-height: 34px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: #52705e; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: -3px; line-height: 1; cursor: grab; touch-action: manipulation; -webkit-touch-callout: none; }
+.schedule-drag-handle { flex: 0 0 42px; align-self: stretch; min-width: 42px; min-height: 42px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: #52705e; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: -3px; line-height: 1; cursor: grab; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 .schedule-drag-handle:hover, .schedule-drag-handle:focus-visible, .schedule-drag-handle.is-active { background: var(--primary-soft); color: var(--primary-dark); }
 .schedule-drag-handle:focus-visible { outline: 2px solid rgba(23, 107, 67, .35); outline-offset: 1px; }
 .schedule-drag-ghost { position: fixed; inset: 0 auto auto 0; z-index: 1000; max-width: calc(100vw - 16px); margin: 0; opacity: .96; pointer-events: none; box-shadow: 0 12px 28px rgba(28, 64, 46, .28); transform-origin: top left; transition: none !important; will-change: transform; }
-.is-schedule-dragging { user-select: none; }
+.is-schedule-dragging { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .is-schedule-dragging .monthly-schedule-row.is-drop-zone { background: #f1f8f3; box-shadow: inset 0 0 0 1px rgba(23, 107, 67, .18); }
 .is-schedule-dragging .monthly-schedule-row.is-drop-target { background: #dff0e4; box-shadow: inset 0 0 0 2px var(--primary); }
 .monthly-schedule-row.is-move-saved { animation: schedule-move-saved 1.2s ease; }
@@ -2268,7 +2268,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); outlin
   .monthly-schedule-row { grid-template-columns: 44px 40px minmax(0, 1fr); padding-inline: 6px; }
   .monthly-schedule-detail { font-size: 13px; }
   .monthly-schedule-item.is-shipment-movable { padding-left: 5px; }
-  .schedule-drag-handle { flex-basis: 38px; min-width: 38px; }
+  .schedule-drag-handle { flex-basis: 42px; min-width: 42px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

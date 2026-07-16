@@ -34,8 +34,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-16.1";
-const BUILD_TIME = "2026-07-16 12:47";
+const APP_VERSION = "2026-07-16.2";
+const BUILD_TIME = "2026-07-16 19:56";
 
 const SCHEDULE_LONG_PRESS_MS = 425;
 const SCHEDULE_MOVE_CANCEL_THRESHOLD = 12;
@@ -1950,6 +1950,7 @@ function createMonthlyScheduleItem_(entry) {
   if (entry.type === "shipment") {
     const handle = document.createElement("button");
     handle.type = "button";
+    handle.draggable = false;
     handle.className = "schedule-drag-handle";
     handle.textContent = "⋮⋮";
     handle.title = "長押しして別の日へ移動";
@@ -2051,6 +2052,8 @@ function cleanupScheduleDrag_() {
 function startSchedulePointerHold_(event, entry, item, handle) {
   if (state.isBusy || !event.isPrimary || event.pointerType === "mouse") return;
   cancelScheduleInteraction_();
+  event.preventDefault();
+  document.addEventListener("selectstart", preventScheduleTextSelection_);
   schedulePointerState_ = {
     pointerId: event.pointerId,
     pointerType: event.pointerType,
@@ -2073,6 +2076,7 @@ function startSchedulePointerHold_(event, entry, item, handle) {
         return;
       }
       schedulePointerState_.active = true;
+      clearScheduleTextSelection_();
       beginScheduleDrag_(entry, item, schedulePointerState_.pointerType || "pointer");
       item.classList.add("is-long-press-active");
       handle.classList.add("is-active");
@@ -2208,12 +2212,24 @@ function preventScheduleDragScroll_(event) {
   if (schedulePointerState_?.active) event.preventDefault();
 }
 
+function preventScheduleTextSelection_(event) {
+  if (schedulePointerState_ || event.target?.closest?.(".schedule-drag-handle")) event.preventDefault();
+}
+
+function clearScheduleTextSelection_() {
+  try {
+    const selection = window.getSelection?.();
+    if (selection?.rangeCount) selection.removeAllRanges();
+  } catch {}
+}
+
 function cancelSchedulePointerHold_(options = {}) {
   if (!schedulePointerState_) return;
   const pointerState = schedulePointerState_;
   window.clearTimeout(pointerState.timer);
   stopScheduleAutoScroll_();
   document.removeEventListener("touchmove", preventScheduleDragScroll_, { passive: false });
+  document.removeEventListener("selectstart", preventScheduleTextSelection_);
   pointerState.handle?.classList.remove("is-active");
   pointerState.ghost?.remove();
   if (pointerState.item && scheduleNativeTouchState_?.item !== pointerState.item) {
@@ -2231,6 +2247,7 @@ function cancelSchedulePointerHold_(options = {}) {
 function cancelScheduleInteraction_() {
   if (schedulePointerState_) cancelSchedulePointerHold_();
   else cleanupScheduleDrag_();
+  document.removeEventListener("selectstart", preventScheduleTextSelection_);
   restoreNativeScheduleDrag_();
 }
 
