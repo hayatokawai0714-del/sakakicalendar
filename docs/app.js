@@ -34,13 +34,14 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-16.2";
-const BUILD_TIME = "2026-07-16 19:56";
+const APP_VERSION = "2026-07-16.3";
+const BUILD_TIME = "2026-07-16 20:16";
 
 const SCHEDULE_LONG_PRESS_MS = 425;
 const SCHEDULE_MOVE_CANCEL_THRESHOLD = 12;
 const SCHEDULE_AUTO_SCROLL_EDGE_PX = 96;
 const SCHEDULE_AUTO_SCROLL_MAX_PX = 10;
+const RESCHEDULE_LOADING_MIN_MS = 400;
 
 function isDebugUiEnabled_() {
   const q = String(location.search || "");
@@ -70,6 +71,8 @@ const state = {
 let scheduleDragState_ = null;
 let schedulePointerState_ = null;
 let scheduleNativeTouchState_ = null;
+let scheduleRescheduleUiState_ = null;
+let scheduleRescheduleInFlight_ = false;
 let scheduleSuppressClickUntil_ = 0;
 
 init();
@@ -481,9 +484,15 @@ function bindEvents() {
   });
   const addEntryForSelectedBtn = document.getElementById("addEntryForSelectedBtn");
   if (addEntryForSelectedBtn) addEntryForSelectedBtn.addEventListener("click", openNewEntryForm_);
-  window.addEventListener("blur", cancelScheduleInteraction_);
+  window.addEventListener("blur", () => {
+    cancelScheduleInteraction_();
+    clearRescheduleLoadingUi_();
+  });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) cancelScheduleInteraction_();
+    if (document.hidden) {
+      cancelScheduleInteraction_();
+      clearRescheduleLoadingUi_();
+    }
   });
   bindEntryControlSegments_();
   bindRecurrenceControls_();
@@ -1848,6 +1857,7 @@ function renderMonthlyScheduleView() {
   const view = document.getElementById("monthlyScheduleView");
   if (!view) return;
   cancelScheduleInteraction_();
+  clearRescheduleLoadingUi_();
   view.innerHTML = "";
   const year = state.currentMonth.getFullYear();
   const month = state.currentMonth.getMonth();
@@ -1910,11 +1920,12 @@ function createMonthlyScheduleItem_(entry) {
   }
   if (entry.type === "shipment") {
     item.classList.add("is-shipment-movable");
+    item.dataset.scheduleEntryKey = scheduleEntryDomKey_(entry);
     item.draggable = true;
     item.setAttribute("aria-grabbed", "false");
     item.addEventListener("pointerdown", (event) => suspendNativeScheduleDragForTouch_(event, item));
     item.addEventListener("dragstart", (event) => {
-      if (state.isBusy) {
+      if (state.isBusy || scheduleRescheduleInFlight_) {
         event.preventDefault();
         return;
       }
@@ -2050,7 +2061,7 @@ function cleanupScheduleDrag_() {
 }
 
 function startSchedulePointerHold_(event, entry, item, handle) {
-  if (state.isBusy || !event.isPrimary || event.pointerType === "mouse") return;
+  if (state.isBusy || scheduleRescheduleInFlight_ || !event.isPrimary || event.pointerType === "mouse") return;
   cancelScheduleInteraction_();
   event.preventDefault();
   document.addEventListener("selectstart", preventScheduleTextSelection_);
@@ -2123,6 +2134,7 @@ function handleSchedulePointerEnd_(event) {
 
 function handleSchedulePointerCancel_(event) {
   if (schedulePointerState_ && event.pointerId === schedulePointerState_.pointerId) cancelScheduleInteraction_();
+  if (scheduleRescheduleUiState_) clearRescheduleLoadingUi_();
 }
 
 function handleSchedulePointerCaptureLost_(event) {
@@ -3193,6 +3205,86 @@ function buildRecurringMoveException_(entry, targetDate) {
   return buildRecurringOccurrenceException_(entry, sourceDate, targetDate, { preferredId });
 }
 
+function scheduleEntryDomKey_(entry) {
+  const kind = entry?.shipmentType === "recurring" ? "recurring" : "spot";
+  const id = String(entry?._ruleId || entry?.recurringId || entry?.id || "shipment");
+  const date = normalizeDateKey(entry?.exceptionDate || entry?.date);
+  return `${kind}:${id}:${date}`;
+}
+
+function findScheduleEntryItem_(entry) {
+  const key = scheduleEntryDomKey_(entry);
+  return Array.from(document.querySelectorAll(".monthly-schedule-item[data-schedule-entry-key]"))
+    .find((item) => item.dataset.scheduleEntryKey === key) || null;
+}
+
+function findScheduleDateRow_(dateKey) {
+  const targetDate = normalizeDateKey(dateKey);
+  return Array.from(document.querySelectorAll(".monthly-schedule-row[data-date]"))
+    .find((row) => row.dataset.date === targetDate) || null;
+}
+
+function beginRescheduleLoading_(entry, targetDate) {
+  clearRescheduleLoadingUi_();
+  const sourceItem = findScheduleEntryItem_(entry);
+  const handle = sourceItem?.querySelector(".schedule-drag-handle") || null;
+  const targetRow = findScheduleDateRow_(targetDate);
+  const targetItems = targetRow?.querySelector(".monthly-schedule-items") || null;
+  const status = document.createElement("span");
+  status.className = "schedule-reschedule-loading";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  status.setAttribute("aria-label", "予定を移動しています");
+  status.innerHTML = '<span class="schedule-reschedule-spinner" aria-hidden="true"></span><span>移動しています…</span>';
+  if (targetItems) {
+    targetItems.appendChild(status);
+  } else {
+    status.classList.add("is-floating");
+    document.body.appendChild(status);
+  }
+
+  const uiState = {
+    startedAt: Date.now(),
+    status,
+    sourceItem,
+    targetRow,
+    handle,
+    originalDraggable: sourceItem?.draggable ?? false,
+    handleWasDisabled: handle?.disabled ?? false,
+  };
+  scheduleRescheduleUiState_ = uiState;
+  sourceItem?.classList.add("is-reschedule-saving");
+  sourceItem?.setAttribute("aria-busy", "true");
+  if (sourceItem) sourceItem.draggable = false;
+  targetRow?.classList.add("is-reschedule-saving-target");
+  if (handle) {
+    handle.disabled = true;
+    handle.setAttribute("aria-disabled", "true");
+  }
+  return uiState;
+}
+
+function clearRescheduleLoadingUi_(uiState = scheduleRescheduleUiState_) {
+  if (!uiState) return;
+  uiState.status?.remove();
+  uiState.sourceItem?.classList.remove("is-reschedule-saving");
+  uiState.sourceItem?.removeAttribute("aria-busy");
+  if (uiState.sourceItem) uiState.sourceItem.draggable = uiState.originalDraggable;
+  uiState.targetRow?.classList.remove("is-reschedule-saving-target");
+  if (uiState.handle) {
+    uiState.handle.disabled = uiState.handleWasDisabled;
+    uiState.handle.setAttribute("aria-disabled", String(uiState.handleWasDisabled));
+  }
+  if (scheduleRescheduleUiState_ === uiState) scheduleRescheduleUiState_ = null;
+}
+
+async function endRescheduleLoading_(uiState) {
+  if (!uiState) return;
+  const remaining = RESCHEDULE_LOADING_MIN_MS - (Date.now() - uiState.startedAt);
+  if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+  clearRescheduleLoadingUi_(uiState);
+}
+
 async function confirmShipmentDateMove_(entry, targetDate) {
   const isRecurring = entry.shipmentType === "recurring";
   const targetLabel = formatDateJa_(targetDate);
@@ -3210,21 +3302,28 @@ async function confirmShipmentDateMove_(entry, targetDate) {
 }
 
 async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
-  if (!entry || entry.type !== "shipment" || state.isBusy) return false;
+  if (!entry || entry.type !== "shipment" || state.isBusy || scheduleRescheduleInFlight_) return false;
   const sourceDate = normalizeDateKey(entry.date);
   const targetDate = normalizeDateKey(targetDateValue);
   if (!sourceDate || !targetDate || sourceDate === targetDate) return false;
-  if (options.confirm !== false && !(await confirmShipmentDateMove_(entry, targetDate))) return false;
-
-  const snap = snapshotLocalState_();
+  scheduleRescheduleInFlight_ = true;
+  let snap = null;
+  let loadingUi = null;
   let syncOk = true;
+  let success = false;
   try {
+    if (options.confirm !== false && !(await confirmShipmentDateMove_(entry, targetDate))) return false;
+    snap = snapshotLocalState_();
+    loadingUi = beginRescheduleLoading_(entry, targetDate);
     setBusy(true, "移動中...");
     if (entry.shipmentType === "recurring") {
       const exception = buildRecurringMoveException_(entry, targetDate);
       saveRecurringException(exception);
       if (isApiEnabled()) {
-        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, "");
+        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, "", {
+          refreshOnError: false,
+          showErrorToast: false,
+        });
       }
     } else {
       const movedEntry = {
@@ -3234,31 +3333,39 @@ async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
         updatedBy: currentUpdatedBy(),
       };
       saveSpotShipment(movedEntry);
-      if (isApiEnabled()) syncOk = await syncSave("saveShipment", flattenSpotShipmentForApi_(movedEntry), snap, "");
+      if (isApiEnabled()) {
+        syncOk = await syncSave("saveShipment", flattenSpotShipmentForApi_(movedEntry), snap, "", {
+          refreshOnError: false,
+          showErrorToast: false,
+        });
+      }
     }
-
-    if (!syncOk) {
+    success = syncOk;
+  } catch (err) {
+    console.error("[sakaki] shipment reschedule failed", err);
+    if (snap) restoreLocalState_(snap);
+  } finally {
+    try {
+      await endRescheduleLoading_(loadingUi);
+    } finally {
+      clearRescheduleLoadingUi_(loadingUi);
       setBusy(false, "");
-      refreshViewFast();
-      setStatus("移動に失敗しました。再度お試しください。", "err");
-      return false;
+      scheduleRescheduleInFlight_ = false;
     }
+  }
 
-    setStatus("移動しました", "ok");
-    showToast("出荷予定を移動しました", "success");
-    setBusy(false, "");
+  if (success) {
+    setStatus("予定を移動しました", "ok");
+    showToast("予定を移動しました", "success");
     showScheduleMovedDate_(targetDate);
     return true;
-  } catch (err) {
-    restoreLocalState_(snap);
-    setBusy(false, "");
-    refreshViewFast();
-    setStatus(`移動に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
-    showToast("移動に失敗しました", "error");
-    return false;
-  } finally {
-    setBusy(false, "");
   }
+
+  if (snap) restoreLocalState_(snap);
+  setStatus("予定を移動できませんでした。もう一度お試しください。", "err");
+  showToast("予定を移動できませんでした。もう一度お試しください。", "error");
+  refreshViewFast();
+  return false;
 }
 
 function showScheduleMovedDate_(dateKey) {
@@ -3285,7 +3392,7 @@ function showScheduleMovedDate_(dateKey) {
   });
 }
 
-function syncSave(action, payload, snap, label) {
+function syncSave(action, payload, snap, label, options = {}) {
   if (!isApiEnabled()) return Promise.resolve(true);
   return (async () => {
     try {
@@ -3295,8 +3402,10 @@ function syncSave(action, payload, snap, label) {
     } catch (err) {
       console.error("[sakaki] sync save failed", { action, payload, err });
       restoreLocalState_(snap);
-      refreshViewFast();
-      showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+      if (options.refreshOnError !== false) refreshViewFast();
+      if (options.showErrorToast !== false) {
+        showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
       return false;
     }
   })();
