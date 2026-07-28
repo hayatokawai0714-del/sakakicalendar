@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="榊カレンダー" />
-    <link rel="stylesheet" href="./style.css?v=2026-07-16-03" />
+    <link rel="stylesheet" href="./style.css?v=2026-07-28-01" />
   </head>
   <body>
     <main class="container">
@@ -23,7 +23,10 @@
         <span class="app-brand__product">出荷カレンダー</span>
       </div>
       <nav class="header-actions" aria-label="アプリ操作">
-        <button type="button" class="admin-btn header-action" data-panel="sync" id="adminSyncBtn"><span class="header-action__icon" aria-hidden="true">↻</span><span>同期</span></button>
+        <button type="button" class="admin-btn header-action sync-state-control" data-panel="sync" id="adminSyncBtn" aria-label="同期設定を開く">
+          <span class="sync-state-dot" id="syncStateDot" aria-hidden="true"></span>
+          <span id="syncStateLabel">端末保存</span>
+        </button>
         <details class="settings-menu">
           <summary class="header-action"><span class="header-action__icon" aria-hidden="true">⚙</span><span>設定</span></summary>
           <div class="settings-menu__panel">
@@ -366,6 +369,11 @@
     </div>
   </div>
 
+  <div id="entryStorageNotice" class="storage-notice hidden" role="note">
+    <span>現在はこの端末だけに保存されます</span>
+    <button type="button" id="openSyncSettingsFromEntry" class="text-btn">同期設定を開く</button>
+  </div>
+
   <div class="actions">
     <button type="submit" class="btn">保存する</button>
     <button type="button" id="cancelEditBtn" class="btn secondary">キャンセル</button>
@@ -503,7 +511,7 @@
       </div>
     </div>
 
-    <script src="./app.js?v=2026-07-16-03"></script>
+    <script src="./app.js?v=2026-07-28-01"></script>
   </body>
 </html>
 

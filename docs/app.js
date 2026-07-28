@@ -17,6 +17,7 @@ const STORAGE_KEYS = {
   unreadTrackingInitialized: "sakaki_unread_tracking_initialized_v1",
   ownEntryUpdates: "sakaki_own_entry_updates_v1",
   ownUpdateTrackingInitialized: "sakaki_own_update_tracking_initialized_v1",
+  localSaveNoticeSeen: "sakaki_local_save_notice_seen_v1",
 };
 
 const LAST_DESTINATION_KEY = "sakaki_last_destination_id";
@@ -34,8 +35,8 @@ const QUALITY_LIKE_STANDARDS_FOR_SUMMARY = new Set(["優", "良", "秀"]);
 const CROP_LIKE_STANDARDS_FOR_SUMMARY = new Set(["ヒサカキ", "八丈榊", "シキミ"]);
 
 // Build info (for PWA cache debugging)
-const APP_VERSION = "2026-07-16.3";
-const BUILD_TIME = "2026-07-16 20:16";
+const APP_VERSION = "2026-07-28.1";
+const BUILD_TIME = "2026-07-28 13:00";
 
 const SCHEDULE_LONG_PRESS_MS = 425;
 const SCHEDULE_MOVE_CANCEL_THRESHOLD = 12;
@@ -62,6 +63,7 @@ const state = {
   updatedBy: "",
   seenEntryUpdates: {},
   ownEntryUpdates: {},
+  syncConnectionState: "",
   isBusy: false,
   currentMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   selectedDate: formatDate(new Date()),
@@ -120,7 +122,6 @@ function loadState() {
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
   state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
   state.apiKey = String(localStorage.getItem(STORAGE_KEYS.apiKey) || "").trim();
-  console.log("[sakaki] loaded api url", state.apiUrl);
   state.updatedBy = String(localStorage.getItem(STORAGE_KEYS.updatedBy) || "").trim();
   const seenEntryUpdates = readLS(STORAGE_KEYS.seenEntryUpdates, {});
   state.seenEntryUpdates = seenEntryUpdates && typeof seenEntryUpdates === "object" && !Array.isArray(seenEntryUpdates)
@@ -437,6 +438,7 @@ function bindEvents() {
   document.getElementById("cancelEditBtn").addEventListener("click", resetEntryForm);
   document.getElementById("openEntryFormBtn").addEventListener("click", openNewEntryForm_);
   document.getElementById("closeEntryFormBtn").addEventListener("click", resetEntryForm);
+  document.getElementById("openSyncSettingsFromEntry").addEventListener("click", openSyncSettings_);
 
   document.getElementById("destinationForm").addEventListener("submit", (e) => void submitDestinationForm(e));
   document.getElementById("cancelDestinationEditBtn").addEventListener("click", resetDestinationForm);
@@ -555,7 +557,12 @@ async function bootData() {
   state._autoSyncSucceeded = false;
   state._autoSyncFailed = false;
   updateDebugBar_();
-  console.log("[sakaki] api url exists", Boolean(apiUrl));
+  console.log("[sakaki] sync config loaded", {
+    apiUrlConfigured: Boolean(apiUrl),
+    apiKeyConfigured: Boolean(state.apiKey),
+    apiUrlLength: apiUrl.length,
+    apiKeyLength: String(state.apiKey || "").length,
+  });
 
   try {
     setSyncInputs();
@@ -580,13 +587,14 @@ async function bootData() {
         renderAll();
         state._lastAutoSyncOk = true;
         state._autoSyncSucceeded = true;
+        setSyncConnectionState_("ok");
         updateDebugBar_();
         console.log("[sakaki] auto sync done", { attempt: attempt + 1, entries: state.entries.length, recurring: state.recurringShipments.length });
         setStatus("同期完了", "ok");
         return;
       } catch (e) {
         lastErr = e;
-        console.warn("[sakaki] bootData retry", { attempt: attempt + 1 }, e);
+        console.warn("[sakaki] bootData retry", { attempt: attempt + 1 });
         await sleep_(600 + attempt * 600);
       }
     }
@@ -594,10 +602,10 @@ async function bootData() {
     throw lastErr || new Error("bootData failed");
   } catch (err) {
     state._autoSyncFailed = true;
+    setSyncConnectionState_("error");
     updateDebugBar_();
-    console.error("[sakaki] bootData failed", err);
-    console.error("[sakaki] loadAllDataFromApi failed", err);
-    setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    console.error("[sakaki] bootData failed");
+    setStatus("同期に失敗しました。同期設定または接続状況を確認してください", "err");
     state._lastAutoSyncOk = false;
     updateDebugBar_();
     showToast("同期に失敗しました", "error");
@@ -644,6 +652,10 @@ function isApiEnabled() {
   return Boolean(state.apiUrl && state.apiKey);
 }
 
+function openSyncSettings_() {
+  if (typeof state._openAdminPanel === "function") state._openAdminPanel("sync");
+}
+
 function promptForApiKey_(message) {
   setStatus(message || "同期には共有キーが必要です。", "err");
   showToast("共有キーを入力してください", "info");
@@ -670,6 +682,43 @@ function setSyncInputs() {
   }
   if (keyEl && keyEl.value !== state.apiKey) keyEl.value = state.apiKey;
   if (byEl && byEl.value !== state.updatedBy) byEl.value = state.updatedBy;
+  updateSyncStateUi_();
+  updateEntryStorageNotice_();
+}
+
+function setSyncConnectionState_(value) {
+  state.syncConnectionState = value === "ok" || value === "error" ? value : "";
+  updateSyncStateUi_();
+}
+
+function updateSyncStateUi_() {
+  const control = document.getElementById("adminSyncBtn");
+  const label = document.getElementById("syncStateLabel");
+  if (!control || !label) return;
+
+  let mode = "local";
+  let text = "端末保存";
+  let title = "この端末だけに保存します。同期設定を開く";
+  if (isApiEnabled()) {
+    mode = state.syncConnectionState === "error" ? "error" : state.syncConnectionState === "ok" ? "cloud" : "configured";
+    text = mode === "error" ? "同期エラー" : mode === "cloud" ? "共有データ" : "共有設定あり";
+    title = mode === "error"
+      ? "直近の同期に失敗しました。同期設定を確認する"
+      : mode === "cloud"
+        ? "直近の同期に成功しました。同期設定を開く"
+        : "共有設定があります。接続状態を確認する";
+  }
+
+  control.dataset.syncState = mode;
+  control.setAttribute("aria-label", title);
+  control.title = title;
+  label.textContent = text;
+}
+
+function updateEntryStorageNotice_() {
+  const notice = document.getElementById("entryStorageNotice");
+  if (!notice) return;
+  notice.classList.toggle("hidden", isApiEnabled());
 }
 
 function setStatus(message, kind) {
@@ -684,7 +733,7 @@ function setStatus(message, kind) {
   el.textContent = message;
 }
 
-function showToast(message, type = "info") {
+function showToast(message, type = "info", options = {}) {
   if (!message) return;
   let wrap = document.getElementById("toastWrap");
   if (!wrap) {
@@ -696,16 +745,114 @@ function showToast(message, type = "info") {
 
   const toast = document.createElement("div");
   toast.className = `toast ${type}`.trim();
-  toast.textContent = message;
+  const body = document.createElement("div");
+  body.className = "toast__body";
+  const title = document.createElement("div");
+  title.className = "toast__title";
+  title.textContent = message;
+  body.appendChild(title);
+  if (options.detail) {
+    const detail = document.createElement("div");
+    detail.className = "toast__detail";
+    detail.textContent = String(options.detail);
+    body.appendChild(detail);
+  }
+  toast.appendChild(body);
+  if (options.actionLabel && typeof options.onAction === "function") {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "toast__action";
+    action.textContent = String(options.actionLabel);
+    action.addEventListener("click", () => {
+      options.onAction();
+      toast.remove();
+    });
+    toast.appendChild(action);
+  }
   wrap.appendChild(toast);
 
   requestAnimationFrame(() => toast.classList.add("show"));
 
-  const ttl = type === "error" ? 2600 : 1800;
+  const ttl = options.detail || options.actionLabel ? 5200 : type === "error" ? 3000 : 2000;
   window.setTimeout(() => {
     toast.classList.remove("show");
     window.setTimeout(() => toast.remove(), 200);
   }, ttl);
+}
+
+function beginSaveStatus(operation = "save") {
+  const message = operation === "delete" ? "削除しています…" : operation === "move" ? "移動しています…" : "保存しています…";
+  setStatus(message, "");
+}
+
+function saveResultCopy_(operation, location) {
+  if (operation === "save") {
+    if (location === "cloud") {
+      return {
+        title: "✓ 共有データへ保存しました",
+        detail: "ほかの端末には同期後に反映されます",
+      };
+    }
+    if (location === "local") {
+      return {
+        title: "⚠ この端末だけに保存しました",
+        detail: "ほかの端末には表示されません。同期設定を確認してください",
+      };
+    }
+    return {
+      title: "共有データへ保存できませんでした",
+      detail: "同期設定または接続状況を確認してください",
+    };
+  }
+  const verb = operation === "delete" ? "削除" : operation === "move" ? "移動" : operation === "update" ? "更新" : "保存";
+  if (location === "cloud") {
+    return {
+      title: `✓ 共有データを${verb}しました`,
+      detail: "ほかの端末には同期後に反映されます",
+    };
+  }
+  if (location === "local") {
+    return {
+      title: `⚠ この端末のデータを${verb}しました`,
+      detail: "ほかの端末には表示されません。同期設定を確認してください",
+    };
+  }
+  return {
+    title: `共有データを${verb}できませんでした`,
+    detail: "同期設定または接続状況を確認してください",
+  };
+}
+
+function finishCloudSaveStatus(operation = "save") {
+  const copy = saveResultCopy_(operation, "cloud");
+  setSyncConnectionState_("ok");
+  setStatus(copy.title, "ok");
+  showToast(copy.title, "success", { detail: copy.detail });
+}
+
+function finishLocalSaveStatus(operation = "save") {
+  const copy = saveResultCopy_(operation, "local");
+  setSyncConnectionState_("");
+  setStatus(copy.title, "warn");
+  showToast(copy.title, "warning", {
+    detail: copy.detail,
+    actionLabel: "同期設定を開く",
+    onAction: openSyncSettings_,
+  });
+}
+
+function finishSaveErrorStatus(operation = "save", options = {}) {
+  const copy = saveResultCopy_(operation, "error");
+  const detail = options.localSaved
+    ? "この端末には保存されていますが、ほかの端末には表示されません"
+    : copy.detail;
+  setSyncConnectionState_("error");
+  setStatus(copy.title, "err");
+  showToast(copy.title, "error", {
+    detail,
+    actionLabel: "同期設定を確認",
+    onAction: openSyncSettings_,
+  });
 }
 
 function setButtonLoading(button, loadingText) {
@@ -728,8 +875,11 @@ function resetButtonLoading(button) {
 async function testApiConnectionUi() {
   const btn = document.getElementById("syncTestBtn");
   if (!state.apiUrl) {
-    setStatus("API URLが未設定です（localStorageモード）", "");
-    showToast("API URLが未設定です", "info");
+    setSyncConnectionState_("");
+    setStatus("現在はこの端末だけに保存されます", "warn");
+    showToast("⚠ 現在は端末保存です", "warning", {
+      detail: "API URLと共有キーを設定してください",
+    });
     return;
   }
   if (!state.apiKey) {
@@ -741,10 +891,12 @@ async function testApiConnectionUi() {
     setBusy(true, "接続テスト中…");
     const data = await apiGet("getAll");
     if (!data || typeof data !== "object") throw new Error("不正なレスポンス");
+    setSyncConnectionState_("ok");
     setStatus("接続できました", "ok");
     showToast("接続できました", "success");
   } catch (err) {
-    setStatus(`接続に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    setSyncConnectionState_("error");
+    setStatus("接続に失敗しました。設定または接続状況を確認してください", "err");
     showToast("接続に失敗しました", "error");
   } finally {
     setBusy(false, "");
@@ -774,16 +926,7 @@ function payloadPreview_(payload) {
 }
 
 function formatErrorForUi(actionLabel, err, payload) {
-  const msg = err instanceof Error ? err.message : String(err);
-  const dbg = err && typeof err === "object" && err._debug ? err._debug : null;
-  if (!dbg) return `${actionLabel}: ${msg}`;
-  return [
-    `${actionLabel}: ${msg}`,
-    `action=${dbg.action}`,
-    `status=${dbg.status}`,
-    `error=${msg}`,
-    `payload=${JSON.stringify(dbg.payloadPreview || payloadPreview_(payload))}`,
-  ].join(" / ");
+  return `${actionLabel}。同期設定または接続状況を確認してください`;
 }
 
 function setBusy(isBusy, message) {
@@ -792,6 +935,9 @@ function setBusy(isBusy, message) {
   const syncSubmit = document.querySelector("#syncForm button[type='submit']");
   if (entrySubmit) entrySubmit.disabled = isBusy;
   if (syncSubmit) syncSubmit.disabled = isBusy;
+  document.querySelectorAll(".row-actions button").forEach((button) => {
+    button.disabled = isBusy;
+  });
   if (isBusy) setStatus(message || "読み込み中...", "");
 }
 
@@ -953,8 +1099,6 @@ function saveSyncSettings(e) {
   const apiKey = String(document.getElementById("apiKeyInput").value || "").trim();
   const updatedBy = String(document.getElementById("updatedByInput").value || "").trim();
 
-  console.log("[sakaki] save api url", apiUrl);
-
   state.apiUrl = apiUrl;
   state.apiKey = apiKey;
   state.updatedBy = updatedBy;
@@ -963,7 +1107,7 @@ function saveSyncSettings(e) {
   localStorage.setItem(STORAGE_KEYS.apiKey, apiKey);
   localStorage.setItem(STORAGE_KEYS.updatedBy, updatedBy);
 
-  console.log("[sakaki] localStorage saved api url", localStorage.getItem("sakaki_api_url_v1"));
+  setSyncConnectionState_("");
 
   // Reflect to inputs immediately
   setSyncInputs();
@@ -1021,6 +1165,20 @@ async function apiPostWithRetry_(action, payload, opts) {
   }
   throw lastErr;
 }
+
+function logApiFailure_(action, status, category, redirected = false) {
+  console.warn("[sakaki] API request failed", {
+    action: String(action || ""),
+    status: Number(status || 0),
+    category: String(category || "unknown"),
+    redirected: Boolean(redirected),
+    apiUrlConfigured: Boolean(state.apiUrl),
+    apiKeyConfigured: Boolean(state.apiKey),
+    apiUrlLength: String(state.apiUrl || "").length,
+    apiKeyLength: String(state.apiKey || "").length,
+  });
+}
+
 async function apiRequest_(method, action, url, payload) {
   const opts =
     method === "GET"
@@ -1031,11 +1189,19 @@ async function apiRequest_(method, action, url, payload) {
           body: JSON.stringify({ action, appKey: state.apiKey || "", payload }),
         };
 
-  const res = await fetch(url, opts);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch {
+    logApiFailure_(action, 0, "network");
+    const err = new Error("Network request failed");
+    err._debug = { action, method, status: 0, category: "network" };
+    throw err;
+  }
   const status = res.status;
   const text = await res.text();
 
-  // GAS may return HTML on auth errors; keep raw text for debugging.
+  // GAS may return HTML on auth errors. Never expose the response body to the UI or logs.
   let json = null;
   try {
     json = text ? JSON.parse(text) : null;
@@ -1044,21 +1210,32 @@ async function apiRequest_(method, action, url, payload) {
   }
 
   if (!res.ok) {
-    const msg = json && json.error ? String(json.error) : (text || "").slice(0, 300);
-    const err = new Error(`HTTP ${status}: ${msg}`);
-    err._debug = { action, method, status, url, payloadPreview: payloadPreview_(payload), bodyPreview: (text || "").slice(0, 500) };
+    const category = status === 401 || status === 403 ? "auth" : "http";
+    logApiFailure_(action, status, category, res.redirected);
+    const err = new Error("API request failed");
+    err._debug = { action, method, status, category };
     throw err;
   }
 
   if (json && typeof json === "object" && json.ok === false) {
-    const err = new Error(String(json.error || "API error"));
-    err._debug = { action, method, status, url, payloadPreview: payloadPreview_(payload), bodyPreview: (text || "").slice(0, 500) };
+    const category = /unauthorized|forbidden/i.test(String(json.error || "")) ? "auth" : "api";
+    logApiFailure_(action, status, category, res.redirected);
+    const err = new Error("API rejected request");
+    err._debug = { action, method, status, category };
     throw err;
   }
 
   if (!json || typeof json !== "object") {
+    logApiFailure_(action, status, "response", res.redirected);
     const err = new Error("Non-JSON response from API");
-    err._debug = { action, method, status, url, payloadPreview: payloadPreview_(payload), bodyPreview: (text || "").slice(0, 500) };
+    err._debug = { action, method, status, category: "response" };
+    throw err;
+  }
+
+  if (json.ok !== true) {
+    logApiFailure_(action, status, "response", res.redirected);
+    const err = new Error("Invalid API response");
+    err._debug = { action, method, status, category: "response" };
     throw err;
   }
 
@@ -1187,11 +1364,13 @@ async function loadAllDataFromApi() {
     if (units.length) state.units = units;
 
     saveState();
+    setSyncConnectionState_("ok");
     console.log("[sakaki] loadAllDataFromApi success");
     setStatus("読み込み完了", "ok");
   } catch (err) {
-    console.error("[sakaki] loadAllDataFromApi failed", err);
-    setStatus(`読み込みに失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
+    setSyncConnectionState_("error");
+    console.error("[sakaki] loadAllDataFromApi failed");
+    setStatus("読み込みに失敗しました。同期設定または接続状況を確認してください", "err");
     throw err;
   } finally {
     setBusy(false, "");
@@ -2469,6 +2648,8 @@ function renderEntryList(ul, entries, emptyText) {
 
 async function deleteEntry(entry, forcedRecurringMode = "") {
   const isRecurringShipment = entry && entry.type === "shipment" && entry.shipmentType === "recurring";
+  const cloudMode = isApiEnabled();
+  let snap = null;
   let deleteMode = forcedRecurringMode;
   if (isRecurringShipment) {
     if (!deleteMode) deleteMode = await recurringChoice_("delete");
@@ -2477,17 +2658,22 @@ async function deleteEntry(entry, forcedRecurringMode = "") {
     return;
   }
   try {
-    setBusy(true, "削除中…");
+    beginSaveStatus("delete");
+    setBusy(true, "削除しています…");
 
-    if (isApiEnabled()) {
+    if (cloudMode) {
       // Optimistic UI update: remove locally first, then sync delete to API.
-      const snap = snapshotLocalState_();
+      snap = snapshotLocalState_();
       if (isRecurringShipment) {
         if (deleteMode === "day") {
           const exception = buildRecurringSkipException_(entry);
           saveRecurringException(exception);
           refreshViewFast();
-          syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, "削除しました");
+          const syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap);
+          if (!syncOk) {
+            finishSaveErrorStatus("delete");
+            return;
+          }
         } else {
           state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
           const removedExceptions = removeRecurringExceptionsForRule(entry._ruleId || entry.id);
@@ -2529,13 +2715,16 @@ async function deleteEntry(entry, forcedRecurringMode = "") {
       }
     }
 
-    setStatus("削除しました", "ok");
-    showToast("削除しました", "success");
+    if (cloudMode) finishCloudSaveStatus("delete");
+    else finishLocalSaveStatus("delete");
     resetEntryForm();
     renderAll();
   } catch (err) {
-    setStatus(`削除に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
-    showToast("削除に失敗しました", "error");
+    if (snap) {
+      restoreLocalState_(snap);
+      refreshViewFast();
+    }
+    finishSaveErrorStatus("delete");
   } finally {
     setBusy(false, "");
   }
@@ -3032,6 +3221,19 @@ function openNewEntryForm_() {
   setFormDate(selected);
   document.getElementById("startDate").value = selected;
   setEntryFormOpen_(true);
+  updateEntryStorageNotice_();
+  if (!isApiEnabled()) {
+    try {
+      if (localStorage.getItem(STORAGE_KEYS.localSaveNoticeSeen) !== "1") {
+        localStorage.setItem(STORAGE_KEYS.localSaveNoticeSeen, "1");
+        showToast("⚠ この端末は共有設定がありません", "warning", {
+          detail: "予定はこの端末だけに保存されます",
+          actionLabel: "同期設定を開く",
+          onAction: openSyncSettings_,
+        });
+      }
+    } catch {}
+  }
   scrollEntryFormIntoView_();
 }
 
@@ -3305,6 +3507,7 @@ async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
   if (!entry || entry.type !== "shipment" || state.isBusy || scheduleRescheduleInFlight_) return false;
   const sourceDate = normalizeDateKey(entry.date);
   const targetDate = normalizeDateKey(targetDateValue);
+  const cloudMode = isApiEnabled();
   if (!sourceDate || !targetDate || sourceDate === targetDate) return false;
   scheduleRescheduleInFlight_ = true;
   let snap = null;
@@ -3315,14 +3518,14 @@ async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
     if (options.confirm !== false && !(await confirmShipmentDateMove_(entry, targetDate))) return false;
     snap = snapshotLocalState_();
     loadingUi = beginRescheduleLoading_(entry, targetDate);
-    setBusy(true, "移動中...");
+    beginSaveStatus("move");
+    setBusy(true, "移動しています…");
     if (entry.shipmentType === "recurring") {
       const exception = buildRecurringMoveException_(entry, targetDate);
       saveRecurringException(exception);
-      if (isApiEnabled()) {
-        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, "", {
+      if (cloudMode) {
+        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(exception), snap, {
           refreshOnError: false,
-          showErrorToast: false,
         });
       }
     } else {
@@ -3333,16 +3536,15 @@ async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
         updatedBy: currentUpdatedBy(),
       };
       saveSpotShipment(movedEntry);
-      if (isApiEnabled()) {
-        syncOk = await syncSave("saveShipment", flattenSpotShipmentForApi_(movedEntry), snap, "", {
+      if (cloudMode) {
+        syncOk = await syncSave("saveShipment", flattenSpotShipmentForApi_(movedEntry), snap, {
           refreshOnError: false,
-          showErrorToast: false,
         });
       }
     }
     success = syncOk;
   } catch (err) {
-    console.error("[sakaki] shipment reschedule failed", err);
+    console.error("[sakaki] shipment reschedule failed");
     if (snap) restoreLocalState_(snap);
   } finally {
     try {
@@ -3355,15 +3557,14 @@ async function moveShipmentToDate_(entry, targetDateValue, options = {}) {
   }
 
   if (success) {
-    setStatus("予定を移動しました", "ok");
-    showToast("予定を移動しました", "success");
+    if (cloudMode) finishCloudSaveStatus("move");
+    else finishLocalSaveStatus("move");
     showScheduleMovedDate_(targetDate);
     return true;
   }
 
   if (snap) restoreLocalState_(snap);
-  setStatus("予定を移動できませんでした。もう一度お試しください。", "err");
-  showToast("予定を移動できませんでした。もう一度お試しください。", "error");
+  finishSaveErrorStatus("move");
   refreshViewFast();
   return false;
 }
@@ -3392,38 +3593,36 @@ function showScheduleMovedDate_(dateKey) {
   });
 }
 
-function syncSave(action, payload, snap, label, options = {}) {
+function syncSave(action, payload, snap, options = {}) {
   if (!isApiEnabled()) return Promise.resolve(true);
   return (async () => {
     try {
       await apiPost(action, payload);
-      if (label) showToast(label, "success");
+      setSyncConnectionState_("ok");
       return true;
     } catch (err) {
-      console.error("[sakaki] sync save failed", { action, payload, err });
-      restoreLocalState_(snap);
+      console.error("[sakaki] sync save failed", { action });
+      setSyncConnectionState_("error");
+      if (options.restoreOnError !== false) restoreLocalState_(snap);
       if (options.refreshOnError !== false) refreshViewFast();
-      if (options.showErrorToast !== false) {
-        showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
-      }
       return false;
     }
   })();
 }
 
-function syncDelete(action, id, snap) {
-  if (!isApiEnabled()) return;
-  (async () => {
-    try {
-      await deleteItemFromApi(action, id);
-      showToast("削除しました", "success");
-    } catch (err) {
-      console.error("[sakaki] sync delete failed", { action, id, err });
-      restoreLocalState_(snap);
-      refreshViewFast();
-      showToast(`同期に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
-    }
-  })();
+async function syncDelete(action, id, snap) {
+  if (!isApiEnabled()) return true;
+  try {
+    await deleteItemFromApi(action, id);
+    setSyncConnectionState_("ok");
+    return true;
+  } catch (err) {
+    console.error("[sakaki] sync delete failed", { action });
+    setSyncConnectionState_("error");
+    restoreLocalState_(snap);
+    refreshViewFast();
+    return false;
+  }
 }
 
 async function submitEntryForm(e) {
@@ -3433,10 +3632,16 @@ async function submitEntryForm(e) {
   const submitBtn = e.submitter || document.querySelector("#entryForm button[type='submit']");
   const type = document.getElementById("entryType").value;
   const entryMode = String(document.getElementById("entryMode")?.value || "");
+  const isEditing = Boolean(document.getElementById("entryId").value || document.getElementById("recurringId").value || entryMode);
+  const operation = isEditing ? "update" : "save";
+  const cloudMode = isApiEnabled();
+  let cloudAttempted = false;
+  let localSaved = false;
 
   try {
     setButtonLoading(submitBtn, "保存中...");
-    setBusy(true, "保存中...");
+    beginSaveStatus(operation);
+    setBusy(true, "保存しています…");
 
     if (type === "shipment" && (entryMode === "recurring_override" || entryMode === "recurring_move")) {
       const exception = buildRecurringOverrideExceptionFromForm_();
@@ -3452,22 +3657,27 @@ async function submitEntryForm(e) {
         updatedBy: exception.updatedBy,
       };
 
-      if (isApiEnabled()) {
+      if (cloudMode) {
         const snap = snapshotLocalState_();
         saveRecurringException(exception);
+        localSaved = true;
         refreshViewFast();
-        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(payload), snap, "保存しました");
+        cloudAttempted = true;
+        syncOk = await syncSave("saveRecurringException", flattenRecurringExceptionForApi_(payload), snap, {
+          restoreOnError: false,
+        });
       } else {
         saveRecurringException(exception);
+        localSaved = true;
       }
 
       if (!syncOk) {
-        setStatus("保存に失敗しました。入力内容を確認して再度お試しください。", "err");
+        finishSaveErrorStatus(operation, { localSaved });
         return;
       }
 
-      setStatus("保存しました", "ok");
-      showToast("保存しました", "success");
+      if (cloudMode) finishCloudSaveStatus(operation);
+      else finishLocalSaveStatus(operation);
       resetEntryForm();
       showSavedDate_(savedDate);
       return;
@@ -3499,19 +3709,28 @@ async function submitEntryForm(e) {
           updatedBy: currentUpdatedBy(),
         };
 
-        if (isApiEnabled()) {
+        if (cloudMode) {
           const snap = snapshotLocalState_();
           // Optimistic UI update: reflect immediately, then sync to API (no full reload).
           saveSpotShipment(entry);
+          localSaved = true;
           refreshViewFast();
-          syncSave("saveShipment", flattenSpotShipmentForApi_(entry), snap, "保存しました");
+          cloudAttempted = true;
+          const syncOk = await syncSave("saveShipment", flattenSpotShipmentForApi_(entry), snap, {
+            restoreOnError: false,
+          });
+          if (!syncOk) {
+            finishSaveErrorStatus(operation, { localSaved });
+            return;
+          }
           // loadAllDataFromApi() removed for performance (optimistic update).
         } else {
           saveSpotShipment(entry);
+          localSaved = true;
         }
 
-        setStatus("保存しました", "ok");
-        showToast("保存しました", "success");
+        if (cloudMode) finishCloudSaveStatus(operation);
+        else finishLocalSaveStatus(operation);
         resetEntryForm();
         showSavedDate_(entry.date);
         return;
@@ -3575,11 +3794,13 @@ async function submitEntryForm(e) {
         throw new Error("曜日を1つ以上選択してください");
       }
 
-      if (isApiEnabled()) {
+      if (cloudMode) {
         const snap = snapshotLocalState_();
         // Optimistic UI update: reflect immediately, then sync to API (no full reload).
         saveRecurringShipment(rule);
+        localSaved = true;
         refreshViewFast();
+        cloudAttempted = true;
         const syncOk = await syncSave("saveRecurringShipment", {
           id: rule.id,
           destinationId: rule.destinationId,
@@ -3604,18 +3825,21 @@ async function submitEntryForm(e) {
           referenceItems: JSON.stringify(rule.referenceItems || []),
           updatedAt: rule.updatedAt,
           updatedBy: rule.updatedBy,
-        }, snap, "保存しました");
+        }, snap, {
+          restoreOnError: false,
+        });
         if (!syncOk) {
-          setStatus("保存に失敗しました。入力内容を確認して再度お試しください。", "err");
+          finishSaveErrorStatus(operation, { localSaved });
           return;
         }
         // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
         saveRecurringShipment(rule);
+        localSaved = true;
       }
 
-      setStatus("保存しました", "ok");
-      showToast("保存しました", "success");
+      if (cloudMode) finishCloudSaveStatus(operation);
+      else finishLocalSaveStatus(operation);
       resetEntryForm();
       showSavedDate_(nextRecurringPreviewDates_(rule, 1)[0] || rule.startDate);
       return;
@@ -3634,20 +3858,23 @@ async function submitEntryForm(e) {
       };
       rememberOwnUpdate_(entry);
 
-      if (isApiEnabled()) {
+      if (cloudMode) {
       // Optimistic UI update: reflect immediately, then sync to API (no full reload).
       upsertById(state.entries, entry);
       saveState();
+      localSaved = true;
       refreshViewFast();
+        cloudAttempted = true;
         await apiPost("saveEvent", entry);
         // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
         upsertById(state.entries, entry);
         saveState();
+        localSaved = true;
       }
 
-      setStatus("保存しました", "ok");
-      showToast("保存しました", "success");
+      if (cloudMode) finishCloudSaveStatus(operation);
+      else finishLocalSaveStatus(operation);
       resetEntryForm();
       showSavedDate_(entry.date);
       return;
@@ -3664,25 +3891,32 @@ async function submitEntryForm(e) {
     };
     rememberOwnUpdate_(entry);
 
-    if (isApiEnabled()) {
+    if (cloudMode) {
     // Optimistic UI update: reflect immediately, then sync to API (no full reload).
     upsertById(state.entries, entry);
     saveState();
+    localSaved = true;
     refreshViewFast();
+      cloudAttempted = true;
       await apiPost("saveMemo", entry);
       // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       upsertById(state.entries, entry);
       saveState();
+      localSaved = true;
     }
 
-    setStatus("保存しました", "ok");
-    showToast("保存しました", "success");
+    if (cloudMode) finishCloudSaveStatus(operation);
+    else finishLocalSaveStatus(operation);
     resetEntryForm();
     showSavedDate_(entry.date);
   } catch (err) {
-    setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
-    showToast(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+    if (cloudAttempted) {
+      finishSaveErrorStatus(operation, { localSaved });
+    } else {
+      setStatus(`保存できませんでした: ${err instanceof Error ? err.message : String(err)}`, "err");
+      showToast("入力内容を確認してください", "error");
+    }
   } finally {
     setBusy(false, "");
     resetButtonLoading(submitBtn);
@@ -3701,9 +3935,13 @@ async function submitRoadsideShipmentForm(e) {
   if (state.isBusy) return;
 
   const submitBtn = e.submitter || document.querySelector("#roadsideShipmentForm button[type='submit']");
+  const cloudMode = isApiEnabled();
+  let cloudAttempted = false;
+  let localSaved = false;
   try {
     setButtonLoading(submitBtn, "保存中...");
-    setBusy(true, "保存中...");
+    beginSaveStatus("save");
+    setBusy(true, "保存しています…");
 
     const stationId = requiredValue("roadsideShipmentDestination", "道の駅名");
     const station = ROADSIDE_STATIONS.find((item) => item.id === stationId);
@@ -3731,11 +3969,13 @@ async function submitRoadsideShipmentForm(e) {
       updatedBy: currentUpdatedBy(),
     };
 
-    if (isApiEnabled()) {
+    if (cloudMode) {
       const snap = snapshotLocalState_();
       saveSpotShipment(entry);
+      localSaved = true;
       refreshViewFast();
-      syncSave("saveShipment", {
+      cloudAttempted = true;
+      const syncOk = await syncSave("saveShipment", {
         id: entry.id,
         shipmentType: entry.shipmentType,
         date: entry.date,
@@ -3751,19 +3991,30 @@ async function submitRoadsideShipmentForm(e) {
         recurrenceRuleId: "",
         updatedAt: entry.updatedAt,
         updatedBy: entry.updatedBy,
-      }, snap, "保存しました");
+      }, snap, {
+        restoreOnError: false,
+      });
+      if (!syncOk) {
+        finishSaveErrorStatus("save", { localSaved });
+        return;
+      }
     } else {
       saveSpotShipment(entry);
+      localSaved = true;
     }
 
-    setStatus("保存しました", "ok");
-    showToast("保存しました", "success");
+    if (cloudMode) finishCloudSaveStatus("save");
+    else finishLocalSaveStatus("save");
     resetRoadsideShipmentForm_();
     showSavedDate_(entry.date);
     if (typeof state._closeAdminPanels === "function") state._closeAdminPanels();
   } catch (err) {
-    setStatus(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "err");
-    showToast(`保存に失敗しました: ${err instanceof Error ? err.message : String(err)}`, "error");
+    if (cloudAttempted) {
+      finishSaveErrorStatus("save", { localSaved });
+    } else {
+      setStatus(`保存できませんでした: ${err instanceof Error ? err.message : String(err)}`, "err");
+      showToast("入力内容を確認してください", "error");
+    }
   } finally {
     setBusy(false, "");
     resetButtonLoading(submitBtn);
@@ -3960,7 +4211,11 @@ async function submitDestinationForm(e) {
   e.preventDefault();
   if (state.isBusy) return;
 
-  const id = document.getElementById("destinationId").value || createId();
+  const existingId = document.getElementById("destinationId").value;
+  const id = existingId || createId();
+  const operation = existingId ? "update" : "save";
+  const cloudMode = isApiEnabled();
+  let localSaved = false;
   const dest = {
     id,
     name: requiredValue("destinationName", "出荷先名"),
@@ -3984,11 +4239,13 @@ async function submitDestinationForm(e) {
   };
 
   try {
-    setBusy(true, "保存中...");
-    if (isApiEnabled()) {
+    beginSaveStatus(operation);
+    setBusy(true, "保存しています…");
+    if (cloudMode) {
     // Optimistic UI update: reflect immediately, then sync to API (no full reload).
     upsertById(state.destinations, dest);
     saveState();
+    localSaved = true;
     fillMasterSelects();
     renderDestinationList();
       await saveDestinationToApi(dest);
@@ -3996,14 +4253,16 @@ async function submitDestinationForm(e) {
     } else {
       upsertById(state.destinations, dest);
       saveState();
+      localSaved = true;
     }
-    setStatus("保存しました", "ok");
-    showToast("保存しました", "success");
+    if (cloudMode) finishCloudSaveStatus(operation);
+    else finishLocalSaveStatus(operation);
     resetDestinationForm();
     fillMasterSelects();
     renderDestinationList();
   } catch (err) {
-    setStatus(formatErrorForUi("出荷先の保存に失敗しました", err, dest), "err");
+    if (cloudMode) finishSaveErrorStatus(operation, { localSaved });
+    else setStatus(formatErrorForUi("出荷先を保存できませんでした", err, dest), "err");
   } finally {
     setBusy(false, "");
   }
@@ -4115,11 +4374,14 @@ function renderDestinationList() {
 
 async function deleteDestination(d) {
   if (!confirm("削除しますか？")) return;
+  const cloudMode = isApiEnabled();
+  let snap = null;
   try {
-    setBusy(true, "削除中…");
-    if (isApiEnabled()) {
+    beginSaveStatus("delete");
+    setBusy(true, "削除しています…");
+    if (cloudMode) {
       // Optimistic UI update: remove locally first, then sync delete to API.
-      const snap = snapshotLocalState_();
+      snap = snapshotLocalState_();
       state.destinations = state.destinations.filter((x) => x.id !== d.id);
       saveState();
       fillMasterSelects();
@@ -4130,13 +4392,13 @@ async function deleteDestination(d) {
       state.destinations = state.destinations.filter((x) => x.id !== d.id);
       saveState();
     }
-    setStatus("削除しました", "ok");
-    showToast("削除しました", "success");
+    if (cloudMode) finishCloudSaveStatus("delete");
+    else finishLocalSaveStatus("delete");
     fillMasterSelects();
     renderDestinationList();
   } catch (err) {
-    setStatus(formatErrorForUi("出荷先の削除に失敗しました", err, { id: d && d.id }), "err");
-    showToast("削除に失敗しました", "error");
+    if (snap) restoreLocalState_(snap);
+    finishSaveErrorStatus("delete");
   } finally {
     setBusy(false, "");
   }
@@ -4641,7 +4903,7 @@ function requestBackgroundSync_(reason) {
       renderAll();
       console.log("[sakaki] auto sync ok", reason || "");
     } catch (e) {
-      console.warn("[sakaki] auto sync failed", reason || "", e);
+      console.warn("[sakaki] auto sync failed", reason || "");
     }
   })();
 }
