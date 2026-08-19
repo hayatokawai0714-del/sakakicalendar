@@ -392,7 +392,17 @@ function getShipmentActualStatuses_() {
 }
 
 function getSalesDashboardData_() {
-  return { actuals: getSheetData_(SHEET_NAMES.shipment_actuals) };
+  return {
+    actuals: getSheetData_(SHEET_NAMES.shipment_actuals),
+    monthlySettlements: getSheetData_(SHEET_NAMES.monthly_settlements),
+    settlementTypes: getSheetData_(SHEET_NAMES.destinations).map((destination) => {
+      const rawType = String(destination.settlementType || "").trim();
+      return {
+        customerId: String(destination.id || ""),
+        settlementType: ["", "direct", "monthly_statement", "consignment"].indexOf(rawType) >= 0 ? rawType : "",
+      };
+    }),
+  };
 }
 
 function getMonthlySettlements_() {

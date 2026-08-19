@@ -141,6 +141,7 @@
             <option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
           </select></label>
         </div>
+        <p id="salesDashboardSettlementStatus" class="sales-settlement-status muted"></p>
         <div id="salesSummaryCards" class="sales-summary-cards"></div>
         <div class="sales-view-tabs" role="tablist" aria-label="売上内訳">
           <button type="button" class="sales-view-btn is-active" data-sales-view="overall">全体</button>
@@ -150,7 +151,8 @@
         <div id="salesBreakdown" class="sales-breakdown"></div>
         <h3 class="sales-subtitle">月間推移</h3>
         <div id="salesTrend" class="sales-trend"></div>
-        <h3 class="sales-subtitle">出荷実績</h3>
+        <p class="muted sales-trend-note">＊は出荷履歴があり、月次精算が未登録の月です。</p>
+        <h3 class="sales-subtitle">売上確定一覧</h3>
         <div id="salesActualList" class="sales-actual-list"></div>
       </section>
       <section class="card monthly-settlement-dashboard hidden" id="monthlySettlementSection" aria-labelledby="monthlySettlementTitle">

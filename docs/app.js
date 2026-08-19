@@ -64,6 +64,7 @@ const state = {
   isAdmin: false,
   adminActuals: [],
   monthlySettlements: [],
+  adminSettlementTypes: [],
   monthlySettlementYear: new Date().getFullYear(),
   monthlySettlementMonth: new Date().getMonth() + 1,
   monthlySettlementCustomerId: "",
@@ -143,6 +144,7 @@ function loadState() {
   state.isAdmin = false;
   state.adminActuals = [];
   state.monthlySettlements = [];
+  state.adminSettlementTypes = [];
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
   state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
@@ -1545,12 +1547,21 @@ async function connectAdmin_(keyOverride, silent = false) {
     const response = await adminApiPost("getSalesDashboardData", {}, key);
     if (requestId !== state.adminAuthRequestId) return false;
     const actuals = Array.isArray(response?.result?.actuals) ? response.result.actuals : [];
-    const monthlySettlements = await loadMonthlySettlements_(key);
+    const monthlySettlements = Array.isArray(response?.result?.monthlySettlements)
+      ? response.result.monthlySettlements.map((record) => normalizeMonthlySettlement_(record))
+      : await loadMonthlySettlements_(key);
+    const settlementTypes = Array.isArray(response?.result?.settlementTypes) ? response.result.settlementTypes : [];
     if (requestId !== state.adminAuthRequestId) return false;
     state.adminKey = key;
     state.isAdmin = true;
     state.adminActuals = actuals.map((actual) => normalizeShipmentActual_(actual));
     state.monthlySettlements = monthlySettlements;
+    state.adminSettlementTypes = settlementTypes.map((item) => ({
+      customerId: String(item.customerId || ""),
+      settlementType: ["direct", "monthly_statement", "consignment"].includes(String(item.settlementType || ""))
+        ? String(item.settlementType)
+        : "",
+    })).filter((item) => item.customerId);
     localStorage.setItem(STORAGE_KEYS.adminKey, key);
     const status = document.getElementById("adminAuthStatus");
     if (status) {
@@ -1563,6 +1574,8 @@ async function connectAdmin_(keyOverride, silent = false) {
   } catch (err) {
     state.isAdmin = false;
     state.adminActuals = [];
+    state.monthlySettlements = [];
+    state.adminSettlementTypes = [];
     const status = document.getElementById("adminAuthStatus");
     if (status) {
       status.textContent = err?._debug?.category === "auth"
@@ -1584,12 +1597,23 @@ async function refreshAdminSales_() {
     const response = await adminApiPost("getSalesDashboardData", {});
     if (!state.isAdmin || !state.adminKey) return;
     const actuals = Array.isArray(response?.result?.actuals) ? response.result.actuals : [];
-    await loadMonthlySettlements_();
+    const monthlySettlements = Array.isArray(response?.result?.monthlySettlements)
+      ? response.result.monthlySettlements.map((record) => normalizeMonthlySettlement_(record))
+      : await loadMonthlySettlements_();
+    const settlementTypes = Array.isArray(response?.result?.settlementTypes) ? response.result.settlementTypes : [];
     state.adminActuals = actuals.map((actual) => normalizeShipmentActual_(actual));
+    state.monthlySettlements = monthlySettlements;
+    state.adminSettlementTypes = settlementTypes.map((item) => ({
+      customerId: String(item.customerId || ""),
+      settlementType: ["direct", "monthly_statement", "consignment"].includes(String(item.settlementType || ""))
+        ? String(item.settlementType)
+        : "",
+    })).filter((item) => item.customerId);
     renderSalesDashboard_();
   } catch {
     state.adminActuals = [];
     state.monthlySettlements = [];
+    state.adminSettlementTypes = [];
     renderSalesDashboard_();
     const status = document.getElementById("adminAuthStatus");
     if (status) {
@@ -1606,6 +1630,7 @@ function adminLogout_() {
   state.isAdmin = false;
   state.adminActuals = [];
   state.monthlySettlements = [];
+  state.adminSettlementTypes = [];
   const input = document.getElementById("adminKeyInput");
   if (input) input.value = "";
   const status = document.getElementById("adminAuthStatus");
@@ -1960,12 +1985,47 @@ async function voidMonthlySettlement_() {
 }
 
 function salesDateKey_(actual) {
-  return normalizeDateKey(actual && actual.shipmentDate || "");
+  return normalizeDateKey(actual && (actual.shipmentDate || actual.dateKey) || "");
 }
 
 function activeAdminActuals_() {
   return state.adminActuals.filter((actual) => String(actual.status || "active") !== "voided"
     && actual.voided !== true && String(actual.voided || "").toLowerCase() !== "true");
+}
+
+function isMonthlySettlementType_(value) {
+  return ["monthly_statement", "consignment"].includes(normalizeSettlementType_(value));
+}
+
+function adminSettlementTypeForCustomer_(customerId) {
+  const id = String(customerId || "");
+  const adminType = state.adminSettlementTypes.find((item) => String(item.customerId || "") === id);
+  if (adminType) return normalizeSettlementType_(adminType.settlementType);
+  const destination = state.destinations.find((item) => String(item.id || "") === id);
+  return normalizeSettlementType_(destination && destination.settlementType);
+}
+
+function monthlySettlementPeriodKey_(year, month) {
+  return `${Number(year)}-${String(Number(month)).padStart(2, "0")}`;
+}
+
+function activeAdminMonthlySettlements_() {
+  const latest = new Map();
+  (Array.isArray(state.monthlySettlements) ? state.monthlySettlements : [])
+    .filter((record) => !record.voided && isMonthlySettlementType_(record.settlementType))
+    .forEach((record) => {
+      const key = `${String(record.customerId || "")}\u0000${monthlySettlementPeriodKey_(record.targetYear, record.targetMonth)}`;
+      const existing = latest.get(key);
+      if (!existing || String(record.updatedAt || "") >= String(existing.updatedAt || "")) latest.set(key, record);
+    });
+  return Array.from(latest.values());
+}
+
+function monthlySettlementForPeriod_(customerId, year, month) {
+  const key = `${String(customerId || "")}\u0000${monthlySettlementPeriodKey_(year, month)}`;
+  return activeAdminMonthlySettlements_().find((record) =>
+    `${String(record.customerId || "")}\u0000${monthlySettlementPeriodKey_(record.targetYear, record.targetMonth)}` === key
+  ) || null;
 }
 
 function salesAmount_(value) {
@@ -1977,23 +2037,115 @@ function formatSalesYen_(value) {
   return `¥${salesAmount_(value).toLocaleString("ja-JP")}`;
 }
 
-function aggregateSales_(actuals) {
-  return (Array.isArray(actuals) ? actuals : []).reduce((sum, actual) => ({
-    grossSales: sum.grossSales + salesAmount_(actual.grossSales),
-    freightCost: sum.freightCost + salesAmount_(actual.freightCost),
-    commissionCost: sum.commissionCost + salesAmount_(actual.commissionCost),
-    netSales: sum.netSales + salesAmount_(actual.netSales),
-  }), { grossSales: 0, freightCost: 0, commissionCost: 0, netSales: 0 });
+function salesRecordFromActual_(actual) {
+  return {
+    id: `actual:${actual.id}`,
+    sourceType: "direct",
+    sourceLabel: "出荷実績",
+    dateKey: salesDateKey_(actual),
+    customerId: String(actual.customerId || ""),
+    customerNameSnapshot: String(actual.customerNameSnapshot || "未設定"),
+    grossSales: actual.grossSales,
+    freightCost: actual.freightCost,
+    commissionCost: actual.commissionCost,
+    otherDeductions: 0,
+    netSales: actual.netSales,
+    lineItems: Array.isArray(actual.lineItems) ? actual.lineItems : [],
+  };
 }
 
-function getSalesPeriodActuals_() {
-  const year = Number(state.salesYear);
-  const month = Number(state.salesMonth);
-  return activeAdminActuals_().filter((actual) => {
+function salesRecordFromMonthlySettlement_(settlement) {
+  const sourceType = normalizeSettlementType_(settlement.settlementType);
+  const isConsignment = sourceType === "consignment";
+  return {
+    id: `settlement:${settlement.id}`,
+    sourceType,
+    sourceLabel: isConsignment ? "委託精算" : "月次精算",
+    dateKey: `${Number(settlement.targetYear)}-${String(Number(settlement.targetMonth)).padStart(2, "0")}-01`,
+    periodLabel: `${Number(settlement.targetYear)}年${Number(settlement.targetMonth)}月`,
+    customerId: String(settlement.customerId || ""),
+    customerNameSnapshot: String(settlement.customerNameSnapshot || "未設定"),
+    grossSales: settlement.grossSales,
+    freightCost: settlement.freightCost,
+    commissionCost: settlement.commissionCost,
+    otherDeductions: settlement.otherDeductions,
+    netSales: settlement.netSales,
+    lineItems: isConsignment ? (Array.isArray(settlement.consignmentItems) ? settlement.consignmentItems.map((item) => ({
+      standard: String(item.standard || ""),
+      unit: String(item.unit || ""),
+      actualQuantity: termNumberOrZero_(item.soldQuantity),
+      lineSales: termNumberOrZero_(item.salesAmount),
+    })) : []) : [],
+  };
+}
+
+function aggregateSales_(records) {
+  return (Array.isArray(records) ? records : []).reduce((sum, record) => ({
+    grossSales: sum.grossSales + salesAmount_(record.grossSales),
+    freightCost: sum.freightCost + salesAmount_(record.freightCost),
+    commissionCost: sum.commissionCost + salesAmount_(record.commissionCost),
+    otherDeductions: sum.otherDeductions + salesAmount_(record.otherDeductions),
+    netSales: sum.netSales + salesAmount_(record.netSales),
+  }), { grossSales: 0, freightCost: 0, commissionCost: 0, otherDeductions: 0, netSales: 0 });
+}
+
+function getSalesRecords_(year, month, mode = "month") {
+  const targetYear = Number(year);
+  const targetMonth = Number(month);
+  const matchesPeriod = (dateKey) => mode === "year"
+    ? dateKey.slice(0, 4) === String(targetYear)
+    : dateKey.slice(0, 7) === monthlySettlementPeriodKey_(targetYear, targetMonth);
+  const actualRecords = activeAdminActuals_()
+    .filter((actual) => matchesPeriod(salesDateKey_(actual)))
+    .filter((actual) => {
+      const settlementType = adminSettlementTypeForCustomer_(actual.customerId);
+      // monthly_statement/consignment are finalized from monthly_settlements.
+      if (isMonthlySettlementType_(settlementType)) return false;
+      // This also protects against a stale/blank destination settlementType when a
+      // monthly settlement snapshot already exists for the same customer and month.
+      const date = salesDateKey_(actual);
+      return !monthlySettlementForPeriod_(actual.customerId, Number(date.slice(0, 4)), Number(date.slice(5, 7)));
+    })
+    .map((actual) => salesRecordFromActual_(actual));
+  const settlementRecords = activeAdminMonthlySettlements_()
+    .filter((settlement) => mode === "year"
+      ? Number(settlement.targetYear) === targetYear
+      : monthlySettlementPeriodKey_(settlement.targetYear, settlement.targetMonth) === monthlySettlementPeriodKey_(targetYear, targetMonth))
+    .map((settlement) => salesRecordFromMonthlySettlement_(settlement));
+  return [...actualRecords, ...settlementRecords];
+}
+
+function getSalesPeriodRecords_() {
+  return getSalesRecords_(state.salesYear, state.salesMonth, state.salesPeriodMode);
+}
+
+function getSalesPeriodUnsettledFor_(year, month, mode = "month") {
+  const targetYear = Number(year);
+  const targetMonth = Number(month);
+  const missing = new Map();
+  activeAdminActuals_().forEach((actual) => {
     const date = salesDateKey_(actual);
-    if (state.salesPeriodMode === "year") return date.slice(0, 4) === String(year);
-    return date.slice(0, 7) === `${year}-${String(month).padStart(2, "0")}`;
+    const actualYear = Number(date.slice(0, 4));
+    const actualMonth = Number(date.slice(5, 7));
+    if (!actualYear || !actualMonth) return;
+    const inPeriod = mode === "year"
+      ? actualYear === targetYear
+      : monthlySettlementPeriodKey_(actualYear, actualMonth) === monthlySettlementPeriodKey_(targetYear, targetMonth);
+    if (!inPeriod || !isMonthlySettlementType_(adminSettlementTypeForCustomer_(actual.customerId))) return;
+    if (monthlySettlementForPeriod_(actual.customerId, actualYear, actualMonth)) return;
+    const key = `${String(actual.customerId || "")}\u0000${monthlySettlementPeriodKey_(actualYear, actualMonth)}`;
+    missing.set(key, {
+      customerId: String(actual.customerId || ""),
+      customerNameSnapshot: String(actual.customerNameSnapshot || "未設定"),
+      settlementType: adminSettlementTypeForCustomer_(actual.customerId),
+      periodLabel: `${actualYear}年${actualMonth}月`,
+    });
   });
+  return Array.from(missing.values());
+}
+
+function getSalesPeriodUnsettled_() {
+  return getSalesPeriodUnsettledFor_(state.salesYear, state.salesMonth, state.salesPeriodMode);
 }
 
 function salesBreakdownRows_(actuals, mode) {
@@ -2025,15 +2177,17 @@ function renderSalesDashboard_() {
   if (!section) return;
   section.classList.toggle("hidden", !state.isAdmin);
   if (!state.isAdmin) {
-    ["salesDashboardPeriodLabel", "salesSummaryCards", "salesBreakdown", "salesTrend", "salesActualList"].forEach((id) => {
+    ["salesDashboardPeriodLabel", "salesDashboardSettlementStatus", "salesSummaryCards", "salesBreakdown", "salesTrend", "salesActualList"].forEach((id) => {
       const element = document.getElementById(id);
       if (element) element.textContent = "";
     });
     return;
   }
 
-  const years = Array.from(new Set(state.adminActuals.map((actual) => salesDateKey_(actual).slice(0, 4)).filter((year) => /^\d{4}$/.test(year))))
-    .map(Number).sort((a, b) => b - a);
+  const years = Array.from(new Set([
+    ...state.adminActuals.map((actual) => salesDateKey_(actual).slice(0, 4)),
+    ...activeAdminMonthlySettlements_().map((record) => String(record.targetYear || "")),
+  ].filter((year) => /^\d{4}$/.test(year)))).map(Number).sort((a, b) => b - a);
   if (years.length && !years.includes(Number(state.salesYear))) state.salesYear = years[0];
   const yearSelect = document.getElementById("salesYearSelect");
   const monthSelect = document.getElementById("salesMonthSelect");
@@ -2047,32 +2201,38 @@ function renderSalesDashboard_() {
   document.querySelectorAll("[data-sales-mode]").forEach((button) => button.classList.toggle("is-active", button.dataset.salesMode === state.salesPeriodMode));
   document.querySelectorAll("[data-sales-view]").forEach((button) => button.classList.toggle("is-active", button.dataset.salesView === state.salesView));
 
-  const actuals = getSalesPeriodActuals_();
-  const totals = aggregateSales_(actuals);
+  const records = getSalesPeriodRecords_();
+  const totals = aggregateSales_(records);
+  const unsettled = getSalesPeriodUnsettled_();
   const periodLabel = state.salesPeriodMode === "year" ? `${state.salesYear}年` : `${state.salesYear}年${state.salesMonth}月`;
   const periodEl = document.getElementById("salesDashboardPeriodLabel");
-  if (periodEl) periodEl.textContent = `${periodLabel}・${actuals.length}件`;
+  if (periodEl) periodEl.textContent = `${periodLabel}・${records.length}件`;
+  const settlementStatus = document.getElementById("salesDashboardSettlementStatus");
+  if (settlementStatus) {
+    settlementStatus.textContent = unsettled.length ? `未精算あり（${unsettled.length}件）` : "精算済み";
+    settlementStatus.className = unsettled.length ? "sales-settlement-status is-unsettled" : "sales-settlement-status is-settled";
+  }
   const summary = document.getElementById("salesSummaryCards");
   summary.innerHTML = [
-    ["売上", totals.grossSales], ["送料", totals.freightCost], ["手数料", totals.commissionCost], ["手取り", totals.netSales],
+    ["売上", totals.grossSales], ["送料", totals.freightCost], ["手数料", totals.commissionCost], ["その他控除", totals.otherDeductions], ["手取り", totals.netSales],
   ].map(([label, value]) => `<div class="sales-summary-card"><span>${label}</span><strong>${formatSalesYen_(value)}</strong></div>`).join("");
-  renderSalesBreakdown_(actuals);
+  renderSalesBreakdown_(records);
   renderSalesTrend_();
-  renderSalesActualList_(actuals);
+  renderSalesActualList_(records);
 }
 
-function renderSalesBreakdown_(actuals) {
+function renderSalesBreakdown_(records) {
   const container = document.getElementById("salesBreakdown");
   if (!container) return;
   container.innerHTML = "";
   if (state.salesView === "overall") {
     const note = document.createElement("p");
     note.className = "muted sales-breakdown-note";
-    note.textContent = `対象の出荷実績 ${actuals.length}件（取消済みは除外）`;
+    note.textContent = `対象の売上確定 ${records.length}件（取消済みは除外）`;
     container.appendChild(note);
     return;
   }
-  const rows = salesBreakdownRows_(actuals, state.salesView);
+  const rows = salesBreakdownRows_(records, state.salesView);
   if (!rows.length) {
     container.innerHTML = `<p class="muted sales-empty">この期間の実績はありません</p>`;
     return;
@@ -2100,42 +2260,43 @@ function renderSalesTrend_() {
   const year = Number(state.salesYear);
   const rows = Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
-    const actuals = activeAdminActuals_().filter((actual) => salesDateKey_(actual).slice(0, 7) === `${year}-${String(month).padStart(2, "0")}`);
-    return { month, amount: aggregateSales_(actuals).grossSales };
+    const records = getSalesRecords_(year, month, "month");
+    const unsettled = getSalesPeriodUnsettledFor_(year, month);
+    return { month, amount: aggregateSales_(records).grossSales, unsettled: unsettled.length > 0 };
   });
   const max = Math.max(...rows.map((row) => row.amount), 0);
   rows.forEach((row) => {
     const item = document.createElement("div");
     item.className = "sales-trend-row";
-    item.innerHTML = `<span>${row.month}月</span><i style="--sales-bar:${max ? Math.round(row.amount / max * 100) : 0}%"></i><strong>${formatSalesYen_(row.amount)}</strong>`;
+    item.innerHTML = `<span>${row.month}月${row.unsettled ? "*" : ""}</span><i style="--sales-bar:${max ? Math.round(row.amount / max * 100) : 0}%"></i><strong>${formatSalesYen_(row.amount)}</strong>`;
     container.appendChild(item);
   });
 }
 
-function renderSalesActualList_(actuals) {
+function renderSalesActualList_(records) {
   const container = document.getElementById("salesActualList");
   if (!container) return;
   container.innerHTML = "";
-  if (!actuals.length) {
-    container.innerHTML = `<p class="muted sales-empty">この期間の出荷実績はありません</p>`;
+  if (!records.length) {
+    container.innerHTML = `<p class="muted sales-empty">この期間の売上確定データはありません</p>`;
     return;
   }
-  actuals.slice().sort((a, b) => salesDateKey_(b).localeCompare(salesDateKey_(a))).forEach((actual) => {
+  records.slice().sort((a, b) => salesDateKey_(b).localeCompare(salesDateKey_(a))).forEach((record) => {
     const item = document.createElement("article");
     item.className = "sales-actual-row";
     const info = document.createElement("div");
     const customer = document.createElement("strong");
-    customer.textContent = String(actual.customerNameSnapshot || "未設定");
-    const lines = actual.lineItems.map((line) => `${line.standard} / ${line.unit} ${line.actualQuantity}${line.unit}`).join("・");
+    customer.textContent = String(record.customerNameSnapshot || "未設定");
+    const lines = record.lineItems.map((line) => `${line.standard} / ${line.unit} ${line.actualQuantity}${line.unit}`).join("・");
     const detail = document.createElement("small");
-    detail.textContent = `${salesDateKey_(actual)}・${lines || "明細なし"}`;
+    detail.textContent = `${record.periodLabel || salesDateKey_(record)}・${record.sourceLabel}・${lines || "内訳なし"}`;
     info.append(customer, detail);
     const amounts = document.createElement("div");
     amounts.className = "sales-actual-amounts";
     const gross = document.createElement("span");
-    gross.textContent = `売上 ${formatSalesYen_(actual.grossSales)}`;
+    gross.textContent = `売上 ${formatSalesYen_(record.grossSales)}`;
     const net = document.createElement("strong");
-    net.textContent = `手取り ${formatSalesYen_(actual.netSales)}`;
+    net.textContent = `手取り ${formatSalesYen_(record.netSales)}`;
     amounts.append(gross, net);
     item.append(info, amounts);
     container.appendChild(item);
