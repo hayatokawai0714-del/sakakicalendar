@@ -2,6 +2,7 @@
 // 1) Set SPREADSHEET_ID
 // 2) Deploy as Web app
 // 3) Use the Web app URL as API_URL in docs/app.js (sync settings)
+// Script Properties required: APP_SECRET, SPREADSHEET_ID, ADMIN_SECRET
 
 function getSpreadsheetId_() {
   const id = String(PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID") || "").trim();
@@ -27,9 +28,21 @@ function getAppSecret_() {
   return String(PropertiesService.getScriptProperties().getProperty("APP_SECRET") || "").trim();
 }
 
+function getAdminSecret_() {
+  return String(PropertiesService.getScriptProperties().getProperty("ADMIN_SECRET") || "").trim();
+}
+
 function requireAppKey_(appKey) {
   const expected = getAppSecret_();
   const actual = String(appKey || "").trim();
+  if (!expected || actual !== expected) {
+    throw new Error("Unauthorized");
+  }
+}
+
+function requireAdminKey_(adminKey) {
+  const expected = getAdminSecret_();
+  const actual = String(adminKey || "").trim();
   if (!expected || actual !== expected) {
     throw new Error("Unauthorized");
   }
@@ -88,9 +101,9 @@ function doGet(e) {
       case "getApplicableShipmentTerm":
         result = getApplicableShipmentTerm_(payload);
         break;
-      case "getShipmentActuals":
-        result = getSheetData_(SHEET_NAMES.shipment_actuals);
-        break;
+      case "getSalesDashboardData":
+        // Dashboard data must not be requested through GET: ADMIN_SECRET must never be sent in a URL.
+        throw new Error("Unsupported request");
 
       // Write actions via GET (workaround for CORS issues with POST fetch)
       case "saveShipment":
@@ -240,6 +253,10 @@ function doPost(e) {
       case "voidShipmentActual":
         out = voidShipmentActual_(payload);
         break;
+      case "getSalesDashboardData":
+        requireAdminKey_(parsed.adminKey || "");
+        out = getSalesDashboardData_();
+        break;
       default:
         throw new Error("Unknown action: " + action);
     }
@@ -255,7 +272,7 @@ function doPost(e) {
 
 function wrapGetResult_(action, data) {
   // Frontend expects these keys for getAll:
-  // { shipments, recurring_shipments, recurring_exceptions, events, memos, destinations, settings_units, shipment_terms, shipment_actuals }
+  // { shipments, recurring_shipments, recurring_exceptions, events, memos, destinations, settings_units, shipment_terms, shipment_actual_statuses }
   if (action === "getAll") return data;
   switch (action) {
     case "getShipments": return { shipments: data };
@@ -268,7 +285,7 @@ function wrapGetResult_(action, data) {
     case "getUnits": return { settings_units: data };
     case "getShipmentTerms": return { shipment_terms: data };
     case "getApplicableShipmentTerm": return { shipment_term: data };
-    case "getShipmentActuals": return { shipment_actuals: data };
+    case "getSalesDashboardData": return data;
     default: return { data };
   }
 }
@@ -285,8 +302,37 @@ function getAllData_() {
     destinations: getSheetData_(SHEET_NAMES.destinations),
     settings_units: getSheetData_(SHEET_NAMES.settings_units),
     shipment_terms: getSheetData_(SHEET_NAMES.shipment_terms),
-    shipment_actuals: getSheetData_(SHEET_NAMES.shipment_actuals),
+    // Normal users may see shipment completion state, but never actual money or price snapshots.
+    shipment_actual_statuses: getShipmentActualStatuses_(),
   };
+}
+
+function getShipmentActualStatuses_() {
+  return getSheetData_(SHEET_NAMES.shipment_actuals).map((actual) => {
+    let lineItems = [];
+    try {
+      lineItems = normalizeActualLineItems_(actual.lineItemsJson || actual.lineItems);
+    } catch (err) {
+      lineItems = [];
+    }
+    lineItems = lineItems.map((line) => ({
+      standard: line.standard,
+      unit: line.unit,
+      actualQuantity: line.actualQuantity,
+    }));
+    return {
+      id: String(actual.id || ""),
+      sourceShipmentId: String(actual.sourceShipmentId || ""),
+      occurrenceDate: normalizeDateKey_(actual.occurrenceDate),
+      shipmentDate: normalizeDateKey_(actual.shipmentDate),
+      status: String(actual.status || "active"),
+      lineItemsJson: JSON.stringify(lineItems),
+    };
+  });
+}
+
+function getSalesDashboardData_() {
+  return { actuals: getSheetData_(SHEET_NAMES.shipment_actuals) };
 }
 
 function getSheetData_(sheetName) {
@@ -469,7 +515,7 @@ function saveShipmentActual_(data) {
     const existing = getSheetData_(SHEET_NAMES.shipment_actuals);
     const sameId = existing.find((actual) => String(actual.id) === normalized.id);
     if (sameId && String(sameId.status || "active") !== "voided") {
-      return { ok: true, duplicate: true, actual: sameId };
+      return { ok: true, duplicate: true, actual: actualStatusPayload_(sameId) };
     }
     const duplicate = existing.some((actual) =>
       String(actual.status || "active") !== "voided"
@@ -477,10 +523,26 @@ function saveShipmentActual_(data) {
     );
     if (duplicate) throw new Error("この出荷は既に出荷済みです");
     saveRow_(SHEET_NAMES.shipment_actuals, normalized);
-    return { created: true, id: normalized.id, actual: normalized };
+    return { created: true, actual: actualStatusPayload_(normalized) };
   } finally {
     lock.releaseLock();
   }
+}
+
+function actualStatusPayload_(actual) {
+  const lineItems = normalizeActualLineItems_(actual.lineItemsJson || actual.lineItems).map((line) => ({
+    standard: line.standard,
+    unit: line.unit,
+    actualQuantity: line.actualQuantity,
+  }));
+  return {
+    id: String(actual.id || ""),
+    sourceShipmentId: String(actual.sourceShipmentId || ""),
+    occurrenceDate: normalizeDateKey_(actual.occurrenceDate),
+    shipmentDate: normalizeDateKey_(actual.shipmentDate),
+    status: String(actual.status || "active"),
+    lineItemsJson: JSON.stringify(lineItems),
+  };
 }
 
 function voidShipmentActual_(data) {
@@ -488,15 +550,16 @@ function voidShipmentActual_(data) {
   if (!id) throw new Error("Missing id");
   const existing = getSheetData_(SHEET_NAMES.shipment_actuals).find((actual) => String(actual.id) === id);
   if (!existing) throw new Error("出荷実績が見つかりません");
-  if (String(existing.status || "active") === "voided") return existing;
+  if (String(existing.status || "active") === "voided") return actualStatusPayload_(existing);
   const now = new Date().toISOString();
-  return saveRow_(SHEET_NAMES.shipment_actuals, {
+  saveRow_(SHEET_NAMES.shipment_actuals, {
     id,
     status: "voided",
     voidedAt: now,
     voidedBy: String(data.voidedBy || "未設定").trim() || "未設定",
     updatedAt: now,
   });
+  return actualStatusPayload_({ ...existing, status: "voided", voidedAt: now, updatedAt: now });
 }
 
 function normalizeActualLineItems_(raw) {
@@ -719,9 +782,5 @@ function parsePayload_(payloadStr) {
     return JSON.parse(decodeURIComponent(payloadStr));
   }
 }
-
-
-
-
 
 

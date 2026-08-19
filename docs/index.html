@@ -121,6 +121,38 @@
         </div>
         <div id="customerYearlySummary" class="customer-yearly-summary"></div>
       </section>
+      <section class="card sales-dashboard hidden" id="salesDashboardSection" aria-labelledby="salesDashboardTitle">
+        <div class="sales-dashboard-head">
+          <div>
+            <h2 id="salesDashboardTitle">売上</h2>
+            <span id="salesDashboardPeriodLabel" class="muted"></span>
+          </div>
+          <span class="admin-mode-badge">管理者</span>
+        </div>
+        <div class="sales-dashboard-controls">
+          <div class="sales-mode-switch" role="tablist" aria-label="売上期間">
+            <button type="button" class="sales-mode-btn is-active" data-sales-mode="month">月</button>
+            <button type="button" class="sales-mode-btn" data-sales-mode="year">年</button>
+          </div>
+          <label>年<select id="salesYearSelect"></select></label>
+          <label>月<select id="salesMonthSelect">
+            <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option>
+            <option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option>
+            <option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select></label>
+        </div>
+        <div id="salesSummaryCards" class="sales-summary-cards"></div>
+        <div class="sales-view-tabs" role="tablist" aria-label="売上内訳">
+          <button type="button" class="sales-view-btn is-active" data-sales-view="overall">全体</button>
+          <button type="button" class="sales-view-btn" data-sales-view="customer">出荷先別</button>
+          <button type="button" class="sales-view-btn" data-sales-view="standard">規格別</button>
+        </div>
+        <div id="salesBreakdown" class="sales-breakdown"></div>
+        <h3 class="sales-subtitle">月間推移</h3>
+        <div id="salesTrend" class="sales-trend"></div>
+        <h3 class="sales-subtitle">出荷実績</h3>
+        <div id="salesActualList" class="sales-actual-list"></div>
+      </section>
       </div>
       <aside class="dashboard-right" aria-label="入力と集計詳細">
       <section class="card dashboard-compact-card compact-monthly-card" aria-label="今月の出荷合計 コンパクト表示">
@@ -400,6 +432,17 @@
                 <input id="apiKeyInput" type="password" autocomplete="off" placeholder="共有キー" />
                 <span class="field-hint">API同期は共有キー保存後だけ実行されます。</span>
               </label>
+              <div class="admin-auth-box">
+                <label>管理者キー
+                  <input id="adminKeyInput" type="password" autocomplete="off" placeholder="管理者キー" />
+                  <span class="field-hint">売上画面の表示に必要です。通常の共有キーとは別に設定します。</span>
+                </label>
+                <div class="admin-auth-actions">
+                  <button type="button" id="adminConnectBtn" class="btn secondary">管理者モードに接続</button>
+                  <button type="button" id="adminLogoutBtn" class="text-btn">ログアウト</button>
+                  <span id="adminAuthStatus" class="admin-auth-status">未接続</span>
+                </div>
+              </div>
               <label>更新者名（updatedBy）
                 <input id="updatedByInput" type="text" placeholder="未設定" />
               </label>

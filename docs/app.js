@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   calendarView: "sakaki_calendar_view_v1",
   apiUrl: "sakaki_api_url_v1",
   apiKey: "sakaki_api_key_v1",
+  adminKey: "sakaki_admin_key_v1",
   updatedBy: "sakaki_updated_by_v1",
   lastSeenUpdatedAt: "sakaki_last_seen_updated_at",
   seenEntryUpdates: "sakaki_seen_entry_updates_v1",
@@ -59,6 +60,14 @@ const state = {
   destinations: [],
   shipmentTerms: [],
   shipmentActuals: [],
+  adminKey: "",
+  isAdmin: false,
+  adminActuals: [],
+  adminAuthRequestId: 0,
+  salesPeriodMode: "month",
+  salesView: "overall",
+  salesYear: new Date().getFullYear(),
+  salesMonth: new Date().getMonth() + 1,
   standards: [],
   units: [],
   apiUrl: "",
@@ -124,6 +133,9 @@ function loadState() {
   state.shipmentTerms = readLS(STORAGE_KEYS.shipmentTerms, []).map((term) => normalizeShipmentTerm_(term));
   // Actual sales records are cloud-only; never restore them from localStorage.
   state.shipmentActuals = [];
+  state.adminKey = String(localStorage.getItem(STORAGE_KEYS.adminKey) || "").trim();
+  state.isAdmin = false;
+  state.adminActuals = [];
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
   state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
@@ -431,6 +443,24 @@ function handleDestinationChange(e) {
 function bindEvents() {
   document.getElementById("syncForm").addEventListener("submit", saveSyncSettings);
   document.getElementById("syncTestBtn").addEventListener("click", () => void testApiConnectionUi());
+  document.getElementById("adminConnectBtn").addEventListener("click", () => void connectAdmin_());
+  document.getElementById("adminLogoutBtn").addEventListener("click", adminLogout_);
+  document.querySelectorAll("[data-sales-mode]").forEach((button) => button.addEventListener("click", () => {
+    state.salesPeriodMode = button.dataset.salesMode === "year" ? "year" : "month";
+    renderSalesDashboard_();
+  }));
+  document.querySelectorAll("[data-sales-view]").forEach((button) => button.addEventListener("click", () => {
+    state.salesView = ["overall", "customer", "standard"].includes(button.dataset.salesView) ? button.dataset.salesView : "overall";
+    renderSalesDashboard_();
+  }));
+  document.getElementById("salesYearSelect").addEventListener("change", (event) => {
+    state.salesYear = Number(event.target.value) || state.salesYear;
+    renderSalesDashboard_();
+  });
+  document.getElementById("salesMonthSelect").addEventListener("change", (event) => {
+    state.salesMonth = Math.min(12, Math.max(1, Number(event.target.value) || state.salesMonth));
+    renderSalesDashboard_();
+  });
 
   document.getElementById("entryType").addEventListener("change", switchEntryTypeFields);
   document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
@@ -601,6 +631,7 @@ async function bootData() {
       try {
         await loadAllDataFromApi();
         renderAll();
+        if (state.adminKey) void connectAdmin_(state.adminKey, true);
         state._lastAutoSyncOk = true;
         state._autoSyncSucceeded = true;
         setSyncConnectionState_("ok");
@@ -647,6 +678,7 @@ function renderAll() {
   renderUnitList();
   fillShipmentTermMasterSelects_();
   renderShipmentTerms();
+  renderSalesDashboard_();
 }
 
 function setFormDate(dateKey) {
@@ -693,12 +725,14 @@ function requireApiKeyForSync_() {
 function setSyncInputs() {
   const apiEl = document.getElementById("apiUrlInput");
   const keyEl = document.getElementById("apiKeyInput");
+  const adminKeyEl = document.getElementById("adminKeyInput");
   const byEl = document.getElementById("updatedByInput");
   if (apiEl) {
     const v = state.apiUrl;
     if (apiEl.value !== v) apiEl.value = v;
   }
   if (keyEl && keyEl.value !== state.apiKey) keyEl.value = state.apiKey;
+  if (adminKeyEl && adminKeyEl.value !== state.adminKey) adminKeyEl.value = state.adminKey;
   if (byEl && byEl.value !== state.updatedBy) byEl.value = state.updatedBy;
   updateSyncStateUi_();
   updateEntryStorageNotice_();
@@ -1164,6 +1198,14 @@ async function apiPost(action, payload) {
   return await apiRequest_("GET", action, url.toString(), payload || {});
 }
 
+async function adminApiPost(action, payload, keyOverride) {
+  requireApiKeyForSync_();
+  const adminKey = String(keyOverride === undefined ? state.adminKey : keyOverride || "").trim();
+  if (!adminKey) throw new Error("Admin key required");
+  // Keep ADMIN_SECRET in the POST body. It must never be placed in the URL or query string.
+  return await apiRequest_("POST", action, state.apiUrl, payload || {}, { adminKey });
+}
+
 
 function sleep_(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -1197,14 +1239,14 @@ function logApiFailure_(action, status, category, redirected = false) {
   });
 }
 
-async function apiRequest_(method, action, url, payload) {
+async function apiRequest_(method, action, url, payload, options = {}) {
   const opts =
     method === "GET"
       ? { method: "GET" }
       : {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, appKey: state.apiKey || "", payload }),
+          body: JSON.stringify({ action, appKey: state.apiKey || "", adminKey: options.adminKey || "", payload }),
         };
 
   let res;
@@ -1273,7 +1315,7 @@ async function loadAllDataFromApi() {
     const destinations = Array.isArray(all.destinations) ? all.destinations : [];
     const settingsUnits = Array.isArray(all.settings_units) ? all.settings_units : [];
     const shipmentTerms = Array.isArray(all.shipment_terms) ? all.shipment_terms : [];
-    const shipmentActuals = Array.isArray(all.shipment_actuals) ? all.shipment_actuals : [];
+    const shipmentActualStatuses = Array.isArray(all.shipment_actual_statuses) ? all.shipment_actual_statuses : [];
 
     state.entries = [
       ...shipments.map((s) => ({
@@ -1372,7 +1414,9 @@ async function loadAllDataFromApi() {
       updatedBy: String(d.updatedBy || "未設定"),
     }));
     state.shipmentTerms = shipmentTerms.map((term) => normalizeShipmentTerm_(term));
-    state.shipmentActuals = shipmentActuals.map((actual) => normalizeShipmentActual_(actual));
+    // The regular sync response contains completion status and quantities only.
+    // Monetary snapshots are fetched separately through the admin-only API.
+    state.shipmentActuals = shipmentActualStatuses.map((actual) => normalizeShipmentActual_(actual));
 
     const specs = settingsUnits
       .filter((u) => String(u.type) === "standard" && String(u.active || "TRUE").toLowerCase() !== "false")
@@ -1444,6 +1488,269 @@ function saveSpotShipment(spot) {
   rememberOwnUpdate_(spot);
   upsertById(state.entries, spot);
   saveState();
+}
+
+async function connectAdmin_(keyOverride, silent = false) {
+  const input = document.getElementById("adminKeyInput");
+  const key = String(keyOverride === undefined ? input?.value || "" : keyOverride).trim();
+  if (!key) {
+    if (!silent) showToast("管理者キーを入力してください", "info");
+    return false;
+  }
+  const button = document.getElementById("adminConnectBtn");
+  const requestId = ++state.adminAuthRequestId;
+  try {
+    setButtonLoading(button, "確認中…");
+    const response = await adminApiPost("getSalesDashboardData", {}, key);
+    if (requestId !== state.adminAuthRequestId) return false;
+    const actuals = Array.isArray(response?.result?.actuals) ? response.result.actuals : [];
+    state.adminKey = key;
+    state.isAdmin = true;
+    state.adminActuals = actuals.map((actual) => normalizeShipmentActual_(actual));
+    localStorage.setItem(STORAGE_KEYS.adminKey, key);
+    const status = document.getElementById("adminAuthStatus");
+    if (status) {
+      status.textContent = "管理者モード接続中";
+      status.className = "admin-auth-status is-connected";
+    }
+    renderAll();
+    if (!silent) showToast("管理者モードに接続しました", "success");
+    return true;
+  } catch (err) {
+    state.isAdmin = false;
+    state.adminActuals = [];
+    const status = document.getElementById("adminAuthStatus");
+    if (status) {
+      status.textContent = err?._debug?.category === "auth"
+        ? "管理者キーを確認してください"
+        : "売上データを取得できませんでした";
+      status.className = "admin-auth-status is-error";
+    }
+    renderSalesDashboard_();
+    if (!silent) showToast(err?._debug?.category === "auth" ? "管理者認証に失敗しました" : "売上データを取得できませんでした", "error");
+    return false;
+  } finally {
+    resetButtonLoading(button);
+  }
+}
+
+async function refreshAdminSales_() {
+  if (!state.isAdmin || !state.adminKey) return;
+  try {
+    const response = await adminApiPost("getSalesDashboardData", {});
+    if (!state.isAdmin || !state.adminKey) return;
+    const actuals = Array.isArray(response?.result?.actuals) ? response.result.actuals : [];
+    state.adminActuals = actuals.map((actual) => normalizeShipmentActual_(actual));
+    renderSalesDashboard_();
+  } catch {
+    state.adminActuals = [];
+    renderSalesDashboard_();
+    const status = document.getElementById("adminAuthStatus");
+    if (status) {
+      status.textContent = "売上データを取得できませんでした";
+      status.className = "admin-auth-status is-error";
+    }
+  }
+}
+
+function adminLogout_() {
+  state.adminAuthRequestId += 1;
+  localStorage.removeItem(STORAGE_KEYS.adminKey);
+  state.adminKey = "";
+  state.isAdmin = false;
+  state.adminActuals = [];
+  const input = document.getElementById("adminKeyInput");
+  if (input) input.value = "";
+  const status = document.getElementById("adminAuthStatus");
+  if (status) {
+    status.textContent = "未接続";
+    status.className = "admin-auth-status";
+  }
+  renderAll();
+  showToast("管理者モードを終了しました", "info");
+}
+
+function salesDateKey_(actual) {
+  return normalizeDateKey(actual && actual.shipmentDate || "");
+}
+
+function activeAdminActuals_() {
+  return state.adminActuals.filter((actual) => String(actual.status || "active") !== "voided"
+    && actual.voided !== true && String(actual.voided || "").toLowerCase() !== "true");
+}
+
+function salesAmount_(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number) : 0;
+}
+
+function formatSalesYen_(value) {
+  return `¥${salesAmount_(value).toLocaleString("ja-JP")}`;
+}
+
+function aggregateSales_(actuals) {
+  return (Array.isArray(actuals) ? actuals : []).reduce((sum, actual) => ({
+    grossSales: sum.grossSales + salesAmount_(actual.grossSales),
+    freightCost: sum.freightCost + salesAmount_(actual.freightCost),
+    commissionCost: sum.commissionCost + salesAmount_(actual.commissionCost),
+    netSales: sum.netSales + salesAmount_(actual.netSales),
+  }), { grossSales: 0, freightCost: 0, commissionCost: 0, netSales: 0 });
+}
+
+function getSalesPeriodActuals_() {
+  const year = Number(state.salesYear);
+  const month = Number(state.salesMonth);
+  return activeAdminActuals_().filter((actual) => {
+    const date = salesDateKey_(actual);
+    if (state.salesPeriodMode === "year") return date.slice(0, 4) === String(year);
+    return date.slice(0, 7) === `${year}-${String(month).padStart(2, "0")}`;
+  });
+}
+
+function salesBreakdownRows_(actuals, mode) {
+  const rows = new Map();
+  const add = (key, label, amount, quantity, netAmount = 0) => {
+    const current = rows.get(key) || { label, amount: 0, netAmount: 0, quantity: 0 };
+    current.amount += salesAmount_(amount);
+    current.netAmount += salesAmount_(netAmount);
+    current.quantity += Number.isFinite(Number(quantity)) ? Number(quantity) : 0;
+    rows.set(key, current);
+  };
+  actuals.forEach((actual) => {
+    if (mode === "customer") {
+      const name = String(actual.customerNameSnapshot || "未設定").trim() || "未設定";
+      add(name, name, actual.grossSales, 0, actual.netSales);
+      return;
+    }
+    (Array.isArray(actual.lineItems) ? actual.lineItems : []).forEach((line) => {
+      const standard = String(line.standard || "未設定").trim() || "未設定";
+      const unit = String(line.unit || "未設定").trim() || "未設定";
+      add(`${standard}\u0000${unit}`, `${standard} / ${unit}`, line.lineSales, line.actualQuantity);
+    });
+  });
+  return Array.from(rows.values()).sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label, "ja"));
+}
+
+function renderSalesDashboard_() {
+  const section = document.getElementById("salesDashboardSection");
+  if (!section) return;
+  section.classList.toggle("hidden", !state.isAdmin);
+  if (!state.isAdmin) {
+    ["salesDashboardPeriodLabel", "salesSummaryCards", "salesBreakdown", "salesTrend", "salesActualList"].forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = "";
+    });
+    return;
+  }
+
+  const years = Array.from(new Set(state.adminActuals.map((actual) => salesDateKey_(actual).slice(0, 4)).filter((year) => /^\d{4}$/.test(year))))
+    .map(Number).sort((a, b) => b - a);
+  if (years.length && !years.includes(Number(state.salesYear))) state.salesYear = years[0];
+  const yearSelect = document.getElementById("salesYearSelect");
+  const monthSelect = document.getElementById("salesMonthSelect");
+  yearSelect.innerHTML = years.length
+    ? years.map((year) => `<option value="${year}">${year}年</option>`).join("")
+    : `<option value="">実績なし</option>`;
+  yearSelect.value = years.length ? String(state.salesYear) : "";
+  yearSelect.disabled = !years.length;
+  monthSelect.value = String(state.salesMonth);
+  monthSelect.disabled = state.salesPeriodMode === "year";
+  document.querySelectorAll("[data-sales-mode]").forEach((button) => button.classList.toggle("is-active", button.dataset.salesMode === state.salesPeriodMode));
+  document.querySelectorAll("[data-sales-view]").forEach((button) => button.classList.toggle("is-active", button.dataset.salesView === state.salesView));
+
+  const actuals = getSalesPeriodActuals_();
+  const totals = aggregateSales_(actuals);
+  const periodLabel = state.salesPeriodMode === "year" ? `${state.salesYear}年` : `${state.salesYear}年${state.salesMonth}月`;
+  const periodEl = document.getElementById("salesDashboardPeriodLabel");
+  if (periodEl) periodEl.textContent = `${periodLabel}・${actuals.length}件`;
+  const summary = document.getElementById("salesSummaryCards");
+  summary.innerHTML = [
+    ["売上", totals.grossSales], ["送料", totals.freightCost], ["手数料", totals.commissionCost], ["手取り", totals.netSales],
+  ].map(([label, value]) => `<div class="sales-summary-card"><span>${label}</span><strong>${formatSalesYen_(value)}</strong></div>`).join("");
+  renderSalesBreakdown_(actuals);
+  renderSalesTrend_();
+  renderSalesActualList_(actuals);
+}
+
+function renderSalesBreakdown_(actuals) {
+  const container = document.getElementById("salesBreakdown");
+  if (!container) return;
+  container.innerHTML = "";
+  if (state.salesView === "overall") {
+    const note = document.createElement("p");
+    note.className = "muted sales-breakdown-note";
+    note.textContent = `対象の出荷実績 ${actuals.length}件（取消済みは除外）`;
+    container.appendChild(note);
+    return;
+  }
+  const rows = salesBreakdownRows_(actuals, state.salesView);
+  if (!rows.length) {
+    container.innerHTML = `<p class="muted sales-empty">この期間の実績はありません</p>`;
+    return;
+  }
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "sales-breakdown-row";
+    const label = document.createElement("span");
+    label.textContent = row.label;
+    const meta = document.createElement("small");
+    meta.textContent = row.quantity ? `${row.quantity.toLocaleString("ja-JP")}数量` : "";
+    const amounts = document.createElement("strong");
+    amounts.textContent = state.salesView === "customer"
+      ? `売上 ${formatSalesYen_(row.amount)} / 手取り ${formatSalesYen_(row.netAmount)}`
+      : formatSalesYen_(row.amount);
+    item.append(label, meta, amounts);
+    container.appendChild(item);
+  });
+}
+
+function renderSalesTrend_() {
+  const container = document.getElementById("salesTrend");
+  if (!container) return;
+  container.innerHTML = "";
+  const year = Number(state.salesYear);
+  const rows = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const actuals = activeAdminActuals_().filter((actual) => salesDateKey_(actual).slice(0, 7) === `${year}-${String(month).padStart(2, "0")}`);
+    return { month, amount: aggregateSales_(actuals).grossSales };
+  });
+  const max = Math.max(...rows.map((row) => row.amount), 0);
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "sales-trend-row";
+    item.innerHTML = `<span>${row.month}月</span><i style="--sales-bar:${max ? Math.round(row.amount / max * 100) : 0}%"></i><strong>${formatSalesYen_(row.amount)}</strong>`;
+    container.appendChild(item);
+  });
+}
+
+function renderSalesActualList_(actuals) {
+  const container = document.getElementById("salesActualList");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!actuals.length) {
+    container.innerHTML = `<p class="muted sales-empty">この期間の出荷実績はありません</p>`;
+    return;
+  }
+  actuals.slice().sort((a, b) => salesDateKey_(b).localeCompare(salesDateKey_(a))).forEach((actual) => {
+    const item = document.createElement("article");
+    item.className = "sales-actual-row";
+    const info = document.createElement("div");
+    const customer = document.createElement("strong");
+    customer.textContent = String(actual.customerNameSnapshot || "未設定");
+    const lines = actual.lineItems.map((line) => `${line.standard} / ${line.unit} ${line.actualQuantity}${line.unit}`).join("・");
+    const detail = document.createElement("small");
+    detail.textContent = `${salesDateKey_(actual)}・${lines || "明細なし"}`;
+    info.append(customer, detail);
+    const amounts = document.createElement("div");
+    amounts.className = "sales-actual-amounts";
+    const gross = document.createElement("span");
+    gross.textContent = `売上 ${formatSalesYen_(actual.grossSales)}`;
+    const net = document.createElement("strong");
+    net.textContent = `手取り ${formatSalesYen_(actual.netSales)}`;
+    amounts.append(gross, net);
+    item.append(info, amounts);
+    container.appendChild(item);
+  });
 }
 async function saveShipmentTermToApi(data) {
   const r = await apiPost("saveShipmentTerm", data);
@@ -4382,6 +4689,7 @@ function normalizeShipmentActual_(actual) {
       commissionType: String(line.commissionType || "none"),
       commissionValue: Number(line.commissionValue || 0),
     })) : [],
+    _hasMoneySnapshot: ["grossSales", "freightCost", "commissionCost", "netSales"].every((key) => Object.prototype.hasOwnProperty.call(value, key)),
   };
 }
 
@@ -4418,7 +4726,8 @@ function shipmentCustomerId_(entry) {
 function findShipmentActual_(entry) {
   const sourceId = shipmentActualSourceId_(entry);
   if (!sourceId) return null;
-  return state.shipmentActuals.find((actual) =>
+  const candidates = state.isAdmin ? [...state.adminActuals, ...state.shipmentActuals] : state.shipmentActuals;
+  return candidates.find((actual) =>
     String(actual.sourceShipmentId || "") === sourceId
     && String(actual.status || "active") !== "voided"
   ) || null;
@@ -4521,6 +4830,7 @@ function openShipmentActualConfirm_(entry) {
     const calculation = document.createElement("div");
     calculation.id = "shipmentActualCalculation";
     calculation.className = "shipment-actual-calculation";
+    if (!state.isAdmin) calculation.classList.add("hidden");
     content.appendChild(calculation);
     content.querySelectorAll(".shipment-actual-quantity").forEach((input) => input.addEventListener("input", renderShipmentActualCalculation_));
     action.classList.remove("hidden");
@@ -4556,6 +4866,7 @@ function appendShipmentActualLineForm_(container, line, index) {
   const price = document.createElement("div");
   price.className = "shipment-actual-line__price";
   price.textContent = `単価 ${formatActualYen_(line.term.unitPrice)} / ${line.unit}`;
+  if (!state.isAdmin) price.classList.add("hidden");
   card.append(heading, label, price);
   container.appendChild(card);
 }
@@ -4620,15 +4931,22 @@ function openShipmentActualDetail_(actual, entry) {
     const row = document.createElement("div");
     const label = document.createElement("span");
     label.textContent = `${line.standard} / ${line.unit} ${line.actualQuantity}${line.unit}`;
-    const sales = document.createElement("strong");
-    sales.textContent = formatActualYen_(line.lineSales);
-    row.append(label, sales);
+    row.appendChild(label);
+    if (state.isAdmin && actual._hasMoneySnapshot) {
+      const sales = document.createElement("strong");
+      sales.textContent = formatActualYen_(line.lineSales);
+      row.appendChild(sales);
+    }
     list.appendChild(row);
   });
-  const totals = document.createElement("div");
-  totals.className = "shipment-actual-calculation";
-  totals.innerHTML = `<div><span>売上</span><strong>${formatActualYen_(actual.grossSales)}</strong></div><div><span>送料</span><strong>${formatActualYen_(actual.freightCost)}</strong></div><div><span>手数料</span><strong>${formatActualYen_(actual.commissionCost)}</strong></div><div class="shipment-actual-net"><span>手取り</span><strong>${formatActualYen_(actual.netSales)}</strong></div>`;
-  content.append(title, date, list, totals);
+  if (state.isAdmin && actual._hasMoneySnapshot) {
+    const totals = document.createElement("div");
+    totals.className = "shipment-actual-calculation";
+    totals.innerHTML = `<div><span>売上</span><strong>${formatActualYen_(actual.grossSales)}</strong></div><div><span>送料</span><strong>${formatActualYen_(actual.freightCost)}</strong></div><div><span>手数料</span><strong>${formatActualYen_(actual.commissionCost)}</strong></div><div class="shipment-actual-net"><span>手取り</span><strong>${formatActualYen_(actual.netSales)}</strong></div>`;
+    content.append(title, date, list, totals);
+  } else {
+    content.append(title, date, list);
+  }
   action.classList.remove("hidden");
   action.textContent = "出荷済みを取り消す";
   action.classList.add("is-cancel-action");
@@ -4676,12 +4994,16 @@ async function handleShipmentActualAction_() {
       state.shipmentActuals = state.shipmentActuals.map((actual) => actual.id === draft.actual.id
         ? { ...actual, status: "voided", voidedAt: new Date().toISOString(), voidedBy: currentUpdatedBy() }
         : actual);
+      state.adminActuals = state.adminActuals.map((actual) => actual.id === draft.actual.id
+        ? { ...actual, status: "voided", voidedAt: new Date().toISOString(), voidedBy: currentUpdatedBy() }
+        : actual);
       requestBackgroundSync_("voidShipmentActual");
       closeShipmentActualSheet_();
       renderAll();
       setSyncConnectionState_("ok");
       setStatus("出荷済みを取り消しました", "ok");
       showToast("出荷済みを取り消しました", "success");
+      void refreshAdminSales_();
       return;
     }
     const totals = readShipmentActualTotals_();
@@ -4704,7 +5026,18 @@ async function handleShipmentActualAction_() {
       lineItems: totals.lines,
     };
     const response = await saveShipmentActualToApi(payload);
-    const saved = response?.data?.actual || response?.result?.actual || payload;
+    const saved = response?.data?.actual || response?.result?.actual || {
+      id: payload.id,
+      sourceShipmentId: payload.sourceShipmentId,
+      occurrenceDate: payload.occurrenceDate,
+      shipmentDate: payload.shipmentDate,
+      status: "active",
+      lineItems: totals.lines.map((line) => ({
+        standard: line.standard,
+        unit: line.unit,
+        actualQuantity: line.actualQuantity,
+      })),
+    };
     upsertById(state.shipmentActuals, normalizeShipmentActual_(saved));
     requestBackgroundSync_("saveShipmentActual");
     closeShipmentActualSheet_();
@@ -4712,6 +5045,7 @@ async function handleShipmentActualAction_() {
     setSyncConnectionState_("ok");
     setStatus("出荷済みにしました", "ok");
     showToast("出荷済みにしました", "success");
+    void refreshAdminSales_();
   } catch {
     finishShipmentActualError_();
   } finally {

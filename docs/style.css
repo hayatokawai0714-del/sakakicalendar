@@ -3183,3 +3183,91 @@ button.monthly-schedule-row:hover { background: #f7faf7; }
   }
 }
 
+.sales-dashboard {
+  order: 6;
+  border: 1px solid #d7e4d9;
+  background: #fbfefb;
+}
+.sales-dashboard-head,
+.sales-dashboard-controls,
+.admin-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sales-dashboard-head { justify-content: space-between; }
+.sales-dashboard-head h2 { margin: 0 0 3px; }
+.admin-mode-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e3f1e5;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 750;
+}
+.sales-dashboard-controls { flex-wrap: wrap; margin: 14px 0; }
+.sales-dashboard-controls label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.sales-dashboard-controls select { min-height: 36px; padding: 5px 8px; font: inherit; color: var(--text); }
+.sales-mode-switch,
+.sales-view-tabs { display: flex; gap: 4px; }
+.sales-mode-btn,
+.sales-view-btn {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sales-mode-btn.is-active,
+.sales-view-btn.is-active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.sales-summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sales-summary-card { min-width: 0; padding: 11px; border-radius: 10px; background: #edf6ee; }
+.sales-summary-card span { display: block; color: var(--muted); font-size: 11px; }
+.sales-summary-card strong { display: block; margin-top: 5px; color: var(--text); font-size: 16px; overflow-wrap: anywhere; }
+.sales-view-tabs { margin-top: 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.sales-breakdown { min-height: 42px; padding: 8px 0; }
+.sales-breakdown-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+.sales-breakdown-row span { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.sales-breakdown-row small { color: var(--muted); }
+.sales-breakdown-row strong { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.sales-breakdown-note { margin: 8px 0; }
+.sales-subtitle { margin: 14px 0 6px; font-size: 13px; }
+.sales-trend { display: grid; gap: 5px; }
+.sales-trend-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 7px; align-items: center; font-size: 11px; }
+.sales-trend-row i { display: block; width: var(--sales-bar); min-width: 2px; height: 8px; border-radius: 999px; background: var(--primary); }
+.sales-trend-row strong { min-width: 78px; text-align: right; font-size: 11px; }
+.sales-actual-list { display: grid; gap: 7px; }
+.sales-actual-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.sales-actual-row > div:first-child { min-width: 0; }
+.sales-actual-row strong,
+.sales-actual-row small { display: block; overflow-wrap: anywhere; }
+.sales-actual-row small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.sales-actual-amounts { flex: 0 0 auto; max-width: 48%; text-align: right; font-size: 11px; overflow-wrap: anywhere; }
+.sales-actual-amounts strong { margin-top: 3px; color: var(--primary); }
+.sales-empty { margin: 9px 0; }
+.admin-auth-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.admin-auth-box > label { display: grid; gap: 5px; }
+.admin-auth-actions { flex-wrap: wrap; margin-top: 8px; }
+.admin-auth-status { color: var(--muted); font-size: 11px; }
+.admin-auth-status.is-connected { color: var(--primary); font-weight: 750; }
+.admin-auth-status.is-error { color: #bd3e3e; font-weight: 700; }
+
+@media (max-width: 600px) {
+  .sales-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sales-dashboard-controls { align-items: stretch; }
+  .sales-mode-switch { width: 100%; }
+  .sales-mode-btn { flex: 1; }
+  .sales-dashboard-controls label { flex: 1; min-width: 92px; }
+  .sales-actual-row { display: grid; gap: 6px; }
+  .sales-actual-amounts { display: flex; justify-content: space-between; gap: 8px; max-width: none; text-align: left; }
+}
+
+@media (min-width: 768px) {
+  .container > .sales-dashboard { order: 6; }
+}
+
