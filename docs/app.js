@@ -129,7 +129,9 @@ function loadState() {
   state.entries = (Array.isArray(storedEntries) ? storedEntries : []).map((entry) => normalizeStoredEntry_(entry));
   state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, []);
   state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
-  state.destinations = readLS(STORAGE_KEYS.destinations, []);
+  const storedDestinations = readLS(STORAGE_KEYS.destinations, []);
+  state.destinations = (Array.isArray(storedDestinations) ? storedDestinations : [])
+    .map((destination) => ({ ...destination, settlementType: normalizeSettlementType_(destination && destination.settlementType) }));
   state.shipmentTerms = readLS(STORAGE_KEYS.shipmentTerms, []).map((term) => normalizeShipmentTerm_(term));
   // Actual sales records are cloud-only; never restore them from localStorage.
   state.shipmentActuals = [];
@@ -483,6 +485,8 @@ function bindEvents() {
   document.getElementById("standardForm").addEventListener("submit", (e) => void addStandard(e));
   document.getElementById("unitForm").addEventListener("submit", (e) => void addUnit(e));
   document.getElementById("shipmentTermsCustomerSelect").addEventListener("change", renderShipmentTerms);
+  document.getElementById("shipmentCustomerSettlementType").addEventListener("change", updateSettlementTypeDescription_);
+  document.getElementById("saveCustomerSettlementBtn").addEventListener("click", () => void submitCustomerSettlementForm_());
   document.getElementById("addShipmentTermBtn").addEventListener("click", () => openShipmentTermForm_());
   document.getElementById("cancelShipmentTermBtn").addEventListener("click", resetShipmentTermForm_);
   document.getElementById("shipmentTermForm").addEventListener("submit", (e) => void submitShipmentTermForm(e));
@@ -1410,6 +1414,7 @@ async function loadAllDataFromApi() {
       note: String(d.note || ""),
       active: String(d.active || "TRUE").toLowerCase() !== "false",
       sortOrder: d.sortOrder === undefined || d.sortOrder === null || String(d.sortOrder).trim() === "" ? null : Number(d.sortOrder),
+      settlementType: normalizeSettlementType_(d.settlementType),
       updatedAt: String(d.updatedAt || new Date().toISOString()),
       updatedBy: String(d.updatedBy || "未設定"),
     }));
@@ -1466,6 +1471,11 @@ async function saveMemoToApi(data) {
 async function saveDestinationToApi(data) {
   const r = await apiPost("saveDestination", data);
   requestBackgroundSync_("saveDestination");
+  return r;
+}
+async function saveCustomerSettlementToApi(data) {
+  const r = await apiPost("saveCustomerSettlement", data);
+  requestBackgroundSync_("saveCustomerSettlement");
   return r;
 }
 async function deleteItemFromApi(action, id) {
@@ -4583,6 +4593,7 @@ async function submitDestinationForm(e) {
       }, 0);
       return max + 1;
     })(),
+    settlementType: normalizeSettlementType_(state.destinations.find((x) => String(x.id) === String(id))?.settlementType),
     updatedAt: new Date().toISOString(),
     updatedBy: currentUpdatedBy(),
   };
@@ -4597,7 +4608,9 @@ async function submitDestinationForm(e) {
     localSaved = true;
     fillMasterSelects();
     renderDestinationList();
-      await saveDestinationToApi(dest);
+      const destinationPayload = { ...dest };
+      delete destinationPayload.settlementType;
+      await saveDestinationToApi(destinationPayload);
       // loadAllDataFromApi() removed for performance (optimistic update).
     } else {
       upsertById(state.destinations, dest);
@@ -5105,6 +5118,7 @@ function renderShipmentTerms() {
   const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
   if (!list || !customerSelect) return;
   fillShipmentTermMasterSelects_();
+  renderCustomerSettlementSetting_();
   list.innerHTML = "";
   const customerId = String(customerSelect.value || "");
   if (!customerId) {
@@ -5149,6 +5163,88 @@ function renderShipmentTerms() {
     li.append(content, actions);
     list.appendChild(li);
   });
+}
+
+function normalizeSettlementType_(value) {
+  const normalized = String(value || "").trim();
+  return ["", "direct", "monthly_statement", "consignment"].includes(normalized) ? normalized : "";
+}
+
+function settlementTypeDescription_(value) {
+  switch (normalizeSettlementType_(value)) {
+    case "direct":
+      return "出荷済みにした時点で単価・送料・手数料から売上を計算します。";
+    case "monthly_statement":
+      return "出荷履歴は記録し、売上金額は月末の明細からまとめて登録する予定です。";
+    case "consignment":
+      return "出荷数量とは別に、実際の販売数量・精算明細から売上を確定する予定です。";
+    default:
+      return "精算方式未設定の場合は、現在の既存処理を維持します。";
+  }
+}
+
+function updateSettlementTypeDescription_() {
+  const select = document.getElementById("shipmentCustomerSettlementType");
+  const description = document.getElementById("settlementTypeDescription");
+  if (!select || !description) return;
+  description.textContent = settlementTypeDescription_(select.value);
+}
+
+function renderCustomerSettlementSetting_() {
+  const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
+  const select = document.getElementById("shipmentCustomerSettlementType");
+  const saveButton = document.getElementById("saveCustomerSettlementBtn");
+  if (!customerSelect || !select) return;
+  const customer = state.destinations.find((destination) => String(destination.id) === String(customerSelect.value || ""));
+  select.value = normalizeSettlementType_(customer?.settlementType);
+  select.disabled = !customer || state.isBusy;
+  if (saveButton) saveButton.disabled = !customer || state.isBusy;
+  updateSettlementTypeDescription_();
+}
+
+async function submitCustomerSettlementForm_() {
+  if (state.isBusy) return;
+  const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
+  const select = document.getElementById("shipmentCustomerSettlementType");
+  const customerId = String(customerSelect?.value || "").trim();
+  if (!customerId) {
+    showToast("取引先を選択してください", "warning");
+    return;
+  }
+  const customer = state.destinations.find((destination) => String(destination.id) === customerId);
+  if (!customer) {
+    showToast("出荷先が見つかりません", "error");
+    return;
+  }
+  const settlementType = normalizeSettlementType_(select?.value);
+  const cloudMode = isApiEnabled();
+  const snap = snapshotLocalState_();
+  const updatedAt = new Date().toISOString();
+  const updatedBy = currentUpdatedBy();
+  const updated = { ...customer, settlementType, updatedAt, updatedBy };
+  try {
+    beginSaveStatus("update");
+    setBusy(true, "精算方式を保存しています…");
+    upsertById(state.destinations, updated);
+    saveState();
+    fillMasterSelects();
+    renderDestinationList();
+    renderShipmentTerms();
+    if (cloudMode) await saveCustomerSettlementToApi({ customerId, settlementType, updatedBy });
+    if (cloudMode) finishCloudSaveStatus("update");
+    else finishLocalSaveStatus("update");
+    showToast("精算方式を保存しました", "success");
+  } catch (err) {
+    restoreLocalState_(snap);
+    fillMasterSelects();
+    renderDestinationList();
+    renderShipmentTerms();
+    if (err && err.message) showToast(err.message, "error");
+    else finishSaveErrorStatus("update");
+  } finally {
+    setBusy(false, "");
+    renderCustomerSettlementSetting_();
+  }
 }
 
 function formatTermYen_(value) {

@@ -2772,6 +2772,13 @@ body { background: #f5f7f4; }
 
 .shipment-terms-sheet { max-height: 90vh; }
 .terms-customer-picker { display: grid; gap: 4px; font-size: 13px; }
+.settlement-settings { display: grid; gap: 7px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #f8fbf9; }
+.settlement-settings__heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.settlement-settings__heading h4 { margin: 0; color: var(--primary-dark); font-size: 14px; }
+.settlement-settings__heading p { margin: 2px 0 0; font-size: 11px; }
+.settlement-settings__heading .btn { flex: 0 0 auto; min-height: 36px; padding-inline: 10px; font-size: 12px; }
+.settlement-settings select { width: 100%; min-height: 40px; }
+.settlement-type-description { min-height: 2.8em; margin: 0; font-size: 12px; line-height: 1.5; }
 .terms-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 6px; }
 .terms-list-head h4 { margin: 0; font-size: 14px; }
 .terms-list-head .btn { flex: 0 0 auto; min-height: 40px; }
@@ -2784,6 +2791,8 @@ body { background: #f5f7f4; }
 .terms-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 
 @media (max-width: 600px) {
+  .settlement-settings__heading { align-items: stretch; flex-direction: column; }
+  .settlement-settings__heading .btn { width: 100%; }
   .terms-list-head { align-items: stretch; flex-direction: column; }
   .terms-list-head .btn { width: 100%; }
   .terms-form-grid { grid-template-columns: 1fr; }

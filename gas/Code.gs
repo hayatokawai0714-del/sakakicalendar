@@ -98,6 +98,9 @@ function doGet(e) {
       case "getShipmentTerms":
         result = getSheetData_(SHEET_NAMES.shipment_terms);
         break;
+      case "getCustomerSettlement":
+        result = getCustomerSettlement_(payload);
+        break;
       case "getApplicableShipmentTerm":
         result = getApplicableShipmentTerm_(payload);
         break;
@@ -159,6 +162,9 @@ function doGet(e) {
         break;
       case "saveShipmentTerm":
         result = saveShipmentTerm_(payload);
+        break;
+      case "saveCustomerSettlement":
+        result = saveCustomerSettlement_(payload);
         break;
       case "saveShipmentActual":
         result = saveShipmentActual_(payload);
@@ -247,6 +253,9 @@ function doPost(e) {
       case "saveShipmentTerm":
         out = saveShipmentTerm_(payload);
         break;
+      case "saveCustomerSettlement":
+        out = saveCustomerSettlement_(payload);
+        break;
       case "saveShipmentActual":
         out = saveShipmentActual_(payload);
         break;
@@ -284,6 +293,7 @@ function wrapGetResult_(action, data) {
     case "getDestinations": return { destinations: data };
     case "getUnits": return { settings_units: data };
     case "getShipmentTerms": return { shipment_terms: data };
+    case "getCustomerSettlement": return { settlement: data };
     case "getApplicableShipmentTerm": return { shipment_term: data };
     case "getSalesDashboardData": return data;
     default: return { data };
@@ -305,6 +315,38 @@ function getAllData_() {
     // Normal users may see shipment completion state, but never actual money or price snapshots.
     shipment_actual_statuses: getShipmentActualStatuses_(),
   };
+}
+
+function normalizeSettlementType_(value) {
+  const normalized = String(value || "").trim();
+  if (["", "direct", "monthly_statement", "consignment"].indexOf(normalized) === -1) {
+    throw new Error("精算方式が不正です");
+  }
+  return normalized;
+}
+
+function getCustomerSettlement_(data) {
+  const customerId = String(data && (data.customerId || data.id) || "").trim();
+  if (!customerId) throw new Error("取引先が未指定です");
+  const customer = getSheetData_(SHEET_NAMES.destinations).find((item) => String(item.id || "") === customerId);
+  if (!customer) throw new Error("出荷先が見つかりません");
+  return {
+    customerId,
+    settlementType: normalizeSettlementType_(customer.settlementType),
+    updatedAt: String(customer.updatedAt || ""),
+  };
+}
+
+function saveCustomerSettlement_(data) {
+  const customerId = String(data && (data.customerId || data.id) || "").trim();
+  if (!customerId) throw new Error("取引先が未指定です");
+  const customer = getSheetData_(SHEET_NAMES.destinations).find((item) => String(item.id || "") === customerId);
+  if (!customer) throw new Error("出荷先が見つかりません");
+  const settlementType = normalizeSettlementType_(data.settlementType);
+  const updatedAt = new Date().toISOString();
+  const updatedBy = String(data.updatedBy || "未設定").trim() || "未設定";
+  saveRow_(SHEET_NAMES.destinations, { id: customerId, settlementType, updatedAt, updatedBy });
+  return { customerId, settlementType, updatedAt, updatedBy };
 }
 
 function getShipmentActualStatuses_() {
@@ -730,7 +772,7 @@ function ensureHeaders_() {
   ensureHeaderRow_(SHEET_NAMES.events, ["id", "date", "time", "title", "memo", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.memos, ["id", "date", "content", "priority", "updatedAt", "updatedBy"]);
   ensureHeaderRow_(SHEET_NAMES.destinations, [
-    "id", "name", "address", "phone", "contactPerson", "email", "note", "active", "sortOrder", "updatedAt", "updatedBy",
+    "id", "name", "address", "phone", "contactPerson", "email", "note", "active", "sortOrder", "settlementType", "updatedAt", "updatedBy",
   ]);
   ensureHeaderRow_(SHEET_NAMES.settings_units, ["id", "type", "name", "sortOrder", "active", "updatedAt"]);
   ensureHeaderRow_(SHEET_NAMES.shipment_terms, [
@@ -782,5 +824,3 @@ function parsePayload_(payloadStr) {
     return JSON.parse(decodeURIComponent(payloadStr));
   }
 }
-
-

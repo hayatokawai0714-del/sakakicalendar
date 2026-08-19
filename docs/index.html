@@ -548,6 +548,22 @@
             <label class="terms-customer-picker">取引先
               <select id="shipmentTermsCustomerSelect"></select>
             </label>
+            <div class="settlement-settings" aria-labelledby="settlementSettingsTitle">
+              <div class="settlement-settings__heading">
+                <div>
+                  <h4 id="settlementSettingsTitle">取引方法</h4>
+                  <p class="muted">精算方式</p>
+                </div>
+                <button type="button" id="saveCustomerSettlementBtn" class="btn secondary">精算方式を保存</button>
+              </div>
+              <select id="shipmentCustomerSettlementType" aria-describedby="settlementTypeDescription">
+                <option value="">未設定（従来どおり）</option>
+                <option value="direct">出荷ごとに自動計算</option>
+                <option value="monthly_statement">月末明細でまとめて精算</option>
+                <option value="consignment">委託販売・月次精算</option>
+              </select>
+              <p id="settlementTypeDescription" class="settlement-type-description muted"></p>
+            </div>
             <div class="terms-list-head">
               <h4>登録済み条件</h4>
               <button type="button" id="addShipmentTermBtn" class="btn">＋ 条件を追加</button>
