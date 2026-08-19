@@ -539,6 +539,21 @@
           </div>
         </section>
       </div>
+      <div class="sheet-backdrop hidden" data-sheet-backdrop="shipmentActual">
+        <section class="sheet shipment-actual-sheet" role="dialog" aria-modal="true" aria-label="出荷実績">
+          <header class="sheet-header">
+            <h3>出荷実績</h3>
+            <button type="button" class="icon-btn" id="closeShipmentActualBtn" aria-label="閉じる">閉じる</button>
+          </header>
+          <div class="sheet-body">
+            <div id="shipmentActualConfirmContent"></div>
+            <div class="actions shipment-actual-actions">
+              <button type="button" id="shipmentActualActionBtn" class="btn">出荷済みにする</button>
+              <button type="button" id="shipmentActualCancelBtn" class="btn secondary">キャンセル</button>
+            </div>
+          </div>
+        </section>
+      </div>
       <section class="debug-bar hidden" id="appDebugBar" aria-label="debug">
         <div class="debug-bar__row"><span id="appVersion"></span><span id="buildTime"></span></div>
         <div class="debug-bar__row muted" id="debugFlags"></div>

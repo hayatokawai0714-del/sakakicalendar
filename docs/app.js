@@ -58,6 +58,7 @@ const state = {
   recurringExceptions: [],
   destinations: [],
   shipmentTerms: [],
+  shipmentActuals: [],
   standards: [],
   units: [],
   apiUrl: "",
@@ -121,6 +122,8 @@ function loadState() {
   state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
   state.shipmentTerms = readLS(STORAGE_KEYS.shipmentTerms, []).map((term) => normalizeShipmentTerm_(term));
+  // Actual sales records are cloud-only; never restore them from localStorage.
+  state.shipmentActuals = [];
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
   state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
@@ -455,6 +458,9 @@ function bindEvents() {
   document.getElementById("shipmentTermForm").addEventListener("submit", (e) => void submitShipmentTermForm(e));
   document.getElementById("shipmentTermFreightType").addEventListener("change", updateShipmentTermValueVisibility_);
   document.getElementById("shipmentTermCommissionType").addEventListener("change", updateShipmentTermValueVisibility_);
+  document.getElementById("closeShipmentActualBtn").addEventListener("click", closeShipmentActualSheet_);
+  document.getElementById("shipmentActualCancelBtn").addEventListener("click", closeShipmentActualSheet_);
+  document.getElementById("shipmentActualActionBtn").addEventListener("click", () => void handleShipmentActualAction_());
   const yearlySummaryYear = document.getElementById("customerYearlySummaryYear");
   const yearlySummaryDestination = document.getElementById("customerYearlySummaryDestination");
   if (yearlySummaryYear) yearlySummaryYear.addEventListener("change", renderCustomerYearlyShipmentSummary);
@@ -947,7 +953,7 @@ function setBusy(isBusy, message) {
   const syncSubmit = document.querySelector("#syncForm button[type='submit']");
   if (entrySubmit) entrySubmit.disabled = isBusy;
   if (syncSubmit) syncSubmit.disabled = isBusy;
-  document.querySelectorAll(".row-actions button").forEach((button) => {
+  document.querySelectorAll(".row-actions button, .shipment-actual-control").forEach((button) => {
     button.disabled = isBusy;
   });
   if (isBusy) setStatus(message || "読み込み中...", "");
@@ -1267,6 +1273,7 @@ async function loadAllDataFromApi() {
     const destinations = Array.isArray(all.destinations) ? all.destinations : [];
     const settingsUnits = Array.isArray(all.settings_units) ? all.settings_units : [];
     const shipmentTerms = Array.isArray(all.shipment_terms) ? all.shipment_terms : [];
+    const shipmentActuals = Array.isArray(all.shipment_actuals) ? all.shipment_actuals : [];
 
     state.entries = [
       ...shipments.map((s) => ({
@@ -1365,6 +1372,7 @@ async function loadAllDataFromApi() {
       updatedBy: String(d.updatedBy || "未設定"),
     }));
     state.shipmentTerms = shipmentTerms.map((term) => normalizeShipmentTerm_(term));
+    state.shipmentActuals = shipmentActuals.map((actual) => normalizeShipmentActual_(actual));
 
     const specs = settingsUnits
       .filter((u) => String(u.type) === "standard" && String(u.active || "TRUE").toLowerCase() !== "false")
@@ -1441,6 +1449,12 @@ async function saveShipmentTermToApi(data) {
   const r = await apiPost("saveShipmentTerm", data);
   requestBackgroundSync_("saveShipmentTerm");
   return r;
+}
+async function saveShipmentActualToApi(data) {
+  return await apiPost("saveShipmentActual", data);
+}
+async function voidShipmentActualToApi(data) {
+  return await apiPost("voidShipmentActual", data);
 }
 
 function flattenSpotShipmentForApi_(entry) {
@@ -2176,6 +2190,10 @@ function createMonthlyScheduleItem_(entry) {
     handle.addEventListener("pointercancel", handleSchedulePointerCancel_);
     handle.addEventListener("lostpointercapture", handleSchedulePointerCaptureLost_);
     item.appendChild(handle);
+    const actualControl = createShipmentActualControl_(entry);
+    actualControl.classList.add("shipment-actual-schedule-control");
+    actualControl.addEventListener("pointerdown", (event) => event.stopPropagation());
+    item.appendChild(actualControl);
   }
   item.addEventListener("click", (event) => {
     if (event.target.closest(".schedule-drag-handle")) return;
@@ -2653,6 +2671,7 @@ function renderEntryList(ul, entries, emptyText) {
       delBtn.addEventListener("click", () => void deleteEntry(entry));
 
       actions.append(editBtn, delBtn);
+      if (entry.type === "shipment") actions.appendChild(createShipmentActualControl_(entry));
       li.append(main, actions);
       li.addEventListener("click", (event) => {
         if (event.target.closest("button")) return;
@@ -3145,6 +3164,7 @@ function snapshotLocalState_() {
     recurringExceptions: state.recurringExceptions.slice(),
     destinations: state.destinations.slice(),
     shipmentTerms: state.shipmentTerms.slice(),
+    shipmentActuals: state.shipmentActuals.slice(),
   };
 }
 
@@ -3155,6 +3175,7 @@ function restoreLocalState_(snap) {
   state.recurringExceptions = Array.isArray(snap.recurringExceptions) ? snap.recurringExceptions : [];
   state.destinations = Array.isArray(snap.destinations) ? snap.destinations : [];
   state.shipmentTerms = Array.isArray(snap.shipmentTerms) ? snap.shipmentTerms : [];
+  state.shipmentActuals = Array.isArray(snap.shipmentActuals) ? snap.shipmentActuals : [];
   saveState();
 }
 
@@ -4322,6 +4343,396 @@ function getApplicableShipmentTerm(customerId, standard, unit, shipmentDate, ter
     .filter((term) => term.standard === String(standard).trim() && term.unit === String(unit).trim())
     .filter((term) => term.effectiveFrom && term.effectiveFrom <= targetDate)
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0] || null;
+}
+
+let shipmentActualDraft_ = null;
+
+function normalizeShipmentActual_(actual) {
+  const value = actual && typeof actual === "object" ? actual : {};
+  let lineItems = value.lineItems;
+  if (!Array.isArray(lineItems) && value.lineItemsJson) {
+    try { lineItems = JSON.parse(String(value.lineItemsJson)); } catch { lineItems = []; }
+  }
+  return {
+    id: String(value.id || ""),
+    sourceShipmentId: String(value.sourceShipmentId || ""),
+    occurrenceDate: normalizeDateKey(value.occurrenceDate || ""),
+    shipmentDate: normalizeDateKey(value.shipmentDate || ""),
+    customerId: String(value.customerId || ""),
+    customerNameSnapshot: String(value.customerNameSnapshot || ""),
+    shippedBy: String(value.shippedBy || "未設定"),
+    shippedAt: String(value.shippedAt || ""),
+    grossSales: roundMoney_(value.grossSales),
+    freightCost: roundMoney_(value.freightCost),
+    commissionCost: roundMoney_(value.commissionCost),
+    netSales: roundMoney_(value.netSales),
+    createdAt: String(value.createdAt || ""),
+    updatedAt: String(value.updatedAt || ""),
+    status: String(value.status || "active"),
+    voidedAt: String(value.voidedAt || ""),
+    voidedBy: String(value.voidedBy || ""),
+    lineItems: Array.isArray(lineItems) ? lineItems.map((line) => ({
+      standard: String(line.standard || ""),
+      unit: String(line.unit || ""),
+      actualQuantity: Number(line.actualQuantity || 0),
+      unitPriceSnapshot: Number(line.unitPriceSnapshot || 0),
+      lineSales: roundMoney_(line.lineSales),
+      freightType: String(line.freightType || "none"),
+      freightValue: Number(line.freightValue || 0),
+      commissionType: String(line.commissionType || "none"),
+      commissionValue: Number(line.commissionValue || 0),
+    })) : [],
+  };
+}
+
+function roundMoney_(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number) : 0;
+}
+
+function formatActualYen_(value) {
+  return `${roundMoney_(value).toLocaleString("ja-JP")}円`;
+}
+
+function shipmentOccurrenceDate_(entry) {
+  if (entry && entry.shipmentType === "recurring") return normalizeDateKey(entry.exceptionDate || entry.date || "");
+  return normalizeDateKey(entry && entry.date || "");
+}
+
+function shipmentActualSourceId_(entry) {
+  if (!entry) return "";
+  if (entry.shipmentType === "recurring") {
+    const recurringId = String(entry.recurringId || entry._ruleId || "").trim();
+    return `recurring:${recurringId}:${shipmentOccurrenceDate_(entry)}`;
+  }
+  return String(entry.id || "").trim();
+}
+
+function shipmentCustomerId_(entry) {
+  const direct = String(entry && entry.destinationId || "").trim();
+  if (direct) return direct;
+  const name = String(entry && (entry.destinationName || entry.destination) || "").trim();
+  return String(state.destinations.find((destination) => String(destination.name || "").trim() === name)?.id || "");
+}
+
+function findShipmentActual_(entry) {
+  const sourceId = shipmentActualSourceId_(entry);
+  if (!sourceId) return null;
+  return state.shipmentActuals.find((actual) =>
+    String(actual.sourceShipmentId || "") === sourceId
+    && String(actual.status || "active") !== "voided"
+  ) || null;
+}
+
+function getShipmentActualLineDefinitions_(entry) {
+  const lines = [];
+  const customerId = shipmentCustomerId_(entry);
+  const add = (standard, unit, plannedQuantity) => {
+    const s = String(standard || "").trim();
+    const u = String(unit || "").trim();
+    if (!s || !u) return;
+    lines.push({
+      standard: s,
+      unit: u,
+      plannedQuantity: Number(plannedQuantity || 0),
+      term: getApplicableShipmentTerm(customerId, s, u, entry.date),
+    });
+  };
+  add(entry.standard, entry.unit, entry.quantity);
+  if (String(entry.standard2 || "").trim() && String(entry.unit2 || "").trim()) {
+    add(entry.standard2, entry.unit2, entry.quantity2);
+  }
+  return lines;
+}
+
+function createShipmentActualControl_(entry) {
+  const actual = findShipmentActual_(entry);
+  if (!isApiEnabled()) {
+    const notice = document.createElement("span");
+    notice.className = "shipment-actual-notice";
+    notice.textContent = actual ? "✓ 出荷済み" : "同期設定が必要";
+    return notice;
+  }
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "text-btn shipment-actual-control";
+  button.disabled = state.isBusy;
+  if (actual) {
+    button.classList.add("is-completed");
+    const quantityText = actual.lineItems.map((line) => `${line.actualQuantity}${line.unit}`).join("・");
+    button.textContent = `✓ 出荷済み${quantityText ? ` ${quantityText}` : ""}`;
+    button.setAttribute("aria-label", "出荷済み実績の詳細を開く");
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openShipmentActualDetail_(actual, entry);
+    });
+  } else {
+    button.textContent = "出荷済みにする";
+    button.setAttribute("aria-label", "出荷済みとして実績を保存");
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openShipmentActualConfirm_(entry);
+    });
+  }
+  return button;
+}
+
+function openShipmentActualConfirm_(entry) {
+  if (!isApiEnabled()) {
+    promptForApiKey_("出荷実績の保存には共有設定が必要です。");
+    return;
+  }
+  const existing = findShipmentActual_(entry);
+  if (existing) {
+    openShipmentActualDetail_(existing, entry);
+    return;
+  }
+  const lines = getShipmentActualLineDefinitions_(entry);
+  const missing = lines.filter((line) => !line.term);
+  shipmentActualDraft_ = { mode: missing.length ? "missing" : "confirm", entry, lines };
+  const content = document.getElementById("shipmentActualConfirmContent");
+  const action = document.getElementById("shipmentActualActionBtn");
+  const cancel = document.getElementById("shipmentActualCancelBtn");
+  content.innerHTML = "";
+  const title = document.createElement("h4");
+  title.className = "shipment-actual-customer";
+  title.textContent = String(entry.destinationName || entry.destination || "");
+  content.appendChild(title);
+  if (missing.length) {
+    const message = document.createElement("p");
+    message.className = "shipment-actual-warning";
+    message.textContent = "この出荷の取引条件が登録されていません";
+    const hint = document.createElement("p");
+    hint.className = "muted";
+    hint.textContent = "単価を設定してから出荷済みにしてください";
+    const settings = document.createElement("button");
+    settings.type = "button";
+    settings.className = "btn secondary";
+    settings.textContent = "取引条件を設定";
+    settings.addEventListener("click", () => {
+      closeShipmentActualSheet_();
+      if (typeof state._openAdminPanel === "function") state._openAdminPanel("terms");
+    });
+    content.append(message, hint, settings);
+    action.classList.add("hidden");
+    cancel.textContent = "閉じる";
+  } else {
+    lines.forEach((line, index) => appendShipmentActualLineForm_(content, line, index));
+    const calculation = document.createElement("div");
+    calculation.id = "shipmentActualCalculation";
+    calculation.className = "shipment-actual-calculation";
+    content.appendChild(calculation);
+    content.querySelectorAll(".shipment-actual-quantity").forEach((input) => input.addEventListener("input", renderShipmentActualCalculation_));
+    action.classList.remove("hidden");
+    action.textContent = "出荷済みにする";
+    action.classList.remove("is-cancel-action");
+    cancel.textContent = "キャンセル";
+    renderShipmentActualCalculation_();
+  }
+  document.querySelector('[data-sheet-backdrop="shipmentActual"]').classList.remove("hidden");
+}
+
+function appendShipmentActualLineForm_(container, line, index) {
+  const card = document.createElement("div");
+  card.className = "shipment-actual-line";
+  const heading = document.createElement("div");
+  heading.className = "shipment-actual-line__heading";
+  heading.textContent = `${line.standard} / ${line.unit}`;
+  const planned = document.createElement("span");
+  planned.className = "muted";
+  planned.textContent = `予定 ${line.plannedQuantity}${line.unit}`;
+  heading.appendChild(planned);
+  const label = document.createElement("label");
+  label.textContent = "実績数量";
+  const input = document.createElement("input");
+  input.className = "shipment-actual-quantity";
+  input.dataset.index = String(index);
+  input.type = "number";
+  input.min = "0";
+  input.step = "0.01";
+  input.inputMode = "decimal";
+  input.value = String(line.plannedQuantity);
+  label.appendChild(input);
+  const price = document.createElement("div");
+  price.className = "shipment-actual-line__price";
+  price.textContent = `単価 ${formatActualYen_(line.term.unitPrice)} / ${line.unit}`;
+  card.append(heading, label, price);
+  container.appendChild(card);
+}
+
+function readShipmentActualTotals_() {
+  const draft = shipmentActualDraft_;
+  if (!draft || draft.mode !== "confirm") throw new Error("出荷実績の確認内容がありません");
+  const lines = draft.lines.map((line, index) => {
+    const input = document.querySelector(`.shipment-actual-quantity[data-index="${index}"]`);
+    const raw = String(input?.value || "").trim();
+    const actualQuantity = Number(raw);
+    if (raw === "" || !Number.isFinite(actualQuantity) || actualQuantity < 0) throw new Error("実績数量を確認してください");
+    const term = line.term;
+    return {
+      standard: line.standard,
+      unit: line.unit,
+      actualQuantity,
+      unitPriceSnapshot: Number(term.unitPrice || 0),
+      lineSales: roundMoney_(actualQuantity * Number(term.unitPrice || 0)),
+      freightType: term.freightType,
+      freightValue: Number(term.freightValue || 0),
+      commissionType: term.commissionType,
+      commissionValue: Number(term.commissionValue || 0),
+    };
+  });
+  const grossSales = roundMoney_(lines.reduce((sum, line) => sum + line.lineSales, 0));
+  const freightCost = roundMoney_(lines.reduce((sum, line) => sum + (line.freightType === "fixed" ? line.freightValue : 0), 0));
+  const commissionCost = roundMoney_(lines.reduce((sum, line) => {
+    if (line.commissionType === "percent") return sum + line.lineSales * line.commissionValue / 100;
+    if (line.commissionType === "fixed") return sum + line.commissionValue;
+    return sum;
+  }, 0));
+  return { lines, grossSales, freightCost, commissionCost, netSales: roundMoney_(grossSales - freightCost - commissionCost) };
+}
+
+function renderShipmentActualCalculation_() {
+  const calculation = document.getElementById("shipmentActualCalculation");
+  if (!calculation || !shipmentActualDraft_ || shipmentActualDraft_.mode !== "confirm") return;
+  try {
+    const totals = readShipmentActualTotals_();
+    calculation.innerHTML = `<div><span>売上</span><strong>${formatActualYen_(totals.grossSales)}</strong></div><div><span>送料</span><strong>${formatActualYen_(totals.freightCost)}</strong></div><div><span>手数料</span><strong>${formatActualYen_(totals.commissionCost)}</strong></div><div class="shipment-actual-net"><span>手取り</span><strong>${formatActualYen_(totals.netSales)}</strong></div>`;
+  } catch {
+    calculation.textContent = "数量を確認してください";
+  }
+}
+
+function openShipmentActualDetail_(actual, entry) {
+  shipmentActualDraft_ = { mode: "detail", actual, entry };
+  const content = document.getElementById("shipmentActualConfirmContent");
+  const action = document.getElementById("shipmentActualActionBtn");
+  const cancel = document.getElementById("shipmentActualCancelBtn");
+  content.innerHTML = "";
+  const title = document.createElement("h4");
+  title.className = "shipment-actual-customer";
+  title.textContent = actual.customerNameSnapshot;
+  const date = document.createElement("p");
+  date.className = "muted";
+  date.textContent = `${formatTermDate_(actual.shipmentDate)}の出荷実績`;
+  const list = document.createElement("div");
+  list.className = "shipment-actual-detail-list";
+  actual.lineItems.forEach((line) => {
+    const row = document.createElement("div");
+    const label = document.createElement("span");
+    label.textContent = `${line.standard} / ${line.unit} ${line.actualQuantity}${line.unit}`;
+    const sales = document.createElement("strong");
+    sales.textContent = formatActualYen_(line.lineSales);
+    row.append(label, sales);
+    list.appendChild(row);
+  });
+  const totals = document.createElement("div");
+  totals.className = "shipment-actual-calculation";
+  totals.innerHTML = `<div><span>売上</span><strong>${formatActualYen_(actual.grossSales)}</strong></div><div><span>送料</span><strong>${formatActualYen_(actual.freightCost)}</strong></div><div><span>手数料</span><strong>${formatActualYen_(actual.commissionCost)}</strong></div><div class="shipment-actual-net"><span>手取り</span><strong>${formatActualYen_(actual.netSales)}</strong></div>`;
+  content.append(title, date, list, totals);
+  action.classList.remove("hidden");
+  action.textContent = "出荷済みを取り消す";
+  action.classList.add("is-cancel-action");
+  cancel.textContent = "閉じる";
+  document.querySelector('[data-sheet-backdrop="shipmentActual"]').classList.remove("hidden");
+}
+
+function closeShipmentActualSheet_() {
+  shipmentActualDraft_ = null;
+  const backdrop = document.querySelector('[data-sheet-backdrop="shipmentActual"]');
+  if (backdrop) backdrop.classList.add("hidden");
+  const content = document.getElementById("shipmentActualConfirmContent");
+  if (content) content.innerHTML = "";
+  const action = document.getElementById("shipmentActualActionBtn");
+  if (action) {
+    action.classList.remove("hidden", "is-cancel-action", "is-loading");
+    action.textContent = "出荷済みにする";
+    action.disabled = false;
+  }
+  const cancel = document.getElementById("shipmentActualCancelBtn");
+  if (cancel) {
+    cancel.textContent = "キャンセル";
+    cancel.disabled = false;
+  }
+}
+
+async function handleShipmentActualAction_() {
+  const draft = shipmentActualDraft_;
+  if (!draft || state.isBusy) return;
+  if (!isApiEnabled()) {
+    promptForApiKey_("出荷実績の保存には共有設定が必要です。");
+    return;
+  }
+  if (draft.mode === "detail" && !confirm("この出荷実績を取り消しますか？")) return;
+  const action = document.getElementById("shipmentActualActionBtn");
+  const cancel = document.getElementById("shipmentActualCancelBtn");
+  action.disabled = true;
+  cancel.disabled = true;
+  action.classList.add("is-loading");
+  action.textContent = draft.mode === "detail" ? "取消中…" : "保存中…";
+  setBusy(true, draft.mode === "detail" ? "出荷済みを取り消しています…" : "出荷実績を保存しています…");
+  try {
+    if (draft.mode === "detail") {
+      await voidShipmentActualToApi({ id: draft.actual.id, voidedBy: currentUpdatedBy() });
+      state.shipmentActuals = state.shipmentActuals.map((actual) => actual.id === draft.actual.id
+        ? { ...actual, status: "voided", voidedAt: new Date().toISOString(), voidedBy: currentUpdatedBy() }
+        : actual);
+      requestBackgroundSync_("voidShipmentActual");
+      closeShipmentActualSheet_();
+      renderAll();
+      setSyncConnectionState_("ok");
+      setStatus("出荷済みを取り消しました", "ok");
+      showToast("出荷済みを取り消しました", "success");
+      return;
+    }
+    const totals = readShipmentActualTotals_();
+    const now = new Date().toISOString();
+    const payload = {
+      id: createId(),
+      sourceShipmentId: shipmentActualSourceId_(draft.entry),
+      occurrenceDate: shipmentOccurrenceDate_(draft.entry),
+      shipmentDate: normalizeDateKey(draft.entry.date),
+      customerId: shipmentCustomerId_(draft.entry),
+      customerNameSnapshot: String(draft.entry.destinationName || draft.entry.destination || ""),
+      shippedBy: currentUpdatedBy(),
+      shippedAt: now,
+      grossSales: totals.grossSales,
+      freightCost: totals.freightCost,
+      commissionCost: totals.commissionCost,
+      netSales: totals.netSales,
+      createdAt: now,
+      updatedAt: now,
+      lineItems: totals.lines,
+    };
+    const response = await saveShipmentActualToApi(payload);
+    const saved = response?.data?.actual || response?.result?.actual || payload;
+    upsertById(state.shipmentActuals, normalizeShipmentActual_(saved));
+    requestBackgroundSync_("saveShipmentActual");
+    closeShipmentActualSheet_();
+    renderAll();
+    setSyncConnectionState_("ok");
+    setStatus("出荷済みにしました", "ok");
+    showToast("出荷済みにしました", "success");
+  } catch {
+    finishShipmentActualError_();
+  } finally {
+    setBusy(false, "");
+    if (shipmentActualDraft_) {
+      action.disabled = false;
+      cancel.disabled = false;
+      action.classList.remove("is-loading");
+      action.textContent = shipmentActualDraft_.mode === "detail" ? "出荷済みを取り消す" : "出荷済みにする";
+    }
+  }
+}
+
+function finishShipmentActualError_() {
+  setSyncConnectionState_("error");
+  setStatus("出荷実績を保存できませんでした", "err");
+  showToast("出荷実績を保存できませんでした", "error", {
+    detail: "同期設定または接続状況を確認してください",
+    actionLabel: "同期設定を確認",
+    onAction: openSyncSettings_,
+  });
 }
 
 function fillShipmentTermMasterSelects_() {

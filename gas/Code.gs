@@ -20,6 +20,7 @@ const SHEET_NAMES = {
   destinations: "destinations",
   settings_units: "settings_units",
   shipment_terms: "shipment_terms",
+  shipment_actuals: "shipment_actuals",
 };
 
 function getAppSecret_() {
@@ -87,6 +88,9 @@ function doGet(e) {
       case "getApplicableShipmentTerm":
         result = getApplicableShipmentTerm_(payload);
         break;
+      case "getShipmentActuals":
+        result = getSheetData_(SHEET_NAMES.shipment_actuals);
+        break;
 
       // Write actions via GET (workaround for CORS issues with POST fetch)
       case "saveShipment":
@@ -142,6 +146,12 @@ function doGet(e) {
         break;
       case "saveShipmentTerm":
         result = saveShipmentTerm_(payload);
+        break;
+      case "saveShipmentActual":
+        result = saveShipmentActual_(payload);
+        break;
+      case "voidShipmentActual":
+        result = voidShipmentActual_(payload);
         break;
 
       default:
@@ -224,6 +234,12 @@ function doPost(e) {
       case "saveShipmentTerm":
         out = saveShipmentTerm_(payload);
         break;
+      case "saveShipmentActual":
+        out = saveShipmentActual_(payload);
+        break;
+      case "voidShipmentActual":
+        out = voidShipmentActual_(payload);
+        break;
       default:
         throw new Error("Unknown action: " + action);
     }
@@ -239,7 +255,7 @@ function doPost(e) {
 
 function wrapGetResult_(action, data) {
   // Frontend expects these keys for getAll:
-  // { shipments, recurring_shipments, recurring_exceptions, events, memos, destinations, settings_units }
+  // { shipments, recurring_shipments, recurring_exceptions, events, memos, destinations, settings_units, shipment_terms, shipment_actuals }
   if (action === "getAll") return data;
   switch (action) {
     case "getShipments": return { shipments: data };
@@ -252,6 +268,7 @@ function wrapGetResult_(action, data) {
     case "getUnits": return { settings_units: data };
     case "getShipmentTerms": return { shipment_terms: data };
     case "getApplicableShipmentTerm": return { shipment_term: data };
+    case "getShipmentActuals": return { shipment_actuals: data };
     default: return { data };
   }
 }
@@ -268,6 +285,7 @@ function getAllData_() {
     destinations: getSheetData_(SHEET_NAMES.destinations),
     settings_units: getSheetData_(SHEET_NAMES.settings_units),
     shipment_terms: getSheetData_(SHEET_NAMES.shipment_terms),
+    shipment_actuals: getSheetData_(SHEET_NAMES.shipment_actuals),
   };
 }
 
@@ -287,11 +305,11 @@ function getSheetData_(sheetName) {
       // Normalize Dates so the frontend can reliably compare by YYYY-MM-DD strings.
       // Sheets often auto-convert "2026-05-27" into a Date cell.
       if (v instanceof Date) {
-        if (key === "date" || key === "startDate" || key === "endDate" || key === "effectiveFrom") {
+        if (key === "date" || key === "startDate" || key === "endDate" || key === "effectiveFrom" || key === "occurrenceDate" || key === "shipmentDate") {
           v = Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd");
         } else if (key === "time") {
           v = Utilities.formatDate(v, "Asia/Tokyo", "HH:mm");
-        } else if (key === "updatedAt") {
+        } else if (key === "updatedAt" || key === "createdAt" || key === "shippedAt" || key === "voidedAt") {
           v = v.toISOString();
         }
       }
@@ -407,6 +425,135 @@ function getApplicableShipmentTerm_(payload) {
     .filter((item) => item.effectiveFrom && item.effectiveFrom <= shipmentDate)
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
   return candidates.length ? candidates[0].term : null;
+}
+
+function saveShipmentActual_(data) {
+  if (!data || !data.id) throw new Error("Missing id");
+  const sourceShipmentId = String(data.sourceShipmentId || "").trim();
+  const occurrenceDate = normalizeDateKey_(data.occurrenceDate);
+  const shipmentDate = normalizeDateKey_(data.shipmentDate);
+  const customerId = String(data.customerId || "").trim();
+  const customerNameSnapshot = String(data.customerNameSnapshot || "").trim();
+  const shippedBy = String(data.shippedBy || "未設定").trim() || "未設定";
+  if (!sourceShipmentId || !occurrenceDate || !shipmentDate || !customerId || !customerNameSnapshot) {
+    throw new Error("出荷実績の必須項目が不足しています");
+  }
+
+  const lineItems = normalizeActualLineItems_(data.lineItemsJson || data.lineItems);
+  if (!lineItems.length) throw new Error("出荷実績の明細がありません");
+  const totals = calculateActualTotals_(lineItems);
+  const now = new Date().toISOString();
+
+  const normalized = {
+    id: String(data.id),
+    sourceShipmentId,
+    occurrenceDate,
+    shipmentDate,
+    customerId,
+    customerNameSnapshot,
+    shippedBy,
+    shippedAt: now,
+    grossSales: totals.grossSales,
+    freightCost: totals.freightCost,
+    commissionCost: totals.commissionCost,
+    netSales: totals.netSales,
+    createdAt: now,
+    updatedAt: now,
+    status: "active",
+    lineItemsJson: JSON.stringify(lineItems),
+  };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const existing = getSheetData_(SHEET_NAMES.shipment_actuals);
+    const sameId = existing.find((actual) => String(actual.id) === normalized.id);
+    if (sameId && String(sameId.status || "active") !== "voided") {
+      return { ok: true, duplicate: true, actual: sameId };
+    }
+    const duplicate = existing.some((actual) =>
+      String(actual.status || "active") !== "voided"
+      && String(actual.sourceShipmentId || "") === normalized.sourceShipmentId
+    );
+    if (duplicate) throw new Error("この出荷は既に出荷済みです");
+    saveRow_(SHEET_NAMES.shipment_actuals, normalized);
+    return { created: true, id: normalized.id, actual: normalized };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function voidShipmentActual_(data) {
+  const id = String(data && data.id || "").trim();
+  if (!id) throw new Error("Missing id");
+  const existing = getSheetData_(SHEET_NAMES.shipment_actuals).find((actual) => String(actual.id) === id);
+  if (!existing) throw new Error("出荷実績が見つかりません");
+  if (String(existing.status || "active") === "voided") return existing;
+  const now = new Date().toISOString();
+  return saveRow_(SHEET_NAMES.shipment_actuals, {
+    id,
+    status: "voided",
+    voidedAt: now,
+    voidedBy: String(data.voidedBy || "未設定").trim() || "未設定",
+    updatedAt: now,
+  });
+}
+
+function normalizeActualLineItems_(raw) {
+  let parsed = raw;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (err) {
+      throw new Error("出荷実績の明細が不正です");
+    }
+  }
+  if (!Array.isArray(parsed)) throw new Error("出荷実績の明細が不正です");
+  return parsed.map((line) => {
+    const standard = String(line && line.standard || "").trim();
+    const unit = String(line && line.unit || "").trim();
+    if (!standard || !unit) throw new Error("出荷実績の規格・単位が不足しています");
+    const actualQuantity = normalizeNonNegativeNumber_(line.actualQuantity, "実績数量");
+    const unitPriceSnapshot = normalizeNonNegativeNumber_(line.unitPriceSnapshot, "単価");
+    const freightType = normalizeChoice_(line.freightType, ["none", "fixed"], "送料区分");
+    const freightValue = freightType === "none" ? 0 : normalizeNonNegativeNumber_(line.freightValue, "送料");
+    const commissionType = normalizeChoice_(line.commissionType, ["none", "percent", "fixed"], "手数料区分");
+    const commissionValue = commissionType === "none" ? 0 : normalizeNonNegativeNumber_(line.commissionValue, "手数料");
+    if (commissionType === "percent" && commissionValue > 100) throw new Error("手数料%は0〜100で入力してください");
+    return {
+      standard,
+      unit,
+      actualQuantity,
+      unitPriceSnapshot,
+      lineSales: roundMoney_(actualQuantity * unitPriceSnapshot),
+      freightType,
+      freightValue,
+      commissionType,
+      commissionValue,
+    };
+  });
+}
+
+function calculateActualTotals_(lineItems) {
+  const grossSales = roundMoney_(lineItems.reduce((sum, line) => sum + line.lineSales, 0));
+  const freightCost = roundMoney_(lineItems.reduce((sum, line) => sum + (line.freightType === "fixed" ? line.freightValue : 0), 0));
+  const commissionCost = roundMoney_(lineItems.reduce((sum, line) => {
+    if (line.commissionType === "percent") return sum + line.lineSales * line.commissionValue / 100;
+    if (line.commissionType === "fixed") return sum + line.commissionValue;
+    return sum;
+  }, 0));
+  return {
+    grossSales,
+    freightCost,
+    commissionCost,
+    netSales: roundMoney_(grossSales - freightCost - commissionCost),
+  };
+}
+
+function roundMoney_(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round(number);
 }
 
 function normalizeChoice_(value, choices, label) {
@@ -527,6 +674,11 @@ function ensureHeaders_() {
     "id", "customerId", "customerName", "standard", "unit", "unitPrice", "effectiveFrom",
     "freightType", "freightValue", "commissionType", "commissionValue", "updatedAt",
   ]);
+  ensureHeaderRow_(SHEET_NAMES.shipment_actuals, [
+    "id", "sourceShipmentId", "occurrenceDate", "shipmentDate", "customerId", "customerNameSnapshot",
+    "shippedBy", "shippedAt", "grossSales", "freightCost", "commissionCost", "netSales", "createdAt", "updatedAt",
+    "status", "voidedAt", "voidedBy", "lineItemsJson",
+  ]);
 }
 
 function ensureHeaderRow_(sheetName, headers) {
@@ -567,8 +719,6 @@ function parsePayload_(payloadStr) {
     return JSON.parse(decodeURIComponent(payloadStr));
   }
 }
-
-
 
 
 

@@ -710,6 +710,68 @@ button:disabled,
   }
 }
 
+.shipment-actual-control {
+  border-color: #9ac4aa;
+  color: var(--primary-dark);
+  white-space: nowrap;
+}
+.shipment-actual-control.is-completed {
+  border-color: transparent;
+  background: #edf7f0;
+  color: #256244;
+  font-weight: 700;
+}
+.shipment-actual-notice {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.shipment-actual-schedule-control {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+.monthly-schedule-item .monthly-schedule-detail { flex: 1 1 auto; }
+.shipment-actual-sheet { max-height: 90vh; }
+.shipment-actual-customer { margin: 0 0 14px; font-size: 18px; }
+.shipment-actual-line {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fbf9;
+}
+.shipment-actual-line__heading { display: flex; justify-content: space-between; gap: 8px; font-weight: 750; }
+.shipment-actual-line label { display: grid; gap: 4px; font-size: 13px; }
+.shipment-actual-line__price { color: var(--muted); font-size: 12px; }
+.shipment-actual-calculation { display: grid; gap: 5px; margin-top: 14px; padding: 12px; border-radius: 12px; background: #f1f7f2; }
+.shipment-actual-calculation > div { display: flex; justify-content: space-between; gap: 12px; }
+.shipment-actual-calculation strong { white-space: nowrap; }
+.shipment-actual-calculation .shipment-actual-net { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--primary-dark); font-size: 16px; }
+.shipment-actual-detail-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.shipment-actual-detail-list > div { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.shipment-actual-warning { margin: 0 0 6px; color: #a33c35; font-weight: 750; }
+.shipment-actual-actions { margin-top: 16px; }
+.shipment-actual-actions .btn { min-height: 44px; }
+.shipment-actual-actions .is-cancel-action { border-color: #d8aaa4; background: #fff; color: #9a3b35; }
+.shipment-actual-actions .is-loading { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.shipment-actual-actions .is-loading::before { content: ""; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.45); border-top-color: currentColor; border-radius: 50%; animation: shipment-actual-spin .8s linear infinite; }
+@keyframes shipment-actual-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .shipment-actual-control { padding: 5px 6px; font-size: 11px; }
+  .shipment-actual-schedule-control { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .shipment-actual-line__heading { display: grid; gap: 2px; }
+  .shipment-actual-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shipment-actual-actions .is-loading::before { animation: none; }
+}
+
 
 
 input,
