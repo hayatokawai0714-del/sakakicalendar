@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   entries: "sakaki_entries_v1",
   destinations: "sakaki_destinations_v1",
+  shipmentTerms: "sakaki_shipment_terms_v1",
   standards: "sakaki_standards_v1",
   units: "sakaki_units_v1",
   recurringShipments: "sakaki_recurring_shipments_v1",
@@ -56,6 +57,7 @@ const state = {
   recurringShipments: [],
   recurringExceptions: [],
   destinations: [],
+  shipmentTerms: [],
   standards: [],
   units: [],
   apiUrl: "",
@@ -118,6 +120,7 @@ function loadState() {
   state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, []);
   state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
   state.destinations = readLS(STORAGE_KEYS.destinations, []);
+  state.shipmentTerms = readLS(STORAGE_KEYS.shipmentTerms, []).map((term) => normalizeShipmentTerm_(term));
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
   state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
@@ -167,6 +170,7 @@ function saveState() {
   writeLS(STORAGE_KEYS.recurringShipments, state.recurringShipments);
   writeLS(STORAGE_KEYS.recurringExceptions, state.recurringExceptions);
   writeLS(STORAGE_KEYS.destinations, state.destinations);
+  writeLS(STORAGE_KEYS.shipmentTerms, state.shipmentTerms);
   writeLS(STORAGE_KEYS.standards, state.standards);
   writeLS(STORAGE_KEYS.units, state.units);
 }
@@ -445,6 +449,12 @@ function bindEvents() {
 
   document.getElementById("standardForm").addEventListener("submit", (e) => void addStandard(e));
   document.getElementById("unitForm").addEventListener("submit", (e) => void addUnit(e));
+  document.getElementById("shipmentTermsCustomerSelect").addEventListener("change", renderShipmentTerms);
+  document.getElementById("addShipmentTermBtn").addEventListener("click", () => openShipmentTermForm_());
+  document.getElementById("cancelShipmentTermBtn").addEventListener("click", resetShipmentTermForm_);
+  document.getElementById("shipmentTermForm").addEventListener("submit", (e) => void submitShipmentTermForm(e));
+  document.getElementById("shipmentTermFreightType").addEventListener("change", updateShipmentTermValueVisibility_);
+  document.getElementById("shipmentTermCommissionType").addEventListener("change", updateShipmentTermValueVisibility_);
   const yearlySummaryYear = document.getElementById("customerYearlySummaryYear");
   const yearlySummaryDestination = document.getElementById("customerYearlySummaryDestination");
   if (yearlySummaryYear) yearlySummaryYear.addEventListener("change", renderCustomerYearlyShipmentSummary);
@@ -629,6 +639,8 @@ function renderAll() {
   renderDestinationList();
   renderStandardList();
   renderUnitList();
+  fillShipmentTermMasterSelects_();
+  renderShipmentTerms();
 }
 
 function setFormDate(dateKey) {
@@ -1254,6 +1266,7 @@ async function loadAllDataFromApi() {
     const recurringExceptions = Array.isArray(all.recurring_exceptions) ? all.recurring_exceptions : [];
     const destinations = Array.isArray(all.destinations) ? all.destinations : [];
     const settingsUnits = Array.isArray(all.settings_units) ? all.settings_units : [];
+    const shipmentTerms = Array.isArray(all.shipment_terms) ? all.shipment_terms : [];
 
     state.entries = [
       ...shipments.map((s) => ({
@@ -1351,6 +1364,7 @@ async function loadAllDataFromApi() {
       updatedAt: String(d.updatedAt || new Date().toISOString()),
       updatedBy: String(d.updatedBy || "未設定"),
     }));
+    state.shipmentTerms = shipmentTerms.map((term) => normalizeShipmentTerm_(term));
 
     const specs = settingsUnits
       .filter((u) => String(u.type) === "standard" && String(u.active || "TRUE").toLowerCase() !== "false")
@@ -1422,6 +1436,11 @@ function saveSpotShipment(spot) {
   rememberOwnUpdate_(spot);
   upsertById(state.entries, spot);
   saveState();
+}
+async function saveShipmentTermToApi(data) {
+  const r = await apiPost("saveShipmentTerm", data);
+  requestBackgroundSync_("saveShipmentTerm");
+  return r;
 }
 
 function flattenSpotShipmentForApi_(entry) {
@@ -3125,6 +3144,7 @@ function snapshotLocalState_() {
     recurringShipments: state.recurringShipments.slice(),
     recurringExceptions: state.recurringExceptions.slice(),
     destinations: state.destinations.slice(),
+    shipmentTerms: state.shipmentTerms.slice(),
   };
 }
 
@@ -3134,6 +3154,7 @@ function restoreLocalState_(snap) {
   state.recurringShipments = Array.isArray(snap.recurringShipments) ? snap.recurringShipments : [];
   state.recurringExceptions = Array.isArray(snap.recurringExceptions) ? snap.recurringExceptions : [];
   state.destinations = Array.isArray(snap.destinations) ? snap.destinations : [];
+  state.shipmentTerms = Array.isArray(snap.shipmentTerms) ? snap.shipmentTerms : [];
   saveState();
 }
 
@@ -4268,6 +4289,265 @@ async function submitDestinationForm(e) {
   }
 }
 
+function normalizeShipmentTerm_(term) {
+  const value = term && typeof term === "object" ? term : {};
+  return {
+    id: String(value.id || ""),
+    customerId: String(value.customerId || ""),
+    customerName: String(value.customerName || ""),
+    standard: String(value.standard || ""),
+    unit: String(value.unit || ""),
+    unitPrice: termNumberOrZero_(value.unitPrice),
+    effectiveFrom: normalizeDateKey(value.effectiveFrom || ""),
+    freightType: ["none", "fixed"].includes(String(value.freightType || "none")) ? String(value.freightType || "none") : "none",
+    freightValue: termNumberOrZero_(value.freightValue),
+    commissionType: ["none", "percent", "fixed"].includes(String(value.commissionType || "none")) ? String(value.commissionType || "none") : "none",
+    commissionValue: termNumberOrZero_(value.commissionValue),
+    updatedAt: String(value.updatedAt || new Date().toISOString()),
+  };
+}
+
+function termNumberOrZero_(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return 0;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getApplicableShipmentTerm(customerId, standard, unit, shipmentDate, terms = state.shipmentTerms) {
+  const targetDate = normalizeDateKey(shipmentDate);
+  if (!customerId || !standard || !unit || !targetDate) return null;
+  return (Array.isArray(terms) ? terms : [])
+    .map((term) => normalizeShipmentTerm_(term))
+    .filter((term) => term.customerId === String(customerId).trim())
+    .filter((term) => term.standard === String(standard).trim() && term.unit === String(unit).trim())
+    .filter((term) => term.effectiveFrom && term.effectiveFrom <= targetDate)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0] || null;
+}
+
+function fillShipmentTermMasterSelects_() {
+  const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
+  const standardSelect = document.getElementById("shipmentTermStandard");
+  const unitSelect = document.getElementById("shipmentTermUnit");
+  if (!customerSelect || !standardSelect || !unitSelect) return;
+
+  const previousCustomerId = customerSelect.value;
+  const customerById = new Map();
+  state.destinations.forEach((destination) => {
+    if (destination && (destination.active || state.shipmentTerms.some((term) => String(term.customerId) === String(destination.id)))) {
+      customerById.set(String(destination.id), { id: String(destination.id), name: String(destination.name || "") });
+    }
+  });
+  state.shipmentTerms.forEach((term) => {
+    const id = String(term.customerId || "");
+    if (id && !customerById.has(id)) customerById.set(id, { id, name: String(term.customerName || id) });
+  });
+  customerSelect.innerHTML = "";
+  customerSelect.appendChild(new Option("取引先を選択", ""));
+  Array.from(customerById.values())
+    .sort((a, b) => a.name.localeCompare(b.name, "ja"))
+    .forEach((customer) => customerSelect.appendChild(new Option(customer.name, customer.id)));
+  customerSelect.disabled = customerById.size === 0;
+  if (Array.from(customerById.keys()).includes(previousCustomerId)) customerSelect.value = previousCustomerId;
+
+  const termStandards = state.shipmentTerms.map((term) => term.standard);
+  const termUnits = state.shipmentTerms.map((term) => term.unit);
+  fillSelect("shipmentTermStandard", mergeMasterValues_(state.standards, getShipmentHistoryValues_(["standard", "standard2"]), termStandards), "規格を選択");
+  fillSelect("shipmentTermUnit", mergeMasterValues_(state.units, getShipmentHistoryValues_(["unit", "unit2"]), termUnits), "単位を選択");
+}
+
+function renderShipmentTerms() {
+  const list = document.getElementById("shipmentTermsList");
+  const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
+  if (!list || !customerSelect) return;
+  fillShipmentTermMasterSelects_();
+  list.innerHTML = "";
+  const customerId = String(customerSelect.value || "");
+  if (!customerId) {
+    const li = document.createElement("li");
+    li.textContent = "取引先を選択してください";
+    list.appendChild(li);
+    return;
+  }
+  const terms = state.shipmentTerms
+    .filter((term) => String(term.customerId) === customerId)
+    .sort((a, b) => String(b.effectiveFrom).localeCompare(String(a.effectiveFrom)));
+  if (!terms.length) {
+    const li = document.createElement("li");
+    li.textContent = "登録済み条件はありません";
+    list.appendChild(li);
+    return;
+  }
+  terms.forEach((term) => {
+    const li = document.createElement("li");
+    li.className = "shipment-term-item";
+    const content = document.createElement("div");
+    content.className = "shipment-term-item__content";
+    const title = document.createElement("strong");
+    title.textContent = `${term.standard} / ${term.unit}`;
+    const details = document.createElement("div");
+    details.className = "shipment-term-item__details";
+    const freight = term.freightType === "fixed" ? `送料 ${formatTermYen_(term.freightValue)}` : "送料なし";
+    const commission = term.commissionType === "percent"
+      ? `手数料 ${term.commissionValue}%`
+      : term.commissionType === "fixed" ? `手数料 ${formatTermYen_(term.commissionValue)}` : "手数料なし";
+    details.textContent = `${formatTermYen_(term.unitPrice)} / ${term.unit} ・ ${freight} ・ ${commission} ・ ${formatTermDate_(term.effectiveFrom)}〜`;
+    content.append(title, details);
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "text-btn";
+    editBtn.textContent = "編集";
+    editBtn.disabled = state.isBusy;
+    editBtn.addEventListener("click", () => setShipmentTermToForm_(term));
+    actions.appendChild(editBtn);
+    li.append(content, actions);
+    list.appendChild(li);
+  });
+}
+
+function formatTermYen_(value) {
+  return `${termNumberOrZero_(value).toLocaleString("ja-JP", { maximumFractionDigits: 2 })}円`;
+}
+
+function formatTermDate_(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${Number(match[1])}/${Number(match[2])}/${Number(match[3])}` : String(value || "");
+}
+
+function openShipmentTermForm_(term) {
+  const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
+  if (!customerSelect || !customerSelect.value) {
+    showToast("取引先を選択してください", "warning");
+    return;
+  }
+  const form = document.getElementById("shipmentTermForm");
+  form.reset();
+  document.getElementById("shipmentTermId").value = term ? String(term.id || "") : "";
+  document.getElementById("shipmentTermFormTitle").textContent = term ? "条件を編集" : "条件を追加";
+  if (term) {
+    ensureSelectOption_(document.getElementById("shipmentTermStandard"), term.standard);
+    ensureSelectOption_(document.getElementById("shipmentTermUnit"), term.unit);
+    document.getElementById("shipmentTermStandard").value = term.standard || "";
+    document.getElementById("shipmentTermUnit").value = term.unit || "";
+    document.getElementById("shipmentTermUnitPrice").value = term.unitPrice;
+    document.getElementById("shipmentTermEffectiveFrom").value = term.effectiveFrom || "";
+    document.getElementById("shipmentTermFreightType").value = term.freightType || "none";
+    document.getElementById("shipmentTermFreightValue").value = term.freightValue;
+    document.getElementById("shipmentTermCommissionType").value = term.commissionType || "none";
+    document.getElementById("shipmentTermCommissionValue").value = term.commissionValue;
+  } else {
+    document.getElementById("shipmentTermEffectiveFrom").value = state.selectedDate || formatDate(new Date());
+    document.getElementById("shipmentTermFreightType").value = "none";
+    document.getElementById("shipmentTermCommissionType").value = "none";
+  }
+  updateShipmentTermValueVisibility_();
+  form.classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function setShipmentTermToForm_(term) {
+  const customerSelect = document.getElementById("shipmentTermsCustomerSelect");
+  customerSelect.value = String(term.customerId || "");
+  renderShipmentTerms();
+  openShipmentTermForm_(term);
+}
+
+function resetShipmentTermForm_() {
+  const form = document.getElementById("shipmentTermForm");
+  if (!form) return;
+  form.reset();
+  document.getElementById("shipmentTermId").value = "";
+  document.getElementById("shipmentTermFormTitle").textContent = "条件を追加";
+  form.classList.add("hidden");
+  updateShipmentTermValueVisibility_();
+}
+
+function updateShipmentTermValueVisibility_() {
+  const freightType = document.getElementById("shipmentTermFreightType");
+  const commissionType = document.getElementById("shipmentTermCommissionType");
+  const freightValue = document.getElementById("shipmentTermFreightValue");
+  const commissionValue = document.getElementById("shipmentTermCommissionValue");
+  const freightRow = document.getElementById("shipmentTermFreightValueRow");
+  const commissionRow = document.getElementById("shipmentTermCommissionValueRow");
+  if (!freightType || !commissionType) return;
+  const freightEnabled = freightType.value === "fixed";
+  const commissionEnabled = commissionType.value !== "none";
+  freightRow.classList.toggle("hidden", !freightEnabled);
+  commissionRow.classList.toggle("hidden", !commissionEnabled);
+  freightValue.required = freightEnabled;
+  commissionValue.required = commissionEnabled;
+}
+
+function readShipmentTermNumber_(id, label) {
+  const raw = String(document.getElementById(id).value || "").trim();
+  const value = Number(raw);
+  if (raw === "" || !Number.isFinite(value) || value < 0) throw new Error(`${label}は0以上で入力してください`);
+  return value;
+}
+
+async function submitShipmentTermForm(e) {
+  e.preventDefault();
+  if (state.isBusy) return;
+  let snap = null;
+  const cloudMode = isApiEnabled();
+  try {
+    const idInput = document.getElementById("shipmentTermId");
+    const isUpdate = Boolean(String(idInput.value || "").trim());
+    const customerId = requiredValue("shipmentTermsCustomerSelect", "取引先");
+    const customer = state.destinations.find((destination) => String(destination.id) === customerId);
+    const customerName = String(customer?.name || document.getElementById("shipmentTermsCustomerSelect").selectedOptions[0]?.textContent || "").trim();
+    const standard = requiredValue("shipmentTermStandard", "規格");
+    const unit = requiredValue("shipmentTermUnit", "単位");
+    const freightType = document.getElementById("shipmentTermFreightType").value;
+    const commissionType = document.getElementById("shipmentTermCommissionType").value;
+    const term = normalizeShipmentTerm_({
+      id: idInput.value || createId(),
+      customerId,
+      customerName,
+      standard,
+      unit,
+      unitPrice: readShipmentTermNumber_("shipmentTermUnitPrice", "単価"),
+      effectiveFrom: requiredValue("shipmentTermEffectiveFrom", "適用開始日"),
+      freightType,
+      freightValue: freightType === "none" ? 0 : readShipmentTermNumber_("shipmentTermFreightValue", "送料"),
+      commissionType,
+      commissionValue: commissionType === "none" ? 0 : readShipmentTermNumber_("shipmentTermCommissionValue", "手数料"),
+      updatedAt: new Date().toISOString(),
+    });
+    if (commissionType === "percent" && term.commissionValue > 100) throw new Error("手数料%は0〜100で入力してください");
+    const duplicate = state.shipmentTerms.some((item) =>
+      String(item.id) !== term.id
+      && String(item.customerId) === term.customerId
+      && String(item.standard) === term.standard
+      && String(item.unit) === term.unit
+      && String(item.effectiveFrom) === term.effectiveFrom
+    );
+    if (duplicate) throw new Error("同じ取引先・規格・単位・適用開始日の条件が既にあります");
+
+    beginSaveStatus(isUpdate ? "update" : "save");
+    setBusy(true, "保存しています…");
+    snap = snapshotLocalState_();
+    upsertById(state.shipmentTerms, term);
+    saveState();
+    renderShipmentTerms();
+    if (cloudMode) await saveShipmentTermToApi(term);
+    if (cloudMode) finishCloudSaveStatus(isUpdate ? "update" : "save");
+    else finishLocalSaveStatus(isUpdate ? "update" : "save");
+    resetShipmentTermForm_();
+    renderShipmentTerms();
+  } catch (err) {
+    if (cloudMode && snap) {
+      restoreLocalState_(snap);
+      renderShipmentTerms();
+    }
+    if (err && err.message) showToast(err.message, "error");
+    else finishSaveErrorStatus("save");
+  } finally {
+    setBusy(false, "");
+  }
+}
+
 function getDestinationUsageStats() {
   // usage: shipments (spot) + recurring shipment rules
   const stats = new Map();
@@ -4522,10 +4802,10 @@ function getShipmentHistoryValues_(fields) {
   return values;
 }
 
-function mergeMasterValues_(base, extra) {
+function mergeMasterValues_(base, ...extras) {
   const seen = new Set();
   const out = [];
-  (base || []).concat(extra || []).forEach((value) => {
+  (base || []).concat(...extras).forEach((value) => {
     const v = String(value || "").trim();
     if (!v || seen.has(v)) return;
     seen.add(v);
@@ -4547,6 +4827,7 @@ function fillMasterSelects() {
   fillSelect("shipmentStandard2", standardOptions, "規格を選択");
   fillSelect("shipmentUnit", unitOptions, "単位を選択");
   fillSelect("shipmentUnit2", unitOptions, "単位を選択");
+  fillShipmentTermMasterSelects_();
 }
 
 function fillDestinationSelect(id, destinations) {

@@ -33,6 +33,7 @@
             <button type="button" class="admin-btn" data-panel="roadside" id="adminRoadsideBtn">道の駅入力</button>
             <button type="button" class="admin-btn" data-panel="dest" id="adminDestBtn">出荷先</button>
             <button type="button" class="admin-btn" data-panel="units" id="adminUnitsBtn">規格・単位</button>
+            <button type="button" class="admin-btn" data-panel="terms" id="adminTermsBtn">取引条件</button>
           </div>
         </details>
       </nav>
@@ -491,6 +492,50 @@
                 <ul id="unitList" class="list"></ul>
               </div>
             </div>
+          </div>
+        </section>
+      </div>
+      <div class="sheet-backdrop hidden" data-sheet-backdrop="terms">
+        <section class="sheet shipment-terms-sheet" role="dialog" aria-modal="true" aria-label="取引条件マスター">
+          <header class="sheet-header">
+            <h3>取引条件</h3>
+            <button type="button" class="icon-btn" data-sheet-close="terms" aria-label="閉じる">閉じる</button>
+          </header>
+          <div class="sheet-body">
+            <label class="terms-customer-picker">取引先
+              <select id="shipmentTermsCustomerSelect"></select>
+            </label>
+            <div class="terms-list-head">
+              <h4>登録済み条件</h4>
+              <button type="button" id="addShipmentTermBtn" class="btn">＋ 条件を追加</button>
+            </div>
+            <ul id="shipmentTermsList" class="list terms-list"></ul>
+            <form id="shipmentTermForm" class="form compact terms-form hidden">
+              <input type="hidden" id="shipmentTermId" />
+              <div class="terms-form-title" id="shipmentTermFormTitle">条件を追加</div>
+              <div class="terms-form-grid">
+                <label>規格<select id="shipmentTermStandard" required></select></label>
+                <label>単位<select id="shipmentTermUnit" required></select></label>
+                <label>単価<input id="shipmentTermUnitPrice" type="number" min="0" step="0.01" inputmode="decimal" required /></label>
+                <label>適用開始日<input id="shipmentTermEffectiveFrom" type="date" required /></label>
+                <label>送料<select id="shipmentTermFreightType">
+                  <option value="none">送料なし</option>
+                  <option value="fixed">1回あたり固定</option>
+                </select></label>
+                <label id="shipmentTermFreightValueRow">送料金額<input id="shipmentTermFreightValue" type="number" min="0" step="0.01" inputmode="decimal" value="0" /></label>
+                <label>手数料<select id="shipmentTermCommissionType">
+                  <option value="none">なし</option>
+                  <option value="percent">売上の%</option>
+                  <option value="fixed">固定額</option>
+                </select></label>
+                <label id="shipmentTermCommissionValueRow">手数料金額・率<input id="shipmentTermCommissionValue" type="number" min="0" step="0.01" inputmode="decimal" value="0" /></label>
+              </div>
+              <p class="field-hint">手数料の%は、例：3% → 3 として保存します。</p>
+              <div class="actions">
+                <button type="submit" class="btn">保存</button>
+                <button type="button" id="cancelShipmentTermBtn" class="btn secondary">キャンセル</button>
+              </div>
+            </form>
           </div>
         </section>
       </div>

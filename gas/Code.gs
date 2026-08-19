@@ -19,6 +19,7 @@ const SHEET_NAMES = {
   memos: "memos",
   destinations: "destinations",
   settings_units: "settings_units",
+  shipment_terms: "shipment_terms",
 };
 
 function getAppSecret_() {
@@ -80,6 +81,12 @@ function doGet(e) {
       case "getUnits":
         result = getSheetData_(SHEET_NAMES.settings_units);
         break;
+      case "getShipmentTerms":
+        result = getSheetData_(SHEET_NAMES.shipment_terms);
+        break;
+      case "getApplicableShipmentTerm":
+        result = getApplicableShipmentTerm_(payload);
+        break;
 
       // Write actions via GET (workaround for CORS issues with POST fetch)
       case "saveShipment":
@@ -132,6 +139,9 @@ function doGet(e) {
         break;
       case "deleteUnit":
         result = deleteRow_(SHEET_NAMES.settings_units, payload.id);
+        break;
+      case "saveShipmentTerm":
+        result = saveShipmentTerm_(payload);
         break;
 
       default:
@@ -211,6 +221,9 @@ function doPost(e) {
       case "deleteUnit":
         out = deleteRow_(SHEET_NAMES.settings_units, payload.id);
         break;
+      case "saveShipmentTerm":
+        out = saveShipmentTerm_(payload);
+        break;
       default:
         throw new Error("Unknown action: " + action);
     }
@@ -237,6 +250,8 @@ function wrapGetResult_(action, data) {
     case "getMemos": return { memos: data };
     case "getDestinations": return { destinations: data };
     case "getUnits": return { settings_units: data };
+    case "getShipmentTerms": return { shipment_terms: data };
+    case "getApplicableShipmentTerm": return { shipment_term: data };
     default: return { data };
   }
 }
@@ -252,6 +267,7 @@ function getAllData_() {
     memos: getSheetData_(SHEET_NAMES.memos),
     destinations: getSheetData_(SHEET_NAMES.destinations),
     settings_units: getSheetData_(SHEET_NAMES.settings_units),
+    shipment_terms: getSheetData_(SHEET_NAMES.shipment_terms),
   };
 }
 
@@ -271,7 +287,7 @@ function getSheetData_(sheetName) {
       // Normalize Dates so the frontend can reliably compare by YYYY-MM-DD strings.
       // Sheets often auto-convert "2026-05-27" into a Date cell.
       if (v instanceof Date) {
-        if (key === "date" || key === "startDate" || key === "endDate") {
+        if (key === "date" || key === "startDate" || key === "endDate" || key === "effectiveFrom") {
           v = Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd");
         } else if (key === "time") {
           v = Utilities.formatDate(v, "Asia/Tokyo", "HH:mm");
@@ -319,6 +335,108 @@ function saveRow_(sheetName, data) {
   }
   sheet.getRange(targetRow, 1, 1, headers.length).setValues([rowValues]);
   return { updated: true, id: data.id };
+}
+
+function saveShipmentTerm_(data) {
+  if (!data || !data.id) throw new Error("Missing id");
+
+  const customerId = String(data.customerId || "").trim();
+  const customerName = String(data.customerName || "").trim();
+  const standard = String(data.standard || "").trim();
+  const unit = String(data.unit || "").trim();
+  const effectiveFrom = normalizeDateKey_(data.effectiveFrom);
+  if (!customerId || !customerName || !standard || !unit) {
+    throw new Error("取引先・規格・単位は必須です");
+  }
+  if (!effectiveFrom) throw new Error("適用開始日は必須です");
+
+  const unitPrice = normalizeNonNegativeNumber_(data.unitPrice, "単価");
+  const freightType = normalizeChoice_(data.freightType, ["none", "fixed"], "送料区分");
+  const freightValue = freightType === "none" ? 0 : normalizeNonNegativeNumber_(data.freightValue, "送料");
+  const commissionType = normalizeChoice_(data.commissionType, ["none", "percent", "fixed"], "手数料区分");
+  const commissionValue = commissionType === "none" ? 0 : normalizeNonNegativeNumber_(data.commissionValue, "手数料");
+  if (commissionType === "percent" && commissionValue > 100) {
+    throw new Error("手数料%は0〜100で入力してください");
+  }
+
+  const normalized = {
+    id: String(data.id),
+    customerId,
+    customerName,
+    standard,
+    unit,
+    unitPrice,
+    effectiveFrom,
+    freightType,
+    freightValue,
+    commissionType,
+    commissionValue,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const existing = getSheetData_(SHEET_NAMES.shipment_terms);
+    const duplicate = existing.some((term) =>
+      String(term.id) !== normalized.id
+      && String(term.customerId || "").trim() === normalized.customerId
+      && String(term.standard || "").trim() === normalized.standard
+      && String(term.unit || "").trim() === normalized.unit
+      && normalizeDateKey_(term.effectiveFrom) === normalized.effectiveFrom
+    );
+    if (duplicate) throw new Error("同じ取引先・規格・単位・適用開始日の条件が既にあります");
+    return saveRow_(SHEET_NAMES.shipment_terms, normalized);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getApplicableShipmentTerm_(payload) {
+  const customerId = String(payload && payload.customerId || "").trim();
+  const standard = String(payload && payload.standard || "").trim();
+  const unit = String(payload && payload.unit || "").trim();
+  const shipmentDate = normalizeDateKey_(payload && payload.shipmentDate);
+  if (!customerId || !standard || !unit || !shipmentDate) return null;
+
+  const candidates = getSheetData_(SHEET_NAMES.shipment_terms)
+    .filter((term) => String(term.customerId || "").trim() === customerId)
+    .filter((term) => String(term.standard || "").trim() === standard)
+    .filter((term) => String(term.unit || "").trim() === unit)
+    .map((term) => ({ term, effectiveFrom: normalizeDateKey_(term.effectiveFrom) }))
+    .filter((item) => item.effectiveFrom && item.effectiveFrom <= shipmentDate)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  return candidates.length ? candidates[0].term : null;
+}
+
+function normalizeChoice_(value, choices, label) {
+  const normalized = String(value || "").trim();
+  if (choices.indexOf(normalized) === -1) throw new Error(label + "が不正です");
+  return normalized;
+}
+
+function normalizeNonNegativeNumber_(value, label) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    throw new Error(label + "は0以上で入力してください");
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) throw new Error(label + "は0以上で入力してください");
+  return number;
+}
+
+function normalizeDateKey_(value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, "Asia/Tokyo", "yyyy-MM-dd");
+  }
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\D|$)/);
+  if (!match) return "";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+  return [year, String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
 }
 
 function deleteRow_(sheetName, id) {
@@ -405,6 +523,10 @@ function ensureHeaders_() {
     "id", "name", "address", "phone", "contactPerson", "email", "note", "active", "sortOrder", "updatedAt", "updatedBy",
   ]);
   ensureHeaderRow_(SHEET_NAMES.settings_units, ["id", "type", "name", "sortOrder", "active", "updatedAt"]);
+  ensureHeaderRow_(SHEET_NAMES.shipment_terms, [
+    "id", "customerId", "customerName", "standard", "unit", "unitPrice", "effectiveFrom",
+    "freightType", "freightValue", "commissionType", "commissionValue", "updatedAt",
+  ]);
 }
 
 function ensureHeaderRow_(sheetName, headers) {
@@ -445,7 +567,6 @@ function parsePayload_(payloadStr) {
     return JSON.parse(decodeURIComponent(payloadStr));
   }
 }
-
 
 
 

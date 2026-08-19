@@ -2708,6 +2708,25 @@ body { background: #f5f7f4; }
 .header-action__icon { font-size: 25px; line-height: 1; }
 .settings-menu__panel .admin-btn { height: 40px; display: block; font-size: 13px; }
 
+.shipment-terms-sheet { max-height: 90vh; }
+.terms-customer-picker { display: grid; gap: 4px; font-size: 13px; }
+.terms-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 6px; }
+.terms-list-head h4 { margin: 0; font-size: 14px; }
+.terms-list-head .btn { flex: 0 0 auto; min-height: 40px; }
+.terms-list { border-top: 1px solid var(--line); }
+.terms-list li.shipment-term-item { align-items: flex-start; padding: 12px 0; }
+.shipment-term-item__content { min-width: 0; display: grid; gap: 4px; }
+.shipment-term-item__details { color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.terms-form { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #f8fbf9; }
+.terms-form-title { color: var(--primary-dark); font-size: 15px; font-weight: 800; }
+.terms-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+@media (max-width: 600px) {
+  .terms-list-head { align-items: stretch; flex-direction: column; }
+  .terms-list-head .btn { width: 100%; }
+  .terms-form-grid { grid-template-columns: 1fr; }
+}
+
 .calendar-card { padding: 20px 22px 18px !important; }
 .calendar-head {
   grid-template-columns: 46px minmax(0, 1fr) 46px;
