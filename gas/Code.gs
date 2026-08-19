@@ -22,6 +22,7 @@ const SHEET_NAMES = {
   settings_units: "settings_units",
   shipment_terms: "shipment_terms",
   shipment_actuals: "shipment_actuals",
+  monthly_settlements: "monthly_settlements",
 };
 
 function getAppSecret_() {
@@ -106,6 +107,11 @@ function doGet(e) {
         break;
       case "getSalesDashboardData":
         // Dashboard data must not be requested through GET: ADMIN_SECRET must never be sent in a URL.
+        throw new Error("Unsupported request");
+      case "getMonthlySettlements":
+      case "saveMonthlySettlement":
+      case "voidMonthlySettlement":
+        // Monthly settlement data is admin-only and must never be sent through a URL.
         throw new Error("Unsupported request");
 
       // Write actions via GET (workaround for CORS issues with POST fetch)
@@ -266,6 +272,18 @@ function doPost(e) {
         requireAdminKey_(parsed.adminKey || "");
         out = getSalesDashboardData_();
         break;
+      case "getMonthlySettlements":
+        requireAdminKey_(parsed.adminKey || "");
+        out = getMonthlySettlements_();
+        break;
+      case "saveMonthlySettlement":
+        requireAdminKey_(parsed.adminKey || "");
+        out = saveMonthlySettlement_(payload);
+        break;
+      case "voidMonthlySettlement":
+        requireAdminKey_(parsed.adminKey || "");
+        out = voidMonthlySettlement_(payload);
+        break;
       default:
         throw new Error("Unknown action: " + action);
     }
@@ -375,6 +393,136 @@ function getShipmentActualStatuses_() {
 
 function getSalesDashboardData_() {
   return { actuals: getSheetData_(SHEET_NAMES.shipment_actuals) };
+}
+
+function getMonthlySettlements_() {
+  return getSheetData_(SHEET_NAMES.monthly_settlements);
+}
+
+function normalizeSettlementYear_(value) {
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 2000 || year > 9999) throw new Error("対象年が不正です");
+  return year;
+}
+
+function normalizeSettlementMonth_(value) {
+  const month = Number(value);
+  if (!Number.isInteger(month) || month < 1 || month > 12) throw new Error("対象月が不正です");
+  return month;
+}
+
+function isVoidedSettlement_(value) {
+  return value === true || String(value || "").toLowerCase() === "true";
+}
+
+function normalizeConsignmentItems_(raw) {
+  let items = raw;
+  if (typeof items === "string") {
+    try {
+      items = items ? JSON.parse(items) : [];
+    } catch (err) {
+      throw new Error("委託販売明細が不正です");
+    }
+  }
+  if (items === undefined || items === null) items = [];
+  if (!Array.isArray(items)) throw new Error("委託販売明細が不正です");
+  return items.map((item) => {
+    const standard = String(item && item.standard || "").trim();
+    const unit = String(item && item.unit || "").trim();
+    if (!standard || !unit) throw new Error("委託販売明細の規格・単位は必須です");
+    return {
+      standard,
+      unit,
+      soldQuantity: normalizeNonNegativeNumber_(item.soldQuantity, "販売数量"),
+      salesAmount: normalizeNonNegativeNumber_(item.salesAmount, "商品売上"),
+    };
+  });
+}
+
+function saveMonthlySettlement_(data) {
+  if (!data || !data.id) throw new Error("Missing id");
+  const customerId = String(data.customerId || "").trim();
+  if (!customerId) throw new Error("取引先が未指定です");
+  const customer = getSheetData_(SHEET_NAMES.destinations).find((item) => String(item.id || "") === customerId);
+  if (!customer) throw new Error("出荷先が見つかりません");
+  const settlementType = String(data.settlementType || "").trim();
+  if (["monthly_statement", "consignment"].indexOf(settlementType) === -1) {
+    throw new Error("月次精算の方式が不正です");
+  }
+  const targetYear = normalizeSettlementYear_(data.targetYear);
+  const targetMonth = normalizeSettlementMonth_(data.targetMonth);
+  let grossSales = normalizeNonNegativeNumber_(data.grossSales, "売上");
+  const freightCost = normalizeNonNegativeNumber_(data.freightCost, "送料");
+  const commissionCost = normalizeNonNegativeNumber_(data.commissionCost, "手数料");
+  const otherDeductions = normalizeNonNegativeNumber_(data.otherDeductions, "その他控除");
+  const consignmentItems = normalizeConsignmentItems_(data.consignmentItemsJson || data.consignmentItems);
+  if (settlementType === "consignment" && !consignmentItems.length) {
+    throw new Error("委託販売明細を1件以上入力してください");
+  }
+  if (settlementType === "consignment") {
+    grossSales = Math.round(consignmentItems.reduce((sum, item) => sum + item.salesAmount, 0));
+  }
+
+  const now = new Date().toISOString();
+  const existing = getSheetData_(SHEET_NAMES.monthly_settlements);
+  const sameId = existing.find((item) => String(item.id || "") === String(data.id));
+  if (sameId && isVoidedSettlement_(sameId.voided)) throw new Error("取消済みの月次精算は更新できません");
+  const duplicate = existing.find((item) =>
+    String(item.id || "") !== String(data.id)
+    && !isVoidedSettlement_(item.voided)
+    && String(item.customerId || "") === customerId
+    && Number(item.targetYear) === targetYear
+    && Number(item.targetMonth) === targetMonth
+  );
+  if (duplicate) throw new Error("同じ取引先・対象年月の月次精算が既にあります");
+
+  const normalized = {
+    id: String(data.id),
+    customerId,
+    customerNameSnapshot: String(customer.name || data.customerNameSnapshot || customerId).trim(),
+    settlementType,
+    targetYear,
+    targetMonth,
+    grossSales,
+    freightCost,
+    commissionCost,
+    otherDeductions,
+    netSales: Math.round(grossSales - freightCost - commissionCost - otherDeductions),
+    memo: String(data.memo || ""),
+    consignmentItemsJson: JSON.stringify(consignmentItems),
+    createdAt: sameId ? String(sameId.createdAt || now) : now,
+    updatedAt: now,
+    voided: false,
+  };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    // Recheck under the lock so two admin tabs cannot create the same active period.
+    const lockedExisting = getSheetData_(SHEET_NAMES.monthly_settlements);
+    const lockedDuplicate = lockedExisting.find((item) =>
+      String(item.id || "") !== normalized.id
+      && !isVoidedSettlement_(item.voided)
+      && String(item.customerId || "") === normalized.customerId
+      && Number(item.targetYear) === normalized.targetYear
+      && Number(item.targetMonth) === normalized.targetMonth
+    );
+    if (lockedDuplicate) throw new Error("同じ取引先・対象年月の月次精算が既にあります");
+    saveRow_(SHEET_NAMES.monthly_settlements, normalized);
+    return { created: !sameId, updated: Boolean(sameId), record: normalized };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function voidMonthlySettlement_(data) {
+  const id = String(data && data.id || "").trim();
+  if (!id) throw new Error("Missing id");
+  const existing = getSheetData_(SHEET_NAMES.monthly_settlements).find((item) => String(item.id || "") === id);
+  if (!existing) throw new Error("月次精算が見つかりません");
+  if (isVoidedSettlement_(existing.voided)) return { updated: false, record: { ...existing, voided: true } };
+  const updatedAt = new Date().toISOString();
+  saveRow_(SHEET_NAMES.monthly_settlements, { id, voided: true, updatedAt });
+  return { updated: true, record: { ...existing, voided: true, updatedAt } };
 }
 
 function getSheetData_(sheetName) {
@@ -783,6 +931,11 @@ function ensureHeaders_() {
     "id", "sourceShipmentId", "occurrenceDate", "shipmentDate", "customerId", "customerNameSnapshot",
     "shippedBy", "shippedAt", "grossSales", "freightCost", "commissionCost", "netSales", "createdAt", "updatedAt",
     "status", "voidedAt", "voidedBy", "lineItemsJson",
+  ]);
+  ensureHeaderRow_(SHEET_NAMES.monthly_settlements, [
+    "id", "customerId", "customerNameSnapshot", "settlementType", "targetYear", "targetMonth",
+    "grossSales", "freightCost", "commissionCost", "otherDeductions", "netSales", "memo",
+    "consignmentItemsJson", "createdAt", "updatedAt", "voided",
   ]);
 }
 

@@ -63,6 +63,10 @@ const state = {
   adminKey: "",
   isAdmin: false,
   adminActuals: [],
+  monthlySettlements: [],
+  monthlySettlementYear: new Date().getFullYear(),
+  monthlySettlementMonth: new Date().getMonth() + 1,
+  monthlySettlementCustomerId: "",
   adminAuthRequestId: 0,
   salesPeriodMode: "month",
   salesView: "overall",
@@ -138,6 +142,7 @@ function loadState() {
   state.adminKey = String(localStorage.getItem(STORAGE_KEYS.adminKey) || "").trim();
   state.isAdmin = false;
   state.adminActuals = [];
+  state.monthlySettlements = [];
   state.standards = readLS(STORAGE_KEYS.standards, DEFAULT_STANDARDS);
   state.units = readLS(STORAGE_KEYS.units, DEFAULT_UNITS);
   state.apiUrl = String(localStorage.getItem(STORAGE_KEYS.apiUrl) || "").trim();
@@ -463,6 +468,25 @@ function bindEvents() {
     state.salesMonth = Math.min(12, Math.max(1, Number(event.target.value) || state.salesMonth));
     renderSalesDashboard_();
   });
+  document.getElementById("monthlySettlementYear").addEventListener("change", (event) => {
+    state.monthlySettlementYear = Number(event.target.value) || state.monthlySettlementYear;
+    renderMonthlySettlement_();
+  });
+  document.getElementById("monthlySettlementMonth").addEventListener("change", (event) => {
+    state.monthlySettlementMonth = Math.min(12, Math.max(1, Number(event.target.value) || state.monthlySettlementMonth));
+    renderMonthlySettlement_();
+  });
+  document.getElementById("monthlySettlementCustomer").addEventListener("change", (event) => {
+    state.monthlySettlementCustomerId = String(event.target.value || "");
+    renderMonthlySettlement_();
+  });
+  document.getElementById("monthlySettlementForm").addEventListener("submit", (event) => void submitMonthlySettlementForm_(event));
+  document.getElementById("monthlySettlementForm").addEventListener("input", renderMonthlySettlementTotals_);
+  document.getElementById("monthlySettlementVoidBtn").addEventListener("click", () => void voidMonthlySettlement_());
+  document.getElementById("monthlySettlementAddItemBtn").addEventListener("click", () => {
+    appendMonthlySettlementItemRow_();
+    renderMonthlySettlementTotals_();
+  });
 
   document.getElementById("entryType").addEventListener("change", switchEntryTypeFields);
   document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
@@ -683,6 +707,7 @@ function renderAll() {
   fillShipmentTermMasterSelects_();
   renderShipmentTerms();
   renderSalesDashboard_();
+  renderMonthlySettlement_();
 }
 
 function setFormDate(dateKey) {
@@ -1478,6 +1503,12 @@ async function saveCustomerSettlementToApi(data) {
   requestBackgroundSync_("saveCustomerSettlement");
   return r;
 }
+async function loadMonthlySettlements_(keyOverride) {
+  const response = await adminApiPost("getMonthlySettlements", {}, keyOverride);
+  const records = Array.isArray(response?.result) ? response.result : [];
+  state.monthlySettlements = records.map((record) => normalizeMonthlySettlement_(record));
+  return state.monthlySettlements;
+}
 async function deleteItemFromApi(action, id) {
   const r = await apiPost(action, { id });
   requestBackgroundSync_(action);
@@ -1514,9 +1545,12 @@ async function connectAdmin_(keyOverride, silent = false) {
     const response = await adminApiPost("getSalesDashboardData", {}, key);
     if (requestId !== state.adminAuthRequestId) return false;
     const actuals = Array.isArray(response?.result?.actuals) ? response.result.actuals : [];
+    const monthlySettlements = await loadMonthlySettlements_(key);
+    if (requestId !== state.adminAuthRequestId) return false;
     state.adminKey = key;
     state.isAdmin = true;
     state.adminActuals = actuals.map((actual) => normalizeShipmentActual_(actual));
+    state.monthlySettlements = monthlySettlements;
     localStorage.setItem(STORAGE_KEYS.adminKey, key);
     const status = document.getElementById("adminAuthStatus");
     if (status) {
@@ -1550,10 +1584,12 @@ async function refreshAdminSales_() {
     const response = await adminApiPost("getSalesDashboardData", {});
     if (!state.isAdmin || !state.adminKey) return;
     const actuals = Array.isArray(response?.result?.actuals) ? response.result.actuals : [];
+    await loadMonthlySettlements_();
     state.adminActuals = actuals.map((actual) => normalizeShipmentActual_(actual));
     renderSalesDashboard_();
   } catch {
     state.adminActuals = [];
+    state.monthlySettlements = [];
     renderSalesDashboard_();
     const status = document.getElementById("adminAuthStatus");
     if (status) {
@@ -1569,6 +1605,7 @@ function adminLogout_() {
   state.adminKey = "";
   state.isAdmin = false;
   state.adminActuals = [];
+  state.monthlySettlements = [];
   const input = document.getElementById("adminKeyInput");
   if (input) input.value = "";
   const status = document.getElementById("adminAuthStatus");
@@ -1578,6 +1615,348 @@ function adminLogout_() {
   }
   renderAll();
   showToast("管理者モードを終了しました", "info");
+}
+
+function normalizeMonthlySettlement_(record) {
+  const value = record && typeof record === "object" ? record : {};
+  let items = value.consignmentItems;
+  if (!Array.isArray(items) && value.consignmentItemsJson) {
+    try { items = JSON.parse(String(value.consignmentItemsJson)); } catch { items = []; }
+  }
+  return {
+    id: String(value.id || ""),
+    customerId: String(value.customerId || ""),
+    customerNameSnapshot: String(value.customerNameSnapshot || ""),
+    settlementType: ["monthly_statement", "consignment"].includes(String(value.settlementType || "")) ? String(value.settlementType) : "",
+    targetYear: Number(value.targetYear || 0),
+    targetMonth: Number(value.targetMonth || 0),
+    grossSales: termNumberOrZero_(value.grossSales),
+    freightCost: termNumberOrZero_(value.freightCost),
+    commissionCost: termNumberOrZero_(value.commissionCost),
+    otherDeductions: termNumberOrZero_(value.otherDeductions),
+    netSales: termNumberOrZero_(value.netSales),
+    memo: String(value.memo || ""),
+    consignmentItems: Array.isArray(items) ? items.map((item) => ({
+      standard: String(item.standard || ""),
+      unit: String(item.unit || ""),
+      soldQuantity: termNumberOrZero_(item.soldQuantity),
+      salesAmount: termNumberOrZero_(item.salesAmount),
+      shippedQuantity: termNumberOrZero_(item.shippedQuantity),
+    })) : [],
+    createdAt: String(value.createdAt || ""),
+    updatedAt: String(value.updatedAt || ""),
+    voided: value.voided === true || String(value.voided || "").toLowerCase() === "true",
+  };
+}
+
+function monthlySettlementTypeLabel_(type) {
+  return type === "consignment" ? "委託販売・月次精算" : "月末明細でまとめて精算";
+}
+
+function formatMonthlySettlementYen_(value) {
+  return `¥${Math.round(termNumberOrZero_(value)).toLocaleString("ja-JP")}`;
+}
+
+function monthlySettlementCustomers_() {
+  return state.destinations
+    .filter((destination) => ["monthly_statement", "consignment"].includes(normalizeSettlementType_(destination.settlementType)))
+    .map((destination) => ({
+      id: String(destination.id || ""),
+      name: String(destination.name || destination.id || ""),
+      settlementType: normalizeSettlementType_(destination.settlementType),
+    }))
+    .filter((customer) => customer.id)
+    .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+}
+
+function monthlySettlementYears_() {
+  const years = new Set([new Date().getFullYear()]);
+  state.adminActuals.forEach((actual) => {
+    const year = Number(salesDateKey_(actual).slice(0, 4));
+    if (Number.isInteger(year) && year >= 2000) years.add(year);
+  });
+  state.monthlySettlements.forEach((record) => {
+    if (Number.isInteger(record.targetYear) && record.targetYear >= 2000) years.add(record.targetYear);
+  });
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+function getMonthlySettlementRecord_() {
+  return state.monthlySettlements.find((record) => !record.voided
+    && String(record.customerId) === String(state.monthlySettlementCustomerId)
+    && Number(record.targetYear) === Number(state.monthlySettlementYear)
+    && Number(record.targetMonth) === Number(state.monthlySettlementMonth)) || null;
+}
+
+function getConsignmentShipmentReference_() {
+  const totals = new Map();
+  state.adminActuals
+    .filter((actual) => !actual.voided && String(actual.status || "active") !== "voided")
+    .filter((actual) => String(actual.customerId || "") === String(state.monthlySettlementCustomerId))
+    .filter((actual) => salesDateKey_(actual).slice(0, 7) === `${state.monthlySettlementYear}-${String(state.monthlySettlementMonth).padStart(2, "0")}`)
+    .forEach((actual) => (actual.lineItems || []).forEach((item) => {
+      const key = `${item.standard}\u0000${item.unit}`;
+      totals.set(key, (totals.get(key) || 0) + termNumberOrZero_(item.actualQuantity));
+    }));
+  return totals;
+}
+
+function renderMonthlySettlement_() {
+  const section = document.getElementById("monthlySettlementSection");
+  if (!section) return;
+  section.classList.toggle("hidden", !state.isAdmin);
+  if (!state.isAdmin) {
+    ["monthlySettlementStatus", "monthlySettlementItems", "monthlySettlementNetSales"].forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = "";
+    });
+    const form = document.getElementById("monthlySettlementForm");
+    if (form) {
+      form.reset();
+      form.classList.add("hidden");
+    }
+    const method = document.getElementById("monthlySettlementMethod");
+    const customerName = document.getElementById("monthlySettlementCustomerName");
+    if (method) method.textContent = "";
+    if (customerName) customerName.textContent = "";
+    return;
+  }
+  const yearSelect = document.getElementById("monthlySettlementYear");
+  const monthSelect = document.getElementById("monthlySettlementMonth");
+  const customerSelect = document.getElementById("monthlySettlementCustomer");
+  const years = monthlySettlementYears_();
+  yearSelect.innerHTML = years.map((year) => `<option value="${year}">${year}年</option>`).join("");
+  if (!years.includes(Number(state.monthlySettlementYear))) state.monthlySettlementYear = years[0];
+  yearSelect.value = String(state.monthlySettlementYear);
+  monthSelect.value = String(state.monthlySettlementMonth);
+  const customers = monthlySettlementCustomers_();
+  customerSelect.innerHTML = "";
+  customerSelect.appendChild(new Option("出荷先を選択", ""));
+  customers.forEach((customer) => customerSelect.appendChild(new Option(`${customer.name}（${monthlySettlementTypeLabel_(customer.settlementType)}）`, customer.id)));
+  if (!customers.some((customer) => customer.id === state.monthlySettlementCustomerId)) {
+    state.monthlySettlementCustomerId = customers[0]?.id || "";
+  }
+  customerSelect.value = state.monthlySettlementCustomerId;
+  renderMonthlySettlementForm_();
+}
+
+function renderMonthlySettlementForm_() {
+  const form = document.getElementById("monthlySettlementForm");
+  const customer = state.destinations.find((destination) => String(destination.id) === String(state.monthlySettlementCustomerId));
+  if (!form || !customer) {
+    form?.classList.add("hidden");
+    const status = document.getElementById("monthlySettlementStatus");
+    if (status) status.textContent = "月末精算の対象先を選択してください。";
+    return;
+  }
+  const settlementType = normalizeSettlementType_(customer.settlementType);
+  const record = getMonthlySettlementRecord_();
+  const method = document.getElementById("monthlySettlementMethod");
+  const customerName = document.getElementById("monthlySettlementCustomerName");
+  const idInput = document.getElementById("monthlySettlementId");
+  const statementFields = document.getElementById("monthlyStatementFields");
+  const consignmentFields = document.getElementById("consignmentFields");
+  const voidButton = document.getElementById("monthlySettlementVoidBtn");
+  method.dataset.type = settlementType;
+  method.textContent = monthlySettlementTypeLabel_(settlementType);
+  customerName.textContent = String(customer.name || "");
+  idInput.value = record?.id || "";
+  statementFields.classList.toggle("hidden", settlementType !== "monthly_statement");
+  consignmentFields.classList.toggle("hidden", settlementType !== "consignment");
+  document.getElementById("monthlySettlementGrossSales").value = record ? record.grossSales : "";
+  document.getElementById("monthlySettlementFreightCost").value = record ? record.freightCost : 0;
+  document.getElementById("monthlySettlementCommissionCost").value = record ? record.commissionCost : 0;
+  document.getElementById("monthlySettlementOtherDeductions").value = record ? record.otherDeductions : 0;
+  document.getElementById("monthlySettlementMemo").value = record?.memo || "";
+  document.getElementById("monthlySettlementGrossSales").readOnly = settlementType === "consignment";
+  if (settlementType === "consignment") {
+    const reference = getConsignmentShipmentReference_();
+    const items = record?.consignmentItems?.length
+      ? record.consignmentItems.map((item) => ({ ...item, shippedQuantity: reference.get(`${item.standard}\u0000${item.unit}`) || item.shippedQuantity || 0 }))
+      : Array.from(reference, ([key, shippedQuantity]) => {
+        const [standard, unit] = key.split("\u0000");
+        return { standard, unit, soldQuantity: 0, salesAmount: 0, shippedQuantity };
+      });
+    renderMonthlySettlementItemRows_(items.length ? items : [{ standard: "", unit: "", soldQuantity: 0, salesAmount: 0, shippedQuantity: 0 }]);
+  } else {
+    document.getElementById("monthlySettlementItems").innerHTML = "";
+  }
+  if (voidButton) voidButton.classList.toggle("hidden", !record);
+  const status = document.getElementById("monthlySettlementStatus");
+  if (status) status.textContent = record ? "登録済みの月次精算を編集中です。" : "新しい月次精算を登録します。";
+  form.classList.remove("hidden");
+  renderMonthlySettlementTotals_();
+}
+
+function renderSettlementDatalists_() {
+  const standardList = document.getElementById("monthlySettlementStandardOptions");
+  const unitList = document.getElementById("monthlySettlementUnitOptions");
+  if (!standardList || !unitList) return;
+  standardList.innerHTML = "";
+  unitList.innerHTML = "";
+  mergeMasterValues_(state.standards, getShipmentHistoryValues_(["standard", "standard2"])).forEach((value) => standardList.appendChild(new Option(value, value)));
+  mergeMasterValues_(state.units, getShipmentHistoryValues_(["unit", "unit2"])).forEach((value) => unitList.appendChild(new Option(value, value)));
+}
+
+function renderMonthlySettlementItemRows_(items) {
+  const container = document.getElementById("monthlySettlementItems");
+  if (!container) return;
+  renderSettlementDatalists_();
+  container.innerHTML = "";
+  items.forEach((item) => appendMonthlySettlementItemRow_(item));
+}
+
+function appendMonthlySettlementItemRow_(item = {}) {
+  const container = document.getElementById("monthlySettlementItems");
+  if (!container) return;
+  const row = document.createElement("div");
+  row.className = "monthly-settlement-item-row";
+  const standard = document.createElement("input");
+  standard.className = "monthly-settlement-standard";
+  standard.setAttribute("list", "monthlySettlementStandardOptions");
+  standard.placeholder = "規格";
+  standard.required = true;
+  standard.value = String(item.standard || "");
+  const unit = document.createElement("input");
+  unit.className = "monthly-settlement-unit";
+  unit.setAttribute("list", "monthlySettlementUnitOptions");
+  unit.placeholder = "単位";
+  unit.required = true;
+  unit.value = String(item.unit || "");
+  const reference = document.createElement("span");
+  reference.className = "monthly-settlement-shipped-reference";
+  reference.textContent = `出荷 ${termNumberOrZero_(item.shippedQuantity)}${item.unit || ""}`;
+  const sold = document.createElement("input");
+  sold.className = "monthly-settlement-sold-quantity";
+  sold.type = "number";
+  sold.min = "0";
+  sold.step = "0.01";
+  sold.inputMode = "decimal";
+  sold.placeholder = "販売数量";
+  sold.required = true;
+  sold.value = item.soldQuantity === undefined ? "" : String(item.soldQuantity);
+  const sales = document.createElement("input");
+  sales.className = "monthly-settlement-sales-amount";
+  sales.type = "number";
+  sales.min = "0";
+  sales.step = "1";
+  sales.inputMode = "numeric";
+  sales.placeholder = "商品売上";
+  sales.required = true;
+  sales.value = item.salesAmount === undefined ? "" : String(item.salesAmount);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "text-btn monthly-settlement-remove-item";
+  remove.textContent = "削除";
+  remove.addEventListener("click", () => { row.remove(); renderMonthlySettlementTotals_(); });
+  const updateReference = () => {
+    const referenceQuantity = getConsignmentShipmentReference_().get(`${standard.value}\u0000${unit.value}`) || 0;
+    reference.textContent = `出荷 ${referenceQuantity}${unit.value || ""}`;
+  };
+  standard.addEventListener("input", updateReference);
+  unit.addEventListener("input", updateReference);
+  row.append(standard, unit, reference, sold, sales, remove);
+  container.appendChild(row);
+}
+
+function renderMonthlySettlementTotals_() {
+  const type = String(document.getElementById("monthlySettlementMethod")?.dataset.type || "");
+  const grossInput = document.getElementById("monthlySettlementGrossSales");
+  let gross = termNumberOrZero_(grossInput?.value);
+  if (type === "consignment") {
+    gross = Array.from(document.querySelectorAll(".monthly-settlement-sales-amount"))
+      .reduce((sum, input) => sum + termNumberOrZero_(input.value), 0);
+    if (grossInput) grossInput.value = String(Math.round(gross));
+  }
+  const net = Math.round(gross
+    - termNumberOrZero_(document.getElementById("monthlySettlementFreightCost")?.value)
+    - termNumberOrZero_(document.getElementById("monthlySettlementCommissionCost")?.value)
+    - termNumberOrZero_(document.getElementById("monthlySettlementOtherDeductions")?.value));
+  const output = document.getElementById("monthlySettlementNetSales");
+  if (output) output.textContent = formatMonthlySettlementYen_(net);
+}
+
+function readMonthlySettlementForm_() {
+  const customer = state.destinations.find((destination) => String(destination.id) === String(state.monthlySettlementCustomerId));
+  const settlementType = normalizeSettlementType_(customer?.settlementType);
+  if (!customer || !["monthly_statement", "consignment"].includes(settlementType)) throw new Error("月末精算の対象先を確認してください");
+  const number = (id, label) => {
+    const raw = String(document.getElementById(id)?.value || "").trim();
+    const value = Number(raw);
+    if (raw === "" || !Number.isFinite(value) || value < 0) throw new Error(`${label}は0以上で入力してください`);
+    return value;
+  };
+  const items = [];
+  document.querySelectorAll(".monthly-settlement-item-row").forEach((row) => {
+    const standard = String(row.querySelector(".monthly-settlement-standard")?.value || "").trim();
+    const unit = String(row.querySelector(".monthly-settlement-unit")?.value || "").trim();
+    if (!standard || !unit) throw new Error("商品別明細の規格・単位は必須です");
+    const soldRaw = String(row.querySelector(".monthly-settlement-sold-quantity")?.value || "").trim();
+    const salesRaw = String(row.querySelector(".monthly-settlement-sales-amount")?.value || "").trim();
+    const soldQuantity = Number(soldRaw);
+    const salesAmount = Number(salesRaw);
+    if (settlementType === "consignment" && (soldRaw === "" || !Number.isFinite(soldQuantity) || soldQuantity < 0 || salesRaw === "" || !Number.isFinite(salesAmount) || salesAmount < 0)) {
+      throw new Error("販売数量と商品売上を確認してください");
+    }
+    if (settlementType === "consignment") items.push({ standard, unit, soldQuantity, salesAmount });
+  });
+  const grossSales = settlementType === "consignment"
+    ? items.reduce((sum, item) => sum + item.salesAmount, 0)
+    : number("monthlySettlementGrossSales", "売上");
+  const freightCost = number("monthlySettlementFreightCost", "送料");
+  const commissionCost = number("monthlySettlementCommissionCost", "手数料");
+  const otherDeductions = number("monthlySettlementOtherDeductions", "その他控除");
+  return {
+    id: String(document.getElementById("monthlySettlementId")?.value || "").trim() || createId(),
+    customerId: String(customer.id),
+    customerNameSnapshot: String(customer.name || ""),
+    settlementType,
+    targetYear: Number(state.monthlySettlementYear),
+    targetMonth: Number(state.monthlySettlementMonth),
+    grossSales: Math.round(grossSales),
+    freightCost,
+    commissionCost,
+    otherDeductions,
+    memo: String(document.getElementById("monthlySettlementMemo")?.value || ""),
+    consignmentItems: items,
+  };
+}
+
+async function submitMonthlySettlementForm_(event) {
+  event.preventDefault();
+  if (!state.isAdmin || state.isBusy) return;
+  try {
+    const payload = readMonthlySettlementForm_();
+    setBusy(true, "月次精算を保存しています…");
+    const response = await adminApiPost("saveMonthlySettlement", payload);
+    const saved = response?.result?.record || payload;
+    upsertById(state.monthlySettlements, normalizeMonthlySettlement_(saved));
+    renderMonthlySettlement_();
+    showToast("月次精算を保存しました", "success");
+  } catch (err) {
+    showToast(err && err.message ? err.message : "月次精算を保存できませんでした", "error");
+  } finally {
+    setBusy(false, "");
+  }
+}
+
+async function voidMonthlySettlement_() {
+  if (!state.isAdmin || state.isBusy) return;
+  const id = String(document.getElementById("monthlySettlementId")?.value || "").trim();
+  if (!id || !confirm("この月次精算を取り消しますか？")) return;
+  try {
+    setBusy(true, "月次精算を取り消しています…");
+    const response = await adminApiPost("voidMonthlySettlement", { id });
+    const saved = response?.result?.record;
+    const index = state.monthlySettlements.findIndex((record) => record.id === id);
+    if (saved && index >= 0) state.monthlySettlements[index] = normalizeMonthlySettlement_(saved);
+    renderMonthlySettlement_();
+    showToast("月次精算を取り消しました", "success");
+  } catch (err) {
+    showToast(err && err.message ? err.message : "月次精算を取り消せませんでした", "error");
+  } finally {
+    setBusy(false, "");
+  }
 }
 
 function salesDateKey_(actual) {

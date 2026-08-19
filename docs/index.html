@@ -153,6 +153,56 @@
         <h3 class="sales-subtitle">出荷実績</h3>
         <div id="salesActualList" class="sales-actual-list"></div>
       </section>
+      <section class="card monthly-settlement-dashboard hidden" id="monthlySettlementSection" aria-labelledby="monthlySettlementTitle">
+        <div class="monthly-settlement-head">
+          <div>
+            <h2 id="monthlySettlementTitle">月次精算</h2>
+            <p class="muted">管理者専用・月末明細の確定値を登録します</p>
+          </div>
+        </div>
+        <div class="monthly-settlement-controls">
+          <label>対象年<select id="monthlySettlementYear"></select></label>
+          <label>対象月<select id="monthlySettlementMonth">
+            <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option>
+            <option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option>
+            <option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select></label>
+          <label class="monthly-settlement-customer-field">出荷先<select id="monthlySettlementCustomer"></select></label>
+        </div>
+        <p id="monthlySettlementStatus" class="muted monthly-settlement-status">月末精算の対象先を選択してください。</p>
+        <form id="monthlySettlementForm" class="form compact monthly-settlement-form hidden">
+          <input type="hidden" id="monthlySettlementId" />
+          <div class="monthly-settlement-summary-line">
+            <div><span class="muted">出荷先</span><strong id="monthlySettlementCustomerName"></strong></div>
+            <div><span class="muted">精算方法</span><strong id="monthlySettlementMethod"></strong></div>
+          </div>
+          <div id="monthlyStatementFields" class="monthly-settlement-hint hidden">月末に届いた明細の確定金額を入力してください。</div>
+          <div id="consignmentFields" class="hidden">
+            <div class="monthly-settlement-section-head">
+              <div>
+                <h3>商品別販売実績</h3>
+                <p class="muted">出荷数量は参考表示です。売上は販売明細から入力します。</p>
+              </div>
+              <button type="button" id="monthlySettlementAddItemBtn" class="btn secondary small">＋ 商品を追加</button>
+            </div>
+            <div id="monthlySettlementItems" class="monthly-settlement-items"></div>
+            <datalist id="monthlySettlementStandardOptions"></datalist>
+            <datalist id="monthlySettlementUnitOptions"></datalist>
+          </div>
+          <div class="monthly-settlement-money-grid">
+            <label>売上<input id="monthlySettlementGrossSales" type="number" min="0" step="1" inputmode="numeric" required /></label>
+            <label>送料<input id="monthlySettlementFreightCost" type="number" min="0" step="1" inputmode="numeric" value="0" required /></label>
+            <label>手数料<input id="monthlySettlementCommissionCost" type="number" min="0" step="1" inputmode="numeric" value="0" required /></label>
+            <label>その他控除<input id="monthlySettlementOtherDeductions" type="number" min="0" step="1" inputmode="numeric" value="0" required /></label>
+          </div>
+          <div class="monthly-settlement-net"><span>手取り</span><strong id="monthlySettlementNetSales">¥0</strong></div>
+          <label>メモ<textarea id="monthlySettlementMemo" rows="3"></textarea></label>
+          <div class="actions monthly-settlement-actions">
+            <button type="submit" class="btn">精算を保存</button>
+            <button type="button" id="monthlySettlementVoidBtn" class="btn secondary hidden">この月次精算を取り消す</button>
+          </div>
+        </form>
+      </section>
       </div>
       <aside class="dashboard-right" aria-label="入力と集計詳細">
       <section class="card dashboard-compact-card compact-monthly-card" aria-label="今月の出荷合計 コンパクト表示">

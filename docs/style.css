@@ -3280,3 +3280,50 @@ button.monthly-schedule-row:hover { background: #f7faf7; }
   .container > .sales-dashboard { order: 6; }
 }
 
+.monthly-settlement-dashboard {
+  order: 7;
+  border: 1px solid #d7e4d9;
+  background: #fbfefb;
+}
+.monthly-settlement-head h2 { margin: 0; }
+.monthly-settlement-head p { margin: 4px 0 0; font-size: 12px; }
+.monthly-settlement-controls { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(100px, .6fr) minmax(180px, 1.7fr); gap: 8px; margin: 14px 0 8px; }
+.monthly-settlement-controls label,
+.monthly-settlement-money-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.monthly-settlement-controls select,
+.monthly-settlement-money-grid input { min-height: 38px; min-width: 0; padding: 6px 8px; font: inherit; color: var(--text); }
+.monthly-settlement-status { margin: 8px 0; font-size: 12px; }
+.monthly-settlement-form { margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #f8fbf9; }
+.monthly-settlement-summary-line { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.monthly-settlement-summary-line > div { display: grid; gap: 3px; min-width: 0; }
+.monthly-settlement-summary-line strong { overflow-wrap: anywhere; }
+.monthly-settlement-hint { margin: 10px 0; padding: 9px; border-radius: 8px; background: #edf6ee; color: var(--primary-dark); font-size: 12px; }
+.monthly-settlement-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 8px; }
+.monthly-settlement-section-head h3 { margin: 0; font-size: 14px; }
+.monthly-settlement-section-head p { margin: 3px 0 0; font-size: 11px; }
+.monthly-settlement-items { display: grid; gap: 8px; }
+.monthly-settlement-item-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(70px, .7fr) minmax(90px, .9fr) minmax(100px, .9fr) minmax(105px, 1fr) auto; gap: 6px; align-items: center; }
+.monthly-settlement-item-row input { min-width: 0; min-height: 38px; padding: 6px 7px; font: inherit; }
+.monthly-settlement-shipped-reference { min-width: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.monthly-settlement-remove-item { padding: 4px; font-size: 11px; }
+.monthly-settlement-money-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.monthly-settlement-money-grid input[readonly] { background: #edf2ee; color: var(--muted); }
+.monthly-settlement-net { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 12px 0; padding: 11px 12px; border-radius: 9px; background: #e3f1e5; color: var(--primary-dark); }
+.monthly-settlement-net strong { font-size: 20px; }
+.monthly-settlement-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 600px) {
+  .monthly-settlement-controls { grid-template-columns: 1fr 1fr; }
+  .monthly-settlement-customer-field { grid-column: 1 / -1; }
+  .monthly-settlement-summary-line { align-items: flex-start; flex-direction: column; }
+  .monthly-settlement-section-head { align-items: stretch; flex-direction: column; }
+  .monthly-settlement-section-head .btn { width: 100%; }
+  .monthly-settlement-item-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr); }
+  .monthly-settlement-shipped-reference { grid-column: 1 / -1; }
+  .monthly-settlement-item-row .monthly-settlement-sold-quantity,
+  .monthly-settlement-item-row .monthly-settlement-sales-amount { grid-row: 3; }
+  .monthly-settlement-item-row .monthly-settlement-remove-item { grid-row: 4; grid-column: 1 / -1; justify-self: end; }
+  .monthly-settlement-money-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .monthly-settlement-actions { display: grid; grid-template-columns: 1fr; }
+}
+
