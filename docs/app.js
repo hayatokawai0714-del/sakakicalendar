@@ -1627,6 +1627,117 @@ function logApiFailure_(action, status, category, redirected = false) {
   });
 }
 
+function syncDiagnosticHost_(value) {
+  try {
+    return new URL(String(value || "")).hostname || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function syncDiagnosticContentType_(value) {
+  const mime = String(value || "").split(";", 1)[0].trim().toLowerCase();
+  return mime || "unknown";
+}
+
+function syncDiagnosticBodyType_(text, contentType) {
+  const body = String(text || "").trim();
+  if (!body) return "empty";
+  const mime = String(contentType || "").toLowerCase();
+  if (mime.includes("json") || body.startsWith("{") || body.startsWith("[")) return "json";
+  if (mime.includes("html") || /^<!doctype\s+html/i.test(body) || /^<html[\s>]/i.test(body)) return "html";
+  return "plain-text";
+}
+
+function syncDiagnosticErrorCode_(json) {
+  const source = String(json && (json.code || json.errorCode || json.error || json.message) || "").toLowerCase();
+  if (/app[_ -]?secret.*missing|missing.*app[_ -]?secret/.test(source)) return "APP_SECRET_MISSING";
+  if (/unauthorized|forbidden|認証/.test(source)) return "AUTH_FAILED";
+  if (/spreadsheet|sheet|スプレッドシート/.test(source)) return "SPREADSHEET_ERROR";
+  if (/unknown action|unsupported request|不明なアクション/.test(source)) return "UNKNOWN_ACTION";
+  if (/validation|invalid|不正|必須/.test(source)) return "VALIDATION_ERROR";
+  return source ? "API_ERROR" : "NONE";
+}
+
+function buildSyncDiagnostic_(details = {}) {
+  const text = String(details.text || "");
+  const contentType = syncDiagnosticContentType_(details.contentType);
+  const bodyType = syncDiagnosticBodyType_(text, contentType);
+  const errorName = String(details.errorName || "");
+  if (details.networkError) {
+    return {
+      status: "network-error",
+      ok: "unknown",
+      redirected: "unknown",
+      host: "unknown",
+      contentType: "unknown",
+      bodyType: "empty",
+      jsonParse: "not-attempted",
+      responseKind: errorName === "AbortError" ? "timeout-or-abort" : "network-error",
+      errorCode: "NONE",
+      errorName: errorName || "unknown",
+    };
+  }
+  const status = Number.isFinite(Number(details.status)) ? Number(details.status) : "unknown";
+  const jsonParse = details.jsonParse || (text.trim() ? "failed" : "not-attempted");
+  let responseKind = "response-error";
+  if (status === 401 || status === 403) responseKind = "http-auth";
+  else if (status === 404) responseKind = "http-not-found";
+  else if (status >= 500) responseKind = "http-server";
+  else if (details.json && details.json.ok === false) responseKind = "json-error";
+  else if (bodyType !== "json" || jsonParse !== "success") responseKind = "non-json-response";
+  else if (details.json && details.json.ok === true) responseKind = "ok-json";
+  return {
+    status,
+    ok: typeof details.ok === "boolean" ? details.ok : "unknown",
+    redirected: details.redirected ? "yes" : "no",
+    host: syncDiagnosticHost_(details.url),
+    contentType,
+    bodyType,
+    jsonParse,
+    responseKind,
+    errorCode: syncDiagnosticErrorCode_(details.json),
+  };
+}
+
+function setSyncDiagnostic_(diagnostic) {
+  const panel = document.getElementById("syncDiagnostic");
+  const text = document.getElementById("syncDiagnosticText");
+  if (!panel || !text) return;
+  if (!diagnostic) {
+    text.textContent = "";
+    panel.classList.add("hidden");
+    return;
+  }
+  const lines = [
+    `status: ${diagnostic.status}`,
+    `ok: ${diagnostic.ok}`,
+    `redirected: ${diagnostic.redirected}`,
+    `host: ${diagnostic.host}`,
+    `content-type: ${diagnostic.contentType}`,
+    `body-type: ${diagnostic.bodyType}`,
+    `json-parse: ${diagnostic.jsonParse}`,
+    `response-kind: ${diagnostic.responseKind}`,
+    `error-code: ${diagnostic.errorCode}`,
+  ];
+  if (diagnostic.errorName) lines.push(`error-name: ${diagnostic.errorName}`);
+  text.textContent = lines.join("\n");
+  panel.classList.remove("hidden");
+}
+
+function logSyncDiagnostic_(diagnostic) {
+  console.warn("[sakaki-sync] diagnostic", {
+    status: diagnostic.status,
+    ok: diagnostic.ok,
+    host: diagnostic.host,
+    contentType: diagnostic.contentType,
+    bodyType: diagnostic.bodyType,
+    jsonParse: diagnostic.jsonParse,
+    responseKind: diagnostic.responseKind,
+    errorCode: diagnostic.errorCode,
+  });
+}
+
 async function apiRequest_(method, action, url, payload, options = {}) {
   const opts =
     method === "GET"
@@ -1640,10 +1751,16 @@ async function apiRequest_(method, action, url, payload, options = {}) {
   let res;
   try {
     res = await fetch(url, opts);
-  } catch {
+  } catch (error) {
+    const diagnostic = buildSyncDiagnostic_({
+      networkError: true,
+      errorName: error && error.name,
+    });
+    setSyncDiagnostic_(diagnostic);
+    logSyncDiagnostic_(diagnostic);
     logApiFailure_(action, 0, "network");
     const err = new Error("Network request failed");
-    err._debug = { action, method, status: 0, category: "network" };
+    err._debug = { action, method, status: 0, category: "network", diagnostic };
     throw err;
   }
   const status = res.status;
@@ -1651,42 +1768,64 @@ async function apiRequest_(method, action, url, payload, options = {}) {
 
   // GAS may return HTML on auth errors. Never expose the response body to the UI or logs.
   let json = null;
+  let jsonParse = "not-attempted";
   try {
+    if (text.trim()) jsonParse = "success";
     json = text ? JSON.parse(text) : null;
   } catch {
+    jsonParse = "failed";
     json = null;
   }
+  const diagnostic = buildSyncDiagnostic_({
+    status,
+    ok: res.ok,
+    redirected: res.redirected,
+    url: res.url,
+    contentType: res.headers.get("content-type"),
+    text,
+    json,
+    jsonParse,
+  });
 
   if (!res.ok) {
     const category = status === 401 || status === 403 ? "auth" : "http";
+    setSyncDiagnostic_(diagnostic);
+    logSyncDiagnostic_(diagnostic);
     logApiFailure_(action, status, category, res.redirected);
     const err = new Error("API request failed");
-    err._debug = { action, method, status, category };
+    err._debug = { action, method, status, category, diagnostic };
     throw err;
   }
 
   if (json && typeof json === "object" && json.ok === false) {
     const category = /unauthorized|forbidden/i.test(String(json.error || "")) ? "auth" : "api";
+    setSyncDiagnostic_(diagnostic);
+    logSyncDiagnostic_(diagnostic);
     logApiFailure_(action, status, category, res.redirected);
     const err = new Error("API rejected request");
-    err._debug = { action, method, status, category };
+    err._debug = { action, method, status, category, diagnostic };
     throw err;
   }
 
   if (!json || typeof json !== "object") {
+    setSyncDiagnostic_(diagnostic);
+    logSyncDiagnostic_(diagnostic);
     logApiFailure_(action, status, "response", res.redirected);
     const err = new Error("Non-JSON response from API");
-    err._debug = { action, method, status, category: "response" };
+    err._debug = { action, method, status, category: "response", diagnostic };
     throw err;
   }
 
   if (json.ok !== true) {
+    setSyncDiagnostic_(diagnostic);
+    logSyncDiagnostic_(diagnostic);
     logApiFailure_(action, status, "response", res.redirected);
     const err = new Error("Invalid API response");
-    err._debug = { action, method, status, category: "response" };
+    err._debug = { action, method, status, category: "response", diagnostic };
     throw err;
   }
 
+  setSyncDiagnostic_(null);
   return json;
 }
 

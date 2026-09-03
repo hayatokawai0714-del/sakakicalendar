@@ -43,6 +43,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .status.warn { border-color: #f2cd7d; background: #fff9e9; color: #7a4b00; }
 .status.err { border-color: #ffccd5; background: #fff5f6; }
 
+.sync-diagnostic { margin-top: 10px; font-size: 12px; }
+.sync-diagnostic summary { cursor: pointer; color: var(--muted); }
+.sync-diagnostic pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 h1, h2, h3 { margin: 0 0 10px; }
 h1 { font-size: 22px; }
 h2 { font-size: 18px; }
