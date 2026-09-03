@@ -132,8 +132,7 @@ function init() {
 function loadState() {
   const storedEntries = readLS(STORAGE_KEYS.entries, []);
   state.entries = (Array.isArray(storedEntries) ? storedEntries : []).map((entry) => normalizeStoredEntry_(entry));
-  state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, [])
-    .map((rule) => normalizeRecurringRule_(rule));
+  state.recurringShipments = normalizeRecurringRules_(readLS(STORAGE_KEYS.recurringShipments, []));
   state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
   const storedDestinations = readLS(STORAGE_KEYS.destinations, []);
   state.destinations = (Array.isArray(storedDestinations) ? storedDestinations : [])
@@ -1404,7 +1403,7 @@ async function loadAllDataFromApi() {
       });
     } catch {}
 
-    state.recurringShipments = recurring.map((r) => normalizeRecurringRule_(r));
+    state.recurringShipments = normalizeRecurringRules_(recurring);
 
     state.destinations = destinations.map((d) => ({
       id: String(d.id),
@@ -2362,6 +2361,31 @@ function normalizeRecurringRule_(raw) {
     updatedAt: String(rule.updatedAt || new Date().toISOString()),
     updatedBy: String(rule.updatedBy || "未設定"),
   };
+}
+
+function normalizeRecurringRules_(rawRules) {
+  const rules = (Array.isArray(rawRules) ? rawRules : []).map((raw) => normalizeRecurringRule_(raw));
+  const bySeries = new Map();
+  rules.forEach((rule) => {
+    const seriesId = recurringSeriesId_(rule);
+    if (!bySeries.has(seriesId)) bySeries.set(seriesId, []);
+    bySeries.get(seriesId).push(rule);
+  });
+
+  // If an older GAS deployment dropped effectiveFrom, recover it only when the
+  // prior version has an explicit effectiveTo boundary and the version ID is ours.
+  rules.forEach((rule, index) => {
+    const raw = Array.isArray(rawRules) ? rawRules[index] : null;
+    if (raw && normalizeDateKey(raw.effectiveFrom)) return;
+    if (!String(rule.parentRecurringId || "").trim()) return;
+    const priorEnds = (bySeries.get(recurringSeriesId_(rule)) || [])
+      .filter((candidate) => candidate.id !== rule.id && candidate.effectiveTo)
+      .map((candidate) => candidate.effectiveTo)
+      .sort();
+    if (!priorEnds.length) return;
+    rule.effectiveFrom = addDaysToDateKey_(priorEnds[priorEnds.length - 1], 1);
+  });
+  return rules;
 }
 
 function recurringSeriesId_(value) {
