@@ -2325,6 +2325,7 @@ function normalizeRecurringRule_(raw) {
   const declaredParentId = String(rule.parentRecurringId || "").trim();
   const versionMarker = "__version__";
   const versionParentId = id.includes(versionMarker) ? id.split(versionMarker)[0].trim() : "";
+  const isVersionedRule = Boolean(versionParentId || declaredParentId);
   // Compatibility for rows written before recurringId/effective columns were deployed:
   // our version IDs explicitly encode their parent series, so restore only that identity.
   const recurringId = declaredParentId
@@ -2348,7 +2349,10 @@ function normalizeRecurringRule_(raw) {
     recurrenceType: String(rule.recurrenceType || "weekly"),
     startDate,
     endDate: normalizeDateKey(rule.endDate || ""),
-    effectiveFrom: normalizeDateKey(rule.effectiveFrom || startDate),
+    // A version with no effectiveFrom must not fall back to the original
+    // startDate: that would backdate a future quantity change. Legacy rules
+    // without version identity retain the startDate compatibility fallback.
+    effectiveFrom: normalizeDateKey(rule.effectiveFrom || (isVersionedRule ? "" : startDate)),
     effectiveTo: normalizeDateKey(rule.effectiveTo || ""),
     weekdays: parseJsonArray(rule.weekdays),
     intervalWeeks: Number(rule.intervalWeeks || 1),
@@ -2875,7 +2879,9 @@ function generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex,
 function isWithinRuleRange(date, rule) {
   if (!date) return false;
   const dateKey = formatDate(date);
-  const starts = [rule.startDate, rule.effectiveFrom]
+  const isVersionedRule = Boolean(String(rule.parentRecurringId || "").trim())
+    || String(rule.id || "").includes("__version__");
+  const starts = [isVersionedRule && !normalizeDateKey(rule.effectiveFrom) ? "" : rule.startDate, rule.effectiveFrom]
     .map((value) => normalizeDateKey(value))
     .filter(Boolean)
     .sort();
