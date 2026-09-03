@@ -56,6 +56,14 @@ function isEffectiveDateDiagnosticsEnabled_() {
   return new URLSearchParams(q).get("debugEffectiveDate") === "1";
 }
 
+function isEffectiveDateRepairEnabled_() {
+  if (!isEffectiveDateDiagnosticsEnabled_()) return false;
+  const q = typeof location === "undefined" ? "" : String(location.search || "");
+  return new URLSearchParams(q).get("allowEffectiveDateRepair") === "1";
+}
+
+const EFFECTIVE_DATE_REPAIR_FROM_ = "2026-09-08";
+
 function diagnosticFieldPresence_(value) {
   return value === undefined || value === null || String(value).trim() === "" ? "missing" : "present";
 }
@@ -206,6 +214,72 @@ function buildRecurringEffectiveDateDiagnostics_(rawRules, normalizedRules) {
   };
 }
 
+function simulateEffectiveDateRepair_(rawRules) {
+  const simulatedRaw = (Array.isArray(rawRules) ? rawRules : []).map((rule) =>
+    Number(rule && rule.quantity || 0) === 30 ? { ...rule, effectiveFrom: EFFECTIVE_DATE_REPAIR_FROM_ } : { ...rule });
+  const simulatedNormalized = normalizeRecurringRules_(simulatedRaw);
+  const selected = chooseEffectiveDateDiagnosticSeries_(simulatedRaw);
+  const target = selected.status === "FOUND"
+    ? simulatedNormalized.filter((rule) => recurringSeriesId_(rule) === selected.key && isEffectiveDateDiagnosticCandidate_(rule))
+    : [];
+  const dates = ["2026-09-01", "2026-09-07", "2026-09-08", "2026-09-15", "2026-09-22"];
+  return Object.fromEntries(dates.map((dateKey) => [
+    dateKey,
+    (() => {
+      const display = analyzeEffectiveDateDiagnostic_(dateKey, target).finalDisplay;
+      if (display && display !== "NONE") return display;
+      const date = parseDate(dateKey);
+      const applicable = target.filter((rule) => isWithinRuleRange(date, rule))
+        .sort((a, b) => String(b.effectiveFrom || "").localeCompare(String(a.effectiveFrom || "")));
+      return applicable.length ? diagnosticWeightLabel_([applicable[0]]) : "NONE";
+    })(),
+  ]));
+}
+
+function buildEffectiveDateRepairAssessment_(rawRules) {
+  const selected = chooseEffectiveDateDiagnosticSeries_(rawRules);
+  const candidates = selected.status === "FOUND"
+    ? selected.rules.filter((rule) => Number(rule && rule.quantity || 0) === 30)
+    : [];
+  const oldRules = selected.status === "FOUND"
+    ? selected.rules.filter((rule) => Number(rule && rule.quantity || 0) === 20)
+    : [];
+  const candidate = candidates.length === 1 ? candidates[0] : null;
+  const simulation = candidate ? simulateEffectiveDateRepair_(selected.rules) : {};
+  const simulationReady = [
+    ["2026-09-01", "20KG"],
+    ["2026-09-07", "20KG"],
+    ["2026-09-08", "30KG"],
+    ["2026-09-15", "30KG"],
+    ["2026-09-22", "30KG"],
+  ].every(([dateKey, expected]) => simulation[dateKey] === expected);
+  const precondition = Boolean(candidate
+    && String(candidate.id || "").trim()
+    && Number(candidate.quantity || 0) === 30
+    && !normalizeDateKey(candidate.effectiveFrom)
+    && oldRules.length > 0
+    && simulationReady);
+  return {
+    targetCount: candidates.length,
+    candidate,
+    simulation,
+    precondition,
+  };
+}
+
+function buildEffectiveDateRepairPatch_(candidate) {
+  if (!candidate || !String(candidate.id || "").trim()) return null;
+  // id is the existing GAS row-routing key; effectiveFrom is the only mutable field.
+  return { id: String(candidate.id), effectiveFrom: EFFECTIVE_DATE_REPAIR_FROM_ };
+}
+
+function repairImmutableFieldsMatch_(before, after) {
+  if (!before || !after) return false;
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  keys.delete("effectiveFrom");
+  return Array.from(keys).every((key) => JSON.stringify(before[key]) === JSON.stringify(after[key]));
+}
+
 function formatEffectiveDateDiagnosticRule_(row) {
   return `${row.quantity}KG startDate=${row.startDate} effectiveFrom=${row.effectiveFrom} effectiveTo=${row.effectiveTo}`
     + ` series=${row.series} history=${row.history} recurrence=${row.recurrenceType}`
@@ -254,6 +328,76 @@ function renderEffectiveDateDiagnostics_() {
     }),
   ] : ["RAW_CAPTURE=WAITING_FOR_API_SYNC"];
   document.getElementById("effectiveDateDiagnosticsText").textContent = lines.join("\n");
+
+  const repairExisting = panel.querySelector("[data-effective-date-repair]");
+  if (!isEffectiveDateRepairEnabled_()) {
+    if (repairExisting) repairExisting.remove();
+    return;
+  }
+  const repair = repairExisting || document.createElement("div");
+  repair.dataset.effectiveDateRepair = "1";
+  if (!repairExisting) panel.appendChild(repair);
+  const assessment = effectiveDateRepairAssessment_;
+  repair.textContent = "";
+  const status = document.createElement("div");
+  status.textContent = effectiveDateRepairResult_
+    ? `REPAIR_RESULT=${effectiveDateRepairResult_}`
+    : `REPAIR_READY=${assessment?.precondition && isApiEnabled() ? "YES" : "NO"}`;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "9/8から30kgに修復";
+  button.disabled = !assessment?.precondition || !isApiEnabled()
+    || Boolean(effectiveDateRepairAttempted_ || effectiveDateRepairPromptOpen_);
+  button.addEventListener("click", () => void runEffectiveDateRepair_());
+  repair.append(status, button);
+}
+
+async function runEffectiveDateRepair_() {
+  if (effectiveDateRepairAttempted_ || effectiveDateRepairPromptOpen_) return;
+  const assessment = buildEffectiveDateRepairAssessment_(effectiveDateRepairRawRules_);
+  if (!assessment.precondition || !isApiEnabled()) {
+    effectiveDateRepairResult_ = "FAILED";
+    renderEffectiveDateDiagnostics_();
+    return;
+  }
+  effectiveDateRepairPromptOpen_ = true;
+  const confirmed = window.confirm("9/8から30kgに修復します。対象は1件、変更項目は適用開始日のみです。");
+  effectiveDateRepairPromptOpen_ = false;
+  if (!confirmed) return;
+
+  effectiveDateRepairAttempted_ = true;
+  const before = { ...assessment.candidate };
+  const patch = buildEffectiveDateRepairPatch_(assessment.candidate);
+  if (!patch) {
+    effectiveDateRepairResult_ = "FAILED";
+    renderEffectiveDateDiagnostics_();
+    return;
+  }
+  try {
+    await apiPost("saveRecurringShipment", patch);
+    await loadAllDataFromApi();
+    renderAll();
+    const after = (Array.isArray(effectiveDateRepairRawRules_) ? effectiveDateRepairRawRules_ : [])
+      .filter((rule) => String(rule && rule.id || "") === String(before.id || ""));
+    const actual = after.length === 1 ? after[0] : null;
+    const verification = actual ? simulateEffectiveDateRepair_(effectiveDateRepairRawRules_) : {};
+    const expected = {
+      "2026-09-01": "20KG",
+      "2026-09-07": "20KG",
+      "2026-09-08": "30KG",
+      "2026-09-15": "30KG",
+      "2026-09-22": "30KG",
+    };
+    const simulationOk = Object.keys(expected).every((dateKey) => verification[dateKey] === expected[dateKey]);
+    const readbackOk = Boolean(actual
+      && Number(actual.quantity || 0) === 30
+      && normalizeDateKey(actual.effectiveFrom) === EFFECTIVE_DATE_REPAIR_FROM_
+      && repairImmutableFieldsMatch_(before, actual));
+    effectiveDateRepairResult_ = readbackOk && simulationOk ? "SUCCESS" : "FAILED";
+  } catch {
+    effectiveDateRepairResult_ = "FAILED";
+  }
+  renderEffectiveDateDiagnostics_();
 }
 
 
@@ -293,6 +437,11 @@ const state = {
 };
 
 let effectiveDateDiagnostics_ = null;
+let effectiveDateRepairRawRules_ = null;
+let effectiveDateRepairAssessment_ = null;
+let effectiveDateRepairResult_ = "";
+let effectiveDateRepairAttempted_ = false;
+let effectiveDateRepairPromptOpen_ = false;
 
 let scheduleDragState_ = null;
 let schedulePointerState_ = null;
@@ -1613,7 +1762,14 @@ async function loadAllDataFromApi() {
 
     state.recurringShipments = normalizeRecurringRules_(recurring);
     if (isEffectiveDateDiagnosticsEnabled_()) {
+      effectiveDateRepairRawRules_ = recurring;
       effectiveDateDiagnostics_ = buildRecurringEffectiveDateDiagnostics_(recurring, state.recurringShipments);
+      effectiveDateRepairAssessment_ = isEffectiveDateRepairEnabled_()
+        ? buildEffectiveDateRepairAssessment_(recurring)
+        : null;
+    } else {
+      effectiveDateRepairRawRules_ = null;
+      effectiveDateRepairAssessment_ = null;
     }
 
     state.destinations = destinations.map((d) => ({

@@ -20,7 +20,9 @@ function extractFunction(name) {
 const context = {
   console,
   URLSearchParams,
+  state: { recurringExceptions: [] },
   createId: () => "test-id",
+  createIdFrom: (prefix, date) => `${prefix}-${date}`,
   formatDate: (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
   parseJsonArray: (value) => Array.isArray(value) ? value : [],
   parseReferenceItems: (value) => Array.isArray(value) ? value : [],
@@ -28,10 +30,19 @@ const context = {
 vm.createContext(context);
 vm.runInContext([
   "isEffectiveDateDiagnosticsEnabled_",
+  "isEffectiveDateRepairEnabled_",
   "diagnosticFieldPresence_",
   "diagnosticDateValue_",
   "diagnosticRecurrenceType_",
   "diagnosticRuleSummary_",
+  "diagnosticRuleSeriesKey_",
+  "isEffectiveDateDiagnosticCandidate_",
+  "chooseEffectiveDateDiagnosticSeries_",
+  "diagnosticWeightLabel_",
+  "analyzeEffectiveDateDiagnostic_",
+  "simulateEffectiveDateRepair_",
+  "buildEffectiveDateRepairAssessment_",
+  "buildEffectiveDateRepairPatch_",
   "normalizeDateKey",
   "parseDate",
   "addDaysToDateKey_",
@@ -39,13 +50,27 @@ vm.runInContext([
   "normalizeRecurringRule_",
   "normalizeRecurringRules_",
   "isWithinRuleRange",
+  "getRecurringExceptions",
+  "applyRecurringExceptions_",
+  "generateRecurringShipmentsForMonthBase_",
+  "matchesWeeklyRule",
+  "parseNumberList",
+  "stripTime",
   "dedupeRecurringOccurrenceVersions_",
 ].map(extractFunction).join("\n"), context);
+
+context.EFFECTIVE_DATE_REPAIR_FROM_ = "2026-09-08";
 
 context.location = { search: "" };
 assert.equal(context.isEffectiveDateDiagnosticsEnabled_(), false);
 context.location.search = "?debugEffectiveDate=1";
 assert.equal(context.isEffectiveDateDiagnosticsEnabled_(), true);
+assert.equal(context.isEffectiveDateRepairEnabled_(), false);
+context.location.search = "?debugEffectiveDate=1&allowEffectiveDateRepair=1";
+assert.equal(context.isEffectiveDateRepairEnabled_(), true);
+context.location.search = "?allowEffectiveDateRepair=1";
+assert.equal(context.isEffectiveDateRepairEnabled_(), false);
+context.location.search = "?debugEffectiveDate=1";
 const safeDiagnostic = context.diagnosticRuleSummary_({
   id: "secret-record-id",
   destinationName: "secret-customer-name",
@@ -68,6 +93,7 @@ const oldRule = {
   startDate: "2026-01-01",
   effectiveFrom: "2026-01-01",
   effectiveTo: "2026-09-07",
+  standard: "40cm",
   quantity: 20,
   unit: "kg",
   recurrenceType: "weekly",
@@ -79,6 +105,7 @@ const futureVersionWithoutBoundary = {
   startDate: "2026-01-01",
   effectiveFrom: "",
   effectiveTo: "",
+  standard: "40cm",
   quantity: 30,
   unit: "kg",
   recurrenceType: "weekly",
@@ -94,6 +121,31 @@ assert.equal(context.isWithinRuleRange(context.parseDate("2026-09-01"), recovere
 assert.equal(context.isWithinRuleRange(context.parseDate("2026-09-01"), recovered[1]), false);
 assert.equal(context.isWithinRuleRange(context.parseDate("2026-09-07"), recovered[1]), false);
 assert.equal(context.isWithinRuleRange(context.parseDate("2026-09-08"), recovered[1]), true);
+
+const repairAssessment = context.buildEffectiveDateRepairAssessment_([oldRule, futureVersionWithoutBoundary]);
+assert.equal(repairAssessment.targetCount, 1);
+assert.equal(repairAssessment.precondition, true);
+assert.equal(JSON.stringify(repairAssessment.simulation), JSON.stringify({
+  "2026-09-01": "20KG",
+  "2026-09-07": "20KG",
+  "2026-09-08": "30KG",
+  "2026-09-15": "30KG",
+  "2026-09-22": "30KG",
+}));
+const repairPatch = context.buildEffectiveDateRepairPatch_(repairAssessment.candidate);
+assert.deepEqual(Object.keys(repairPatch).sort(), ["effectiveFrom", "id"]);
+assert.equal(repairPatch.effectiveFrom, "2026-09-08");
+
+assert.equal(context.buildEffectiveDateRepairAssessment_([oldRule]).precondition, false);
+assert.equal(context.buildEffectiveDateRepairAssessment_([
+  oldRule,
+  futureVersionWithoutBoundary,
+  { ...futureVersionWithoutBoundary, id: "series__version__v2", quantity: 30 },
+]).precondition, false);
+assert.equal(context.buildEffectiveDateRepairAssessment_([
+  oldRule,
+  { ...futureVersionWithoutBoundary, effectiveFrom: "2026-09-08" },
+]).precondition, false);
 
 function quantityFor(dateKey, rules) {
   const candidates = rules
