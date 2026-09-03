@@ -132,7 +132,8 @@ function init() {
 function loadState() {
   const storedEntries = readLS(STORAGE_KEYS.entries, []);
   state.entries = (Array.isArray(storedEntries) ? storedEntries : []).map((entry) => normalizeStoredEntry_(entry));
-  state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, []);
+  state.recurringShipments = readLS(STORAGE_KEYS.recurringShipments, [])
+    .map((rule) => normalizeRecurringRule_(rule));
   state.recurringExceptions = readLS(STORAGE_KEYS.recurringExceptions, []).map((ex) => normalizeRecurringException_(ex));
   const storedDestinations = readLS(STORAGE_KEYS.destinations, []);
   state.destinations = (Array.isArray(storedDestinations) ? storedDestinations : [])
@@ -1403,33 +1404,7 @@ async function loadAllDataFromApi() {
       });
     } catch {}
 
-    state.recurringShipments = recurring.map((r) => ({
-      id: String(r.id),
-      shipmentType: "recurring",
-      destinationId: String(r.destinationId || ""),
-      destinationName: String(r.destinationName || r.destination || r.customer || ""),
-      destination: String(r.destinationName || r.destination || r.customer || ""),
-      standard: String(r.standard || ""),
-      quantity: Number(r.quantity || 0),
-      unit: String(r.unit || ""),
-      standard2: String(r.standard2 || ""),
-      quantity2: Number(r.quantity2 || 0),
-      unit2: String(r.unit2 || ""),
-      memo: String(r.memo || ""),
-      recurrenceType: String(r.recurrenceType || "weekly"),
-      startDate: normalizeDateKey(r.startDate || ""),
-      endDate: normalizeDateKey(r.endDate || ""),
-      weekdays: parseJsonArray(r.weekdays),
-      intervalWeeks: Number(r.intervalWeeks || 1),
-      monthDays: parseJsonArray(r.monthDays),
-      referenceDay: Number(r.referenceDay || 0),
-      referenceWeekdays: parseJsonArray(r.referenceWeekdays),
-      candidateWeekdays: parseJsonArray(r.candidateWeekdays),
-      shipOffsetDays: Number(r.shipOffsetDays || 0),
-      referenceItems: parseReferenceItems(r.referenceItems),
-      updatedAt: String(r.updatedAt || new Date().toISOString()),
-      updatedBy: String(r.updatedBy || "未設定"),
-    }));
+    state.recurringShipments = recurring.map((r) => normalizeRecurringRule_(r));
 
     state.destinations = destinations.map((d) => ({
       id: String(d.id),
@@ -2335,10 +2310,86 @@ function flattenSpotShipmentForApi_(entry) {
 }
 
 function saveRecurringShipment(rule) {
-  rule.shipmentType = "recurring";
-  rememberOwnUpdate_(rule);
-  upsertById(state.recurringShipments, rule);
+  const normalized = normalizeRecurringRule_(rule);
+  normalized.shipmentType = "recurring";
+  rememberOwnUpdate_(normalized);
+  upsertById(state.recurringShipments, normalized);
   saveState();
+  return normalized;
+}
+
+function normalizeRecurringRule_(raw) {
+  const rule = raw && typeof raw === "object" ? raw : {};
+  const id = String(rule.id || createId()).trim();
+  const startDate = normalizeDateKey(rule.startDate || rule.date || "");
+  return {
+    ...rule,
+    id,
+    recurringId: String(rule.recurringId || id).trim(),
+    shipmentType: "recurring",
+    destinationId: String(rule.destinationId || ""),
+    destinationName: String(rule.destinationName || rule.destination || rule.customer || ""),
+    destination: String(rule.destinationName || rule.destination || rule.customer || ""),
+    standard: String(rule.standard || ""),
+    quantity: Number(rule.quantity || 0),
+    unit: String(rule.unit || ""),
+    standard2: String(rule.standard2 || ""),
+    quantity2: Number(rule.quantity2 || 0),
+    unit2: String(rule.unit2 || ""),
+    memo: String(rule.memo || ""),
+    recurrenceType: String(rule.recurrenceType || "weekly"),
+    startDate,
+    endDate: normalizeDateKey(rule.endDate || ""),
+    effectiveFrom: normalizeDateKey(rule.effectiveFrom || startDate),
+    effectiveTo: normalizeDateKey(rule.effectiveTo || ""),
+    weekdays: parseJsonArray(rule.weekdays),
+    intervalWeeks: Number(rule.intervalWeeks || 1),
+    monthDays: parseJsonArray(rule.monthDays),
+    referenceDay: Number(rule.referenceDay || 0),
+    referenceWeekdays: parseJsonArray(rule.referenceWeekdays),
+    candidateWeekdays: parseJsonArray(rule.candidateWeekdays),
+    shipOffsetDays: Number(rule.shipOffsetDays || 0),
+    referenceItems: parseReferenceItems(rule.referenceItems),
+    updatedAt: String(rule.updatedAt || new Date().toISOString()),
+    updatedBy: String(rule.updatedBy || "未設定"),
+  };
+}
+
+function recurringSeriesId_(value) {
+  const item = value && typeof value === "object" ? value : {};
+  return String(item.recurringId || item._seriesId || item._ruleId || item.id || "").trim();
+}
+
+function recurringRuleApiPayload_(rule) {
+  const normalized = normalizeRecurringRule_(rule);
+  return {
+    id: normalized.id,
+    recurringId: normalized.recurringId,
+    destinationId: normalized.destinationId,
+    destinationName: normalized.destinationName,
+    standard: normalized.standard,
+    quantity: normalized.quantity,
+    unit: normalized.unit,
+    standard2: normalized.standard2,
+    quantity2: normalized.quantity2,
+    unit2: normalized.unit2,
+    memo: normalized.memo,
+    recurrenceType: normalized.recurrenceType,
+    startDate: normalized.startDate,
+    endDate: normalized.endDate,
+    effectiveFrom: normalized.effectiveFrom,
+    effectiveTo: normalized.effectiveTo,
+    weekdays: JSON.stringify(normalized.weekdays),
+    intervalWeeks: normalized.intervalWeeks,
+    monthDays: JSON.stringify(normalized.monthDays),
+    referenceDay: normalized.referenceDay,
+    referenceWeekdays: JSON.stringify(normalized.referenceWeekdays || []),
+    candidateWeekdays: JSON.stringify(normalized.candidateWeekdays || []),
+    shipOffsetDays: normalized.shipOffsetDays,
+    referenceItems: JSON.stringify(normalized.referenceItems || []),
+    updatedAt: normalized.updatedAt,
+    updatedBy: normalized.updatedBy,
+  };
 }
 
 function getRecurringExceptions() {
@@ -2455,7 +2506,7 @@ function buildRecurringExceptionShipment_(sourceEntry, exception) {
     exceptionDate: sourceDate,
     exceptionAction: isMove ? "move" : "override",
     recurringId: exception.recurringId || sourceEntry.recurringId || sourceEntry._ruleId || "",
-    _ruleId: exception.recurringId || sourceEntry._ruleId,
+    _ruleId: sourceEntry._ruleId || exception.recurringId,
     updatedAt: String(exception.updatedAt || sourceEntry.updatedAt || new Date().toISOString()),
     updatedBy: String(exception.updatedBy || sourceEntry.updatedBy || currentUpdatedBy()),
   };
@@ -2495,10 +2546,12 @@ function generateRecurringShipmentsForMonthBase_(year, monthIndex, rules = getRe
   const end = new Date(year, monthIndex + 1, 0);
   const out = [];
 
-  rules.forEach((rule) => {
+  rules.forEach((rawRule) => {
+    const rule = normalizeRecurringRule_(rawRule);
     const referenceItems = Array.isArray(rule.referenceItems) ? rule.referenceItems.filter(Boolean) : [];
     if (referenceItems.length && ["monthlyByDate", "referenceDate", "beforeReferenceNearestWeekday"].includes(rule.recurrenceType)) {
-      out.push(...generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems));
+      out.push(...generateRecurringShipmentsFromReferenceItemsForMonth(year, monthIndex, rule, referenceItems)
+        .filter((entry) => isWithinRuleRange(parseDate(entry.date), rule)));
       return;
     }
 
@@ -2548,7 +2601,7 @@ function generateRecurringShipmentsForMonthBase_(year, monthIndex, rules = getRe
         updatedBy: rule.updatedBy || currentUpdatedBy(),
         _ruleId: rule.id,
         sourceType: "recurring",
-        recurringId: rule.id,
+        recurringId: rule.recurringId || rule.id,
       });
     }
   });
@@ -2672,7 +2725,7 @@ function buildRecurringShipmentEntry_(rule, item, shipDateKey, referenceDate, ne
     updatedBy: rule.updatedBy || currentUpdatedBy(),
     _ruleId: rule.id,
     sourceType: "recurring",
-    recurringId: rule.id,
+    recurringId: rule.recurringId || rule.id,
     referenceDay: refDay,
     referenceDate: referenceDate ? formatDate(referenceDate) : "",
     nearestWeekdayDate: nearestWeekdayDate ? formatDate(nearestWeekdayDate) : "",
@@ -2738,7 +2791,7 @@ function generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex,
       updatedBy: rule.updatedBy || currentUpdatedBy(),
       _ruleId: rule.id,
       sourceType: "recurring",
-      recurringId: rule.id,
+      recurringId: rule.recurringId || rule.id,
       referenceDate: formatDate(referenceDate),
       nearestWeekdayDate: formatDate(candidate),
     };
@@ -2747,14 +2800,18 @@ function generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex,
 }
 
 function isWithinRuleRange(date, rule) {
-  const start = parseDate(normalizeDateKey(rule.startDate));
-  if (!start) return false;
-  if (date < start) return false;
-  if (rule.endDate) {
-    const end = parseDate(normalizeDateKey(rule.endDate));
-    if (end && date > end) return false;
-  }
-  return true;
+  if (!date) return false;
+  const dateKey = formatDate(date);
+  const starts = [rule.startDate, rule.effectiveFrom]
+    .map((value) => normalizeDateKey(value))
+    .filter(Boolean)
+    .sort();
+  if (!starts.length || dateKey < starts[starts.length - 1]) return false;
+  const ends = [rule.endDate, rule.effectiveTo]
+    .map((value) => normalizeDateKey(value))
+    .filter(Boolean)
+    .sort();
+  return !ends.length || dateKey <= ends[0];
 }
 
 function matchesWeeklyRule(date, rule) {
@@ -3549,6 +3606,7 @@ async function deleteEntry(entry, forcedRecurringMode = "") {
   if (isRecurringShipment) {
     if (!deleteMode) deleteMode = await recurringChoice_("delete");
     if (!deleteMode) return;
+    if (deleteMode === "rule" && !confirm("この日以降の定期出荷を停止します。過去の予定は変更されません。")) return;
   } else if (!confirm("削除しますか？")) {
     return;
   }
@@ -3557,7 +3615,7 @@ async function deleteEntry(entry, forcedRecurringMode = "") {
     setBusy(true, "削除しています…");
 
     if (cloudMode) {
-      // Optimistic UI update: remove locally first, then sync delete to API.
+      // Optimistic UI update: close only the future range, preserving history.
       snap = snapshotLocalState_();
       if (isRecurringShipment) {
         if (deleteMode === "day") {
@@ -3570,13 +3628,19 @@ async function deleteEntry(entry, forcedRecurringMode = "") {
             return;
           }
         } else {
-          state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
-          const removedExceptions = removeRecurringExceptionsForRule(entry._ruleId || entry.id);
-          saveState();
+          const changes = stopRecurringSeriesFromDate_(entry);
+          changes.forEach((rule) => saveRecurringShipment(rule));
           refreshViewFast();
-          await deleteItemFromApi("deleteRecurringShipment", entry._ruleId || entry.id);
-          for (const ex of removedExceptions) {
-            await deleteItemFromApi("deleteRecurringException", ex.id);
+          for (const rule of changes) {
+            const syncOk = await syncSave("saveRecurringShipment", recurringRuleApiPayload_(rule), snap, {
+              restoreOnError: false,
+            });
+            if (!syncOk) {
+              restoreLocalState_(snap);
+              refreshViewFast();
+              finishSaveErrorStatus("delete");
+              return;
+            }
           }
         }
       } else {
@@ -3597,12 +3661,7 @@ async function deleteEntry(entry, forcedRecurringMode = "") {
         if (deleteMode === "day") {
           saveRecurringException(buildRecurringSkipException_(entry));
         } else {
-          state.recurringShipments = state.recurringShipments.filter((r) => r.id !== (entry._ruleId || entry.id));
-          const removedExceptions = removeRecurringExceptionsForRule(entry._ruleId || entry.id);
-          saveState();
-          for (const ex of removedExceptions) {
-            deleteRecurringException(ex.recurringId, ex.date);
-          }
+          stopRecurringSeriesFromDate_(entry).forEach((rule) => saveRecurringShipment(rule));
         }
       } else {
         state.entries = state.entries.filter((x) => x.id !== entry.id);
@@ -4145,15 +4204,72 @@ function scrollEntryFormIntoView_() {
   window.setTimeout(() => card.classList.remove("form-highlight"), 1200);
 }
 
+function createRecurringRuleVersionId_(seriesId) {
+  return `${String(seriesId || "recurring").trim()}__version__${createId()}`;
+}
+
+function splitRecurringRuleForFutureChange_(existingRule, proposedRule, effectiveFrom) {
+  const previous = normalizeRecurringRule_(existingRule);
+  const nextDate = normalizeDateKey(effectiveFrom);
+  const cutoff = addDaysToDateKey_(nextDate, -1);
+  const seriesId = previous.recurringId || previous.id;
+  const now = new Date().toISOString();
+  const nextVersionStarts = getRecurringShipments()
+    .filter((rule) => recurringSeriesId_(rule) === seriesId && String(rule.id) !== String(previous.id))
+    .map((rule) => normalizeDateKey(rule.effectiveFrom || rule.startDate))
+    .filter((date) => date && date > nextDate)
+    .sort();
+  const nextVersionEnd = nextVersionStarts.length ? addDaysToDateKey_(nextVersionStarts[0], -1) : "";
+  const nextEndCandidates = [previous.effectiveTo, nextVersionEnd].filter(Boolean).sort();
+  const closed = {
+    ...previous,
+    recurringId: seriesId,
+    effectiveTo: previous.effectiveTo && previous.effectiveTo < cutoff ? previous.effectiveTo : cutoff,
+    updatedAt: now,
+    updatedBy: currentUpdatedBy(),
+  };
+  const next = normalizeRecurringRule_({
+    ...proposedRule,
+    id: createRecurringRuleVersionId_(seriesId),
+    recurringId: seriesId,
+    effectiveFrom: nextDate,
+    effectiveTo: nextEndCandidates[0] || "",
+    updatedAt: now,
+    updatedBy: currentUpdatedBy(),
+  });
+  return { previous: closed, next };
+}
+
+function stopRecurringSeriesFromDate_(entry) {
+  const seriesId = recurringSeriesId_(entry);
+  const stopDate = normalizeDateKey(entry && (entry.exceptionDate || entry.date));
+  if (!seriesId || !stopDate) return [];
+  const cutoff = addDaysToDateKey_(stopDate, -1);
+  return getRecurringShipments()
+    .filter((rule) => recurringSeriesId_(rule) === seriesId)
+    .map((rawRule) => {
+      const rule = normalizeRecurringRule_(rawRule);
+      const currentEnd = rule.effectiveTo;
+      if (currentEnd && currentEnd <= cutoff) return null;
+      return {
+        ...rule,
+        effectiveTo: cutoff,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUpdatedBy(),
+      };
+    })
+    .filter(Boolean);
+}
+
 function openChoiceModal_(kind) {
   const config = kind === "edit"
     ? {
         title: "定期出荷の編集",
-        text: "変更する範囲を選んでください。定期設定全体を変える操作は最後に表示しています。",
+        text: "変更する範囲を選んでください。今後の定期出荷を変更する場合、過去の予定は変更されません。",
         buttons: [
           { label: "この回だけ変更", value: "day", primary: true },
           { label: "この回だけ別日に移動", value: "move" },
-          { label: "定期設定全体を変更", value: "rule" },
+          { label: "この日以降の定期出荷を変更", value: "rule" },
           { label: "この回だけ削除", value: "delete_day", danger: true },
           { label: "キャンセル", value: "" },
         ],
@@ -4163,7 +4279,7 @@ function openChoiceModal_(kind) {
         text: "削除方法を選んでください。",
         buttons: [
           { label: "この回だけ削除", value: "day", primary: true },
-          { label: "定期設定全体を削除", value: "rule", danger: true },
+          { label: "今後の定期出荷を停止", value: "rule", danger: true },
           { label: "キャンセル", value: "" },
         ],
       };
@@ -4227,7 +4343,7 @@ async function recurringChoice_(kind) {
 }
 
 function buildRecurringSkipException_(entry) {
-  const recurringId = String(entry._ruleId || entry.recurringId || entry.id || "").trim();
+  const recurringId = recurringSeriesId_(entry);
   const date = normalizeDateKey(entry.exceptionDate || entry.date);
   return {
     id: entry.exceptionAction && entry.id ? String(entry.id) : createIdFrom(`${recurringId}__skip`, date),
@@ -4275,7 +4391,7 @@ function buildRecurringOccurrenceException_(entry, sourceDateValue, targetDateVa
   if (!source || !target) throw new Error("移動元と移動先の日付を確認してください");
   const offsetDays = Math.round((stripTime(target).getTime() - stripTime(source).getTime()) / (24 * 60 * 60 * 1000));
   const action = offsetDays === 0 ? "override" : "move";
-  const recurringId = String(entry._ruleId || entry.recurringId || "").trim();
+  const recurringId = recurringSeriesId_(entry);
   const destinationName = String(entry.destinationName || entry.destination || "").trim();
   return {
     id: String(options.preferredId || "") || createIdFrom(`${recurringId}__override`, sourceDate),
@@ -4647,9 +4763,15 @@ async function submitEntryForm(e) {
       const referenceDay = Number(document.getElementById("referenceDay").value || 0);
       const shipOffsetDays = Number(document.getElementById("shipOffsetDays").value || 0);
       const selectedRecurringWeekdays = getSelectedWeekdays();
+      const existingVersionId = String(document.getElementById("recurringId").value || "").trim();
+      const existingRule = existingVersionId
+        ? getRecurringShipments().find((item) => String(item.id) === existingVersionId)
+        : null;
+      const effectiveFrom = requiredValue("effectiveFrom", "適用開始日");
 
       const rule = {
-        id: document.getElementById("recurringId").value || createId(),
+        id: existingVersionId || createId(),
+        recurringId: existingRule ? recurringSeriesId_(existingRule) : existingVersionId || undefined,
         shipmentType: "recurring",
         destinationId: destId,
         destinationName: destName,
@@ -4672,6 +4794,8 @@ async function submitEntryForm(e) {
         candidateWeekdays: recurrenceType === "beforeReferenceNearestWeekday" ? selectedRecurringWeekdays : [],
         shipOffsetDays: recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday" ? shipOffsetDays : 0,
         referenceItems: [],
+        effectiveFrom,
+        effectiveTo: "",
         updatedAt: new Date().toISOString(),
         updatedBy: currentUpdatedBy(),
       };
@@ -4693,54 +4817,44 @@ async function submitEntryForm(e) {
         throw new Error("曜日を1つ以上選択してください");
       }
 
+      let rulesToSave = [normalizeRecurringRule_(rule)];
+      if (existingRule) {
+        if (effectiveFrom < normalizeDateKey(existingRule.effectiveFrom || existingRule.startDate)) {
+          throw new Error("適用開始日は、現在の定期版の適用開始日以降にしてください");
+        }
+        if (!confirm("この日以降の定期出荷を変更します。過去の予定は変更されません。")) return;
+        rulesToSave = Object.values(splitRecurringRuleForFutureChange_(existingRule, rule, effectiveFrom));
+      }
+
       if (cloudMode) {
         const snap = snapshotLocalState_();
         // Optimistic UI update: reflect immediately, then sync to API (no full reload).
-        saveRecurringShipment(rule);
+        rulesToSave.forEach((item) => saveRecurringShipment(item));
         localSaved = true;
         refreshViewFast();
         cloudAttempted = true;
-        const syncOk = await syncSave("saveRecurringShipment", {
-          id: rule.id,
-          destinationId: rule.destinationId,
-          destinationName: rule.destinationName,
-          standard: rule.standard,
-          quantity: rule.quantity,
-          unit: rule.unit,
-          memo: rule.memo,
-          standard2: rule.standard2 || "",
-          quantity2: rule.quantity2 || 0,
-          unit2: rule.unit2 || "",
-          recurrenceType: rule.recurrenceType,
-          startDate: rule.startDate,
-          endDate: rule.endDate,
-          weekdays: JSON.stringify(rule.weekdays),
-          intervalWeeks: rule.intervalWeeks,
-          monthDays: JSON.stringify(rule.monthDays),
-          referenceDay: rule.referenceDay,
-          referenceWeekdays: JSON.stringify(rule.referenceWeekdays || []),
-          candidateWeekdays: JSON.stringify(rule.candidateWeekdays || []),
-          shipOffsetDays: rule.shipOffsetDays || 0,
-          referenceItems: JSON.stringify(rule.referenceItems || []),
-          updatedAt: rule.updatedAt,
-          updatedBy: rule.updatedBy,
-        }, snap, {
-          restoreOnError: false,
-        });
-        if (!syncOk) {
-          finishSaveErrorStatus(operation, { localSaved });
-          return;
+        for (const item of rulesToSave) {
+          const syncOk = await syncSave("saveRecurringShipment", recurringRuleApiPayload_(item), snap, {
+            restoreOnError: false,
+          });
+          if (!syncOk) {
+            restoreLocalState_(snap);
+            refreshViewFast();
+            finishSaveErrorStatus(operation, { localSaved });
+            return;
+          }
         }
         // loadAllDataFromApi() removed for performance (optimistic update).
       } else {
-        saveRecurringShipment(rule);
+        rulesToSave.forEach((item) => saveRecurringShipment(item));
         localSaved = true;
       }
 
       if (cloudMode) finishCloudSaveStatus(operation);
       else finishLocalSaveStatus(operation);
       resetEntryForm();
-      showSavedDate_(nextRecurringPreviewDates_(rule, 1)[0] || rule.startDate);
+      const savedRule = rulesToSave[rulesToSave.length - 1];
+      showSavedDate_(nextRecurringPreviewDates_(savedRule, 1)[0] || savedRule.effectiveFrom || savedRule.startDate);
       return;
     }
 
@@ -4934,7 +5048,7 @@ async function setEntryToForm(entry) {
 
     if (choice === "day" || choice === "move") {
       document.getElementById("entryMode").value = choice === "move" ? "recurring_move" : "recurring_override";
-      document.getElementById("exceptionRecurringId").value = String(entry._ruleId || entry.recurringId || entry.id || "");
+      document.getElementById("exceptionRecurringId").value = recurringSeriesId_(entry);
       document.getElementById("exceptionDate").value = String(entry.exceptionDate || entry.date || "");
       document.getElementById("entryId").value = String(entry.id || createId());
 
@@ -5015,6 +5129,7 @@ async function setEntryToForm(entry) {
 
     document.getElementById("startDate").value = rule.startDate || "";
     document.getElementById("endDate").value = rule.endDate || "";
+    document.getElementById("effectiveFrom").value = normalizeDateKey(state.selectedDate || entry.date || rule.effectiveFrom || rule.startDate || "");
     return true;
   }
 
@@ -5085,6 +5200,7 @@ function resetEntryForm() {
 
   setFormDate(state.selectedDate);
   document.getElementById("startDate").value = state.selectedDate;
+  document.getElementById("effectiveFrom").value = state.selectedDate;
   document.getElementById("endDate").value = "";
 
     document.getElementById("recurrenceType").value = "weekly_1";

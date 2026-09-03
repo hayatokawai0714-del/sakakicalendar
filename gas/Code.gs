@@ -551,7 +551,7 @@ function getSheetData_(sheetName) {
       // Normalize Dates so the frontend can reliably compare by YYYY-MM-DD strings.
       // Sheets often auto-convert "2026-05-27" into a Date cell.
       if (v instanceof Date) {
-        if (key === "date" || key === "startDate" || key === "endDate" || key === "effectiveFrom" || key === "occurrenceDate" || key === "shipmentDate") {
+        if (key === "date" || key === "startDate" || key === "endDate" || key === "effectiveFrom" || key === "effectiveTo" || key === "occurrenceDate" || key === "shipmentDate") {
           v = Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd");
         } else if (key === "time") {
           v = Utilities.formatDate(v, "Asia/Tokyo", "HH:mm");
@@ -887,6 +887,7 @@ function ensureHeaders_() {
   ]);
   ensureHeaderRow_(SHEET_NAMES.recurring_shipments, [
     "id",
+    "recurringId",
     "destinationId",
     "destinationName",
     "standard",
@@ -906,6 +907,8 @@ function ensureHeaders_() {
     "referenceWeekdays",
     "candidateWeekdays",
     "shipOffsetDays",
+    "effectiveFrom",
+    "effectiveTo",
     "updatedAt",
     "updatedBy",
   ]);
