@@ -2322,10 +2322,19 @@ function normalizeRecurringRule_(raw) {
   const rule = raw && typeof raw === "object" ? raw : {};
   const id = String(rule.id || createId()).trim();
   const startDate = normalizeDateKey(rule.startDate || rule.date || "");
+  const declaredSeriesId = String(rule.recurringId || "").trim();
+  const declaredParentId = String(rule.parentRecurringId || "").trim();
+  const versionMarker = "__version__";
+  const versionParentId = id.includes(versionMarker) ? id.split(versionMarker)[0].trim() : "";
+  // Compatibility for rows written before recurringId/effective columns were deployed:
+  // our version IDs explicitly encode their parent series, so restore only that identity.
+  const recurringId = declaredParentId
+    || (declaredSeriesId && declaredSeriesId !== id ? declaredSeriesId : versionParentId || declaredSeriesId || id);
   return {
     ...rule,
     id,
-    recurringId: String(rule.recurringId || id).trim(),
+    recurringId,
+    parentRecurringId: declaredParentId || versionParentId,
     shipmentType: "recurring",
     destinationId: String(rule.destinationId || ""),
     destinationName: String(rule.destinationName || rule.destination || rule.customer || ""),
@@ -4260,7 +4269,8 @@ function splitRecurringRuleForFutureChange_(existingRule, proposedRule, effectiv
     .filter((date) => date && date > nextDate)
     .sort();
   const nextVersionEnd = nextVersionStarts.length ? addDaysToDateKey_(nextVersionStarts[0], -1) : "";
-  const nextEndCandidates = [previous.effectiveTo, nextVersionEnd].filter(Boolean).sort();
+  const previousEnd = previous.effectiveTo && previous.effectiveTo >= nextDate ? previous.effectiveTo : "";
+  const nextEndCandidates = [previousEnd, nextVersionEnd].filter(Boolean).sort();
   const closed = {
     ...previous,
     recurringId: seriesId,
