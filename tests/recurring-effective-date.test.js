@@ -19,6 +19,7 @@ function extractFunction(name) {
 
 const context = {
   console,
+  URLSearchParams,
   createId: () => "test-id",
   formatDate: (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
   parseJsonArray: (value) => Array.isArray(value) ? value : [],
@@ -26,6 +27,11 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext([
+  "isEffectiveDateDiagnosticsEnabled_",
+  "diagnosticFieldPresence_",
+  "diagnosticDateValue_",
+  "diagnosticRecurrenceType_",
+  "diagnosticRuleSummary_",
   "normalizeDateKey",
   "parseDate",
   "addDaysToDateKey_",
@@ -35,6 +41,26 @@ vm.runInContext([
   "isWithinRuleRange",
   "dedupeRecurringOccurrenceVersions_",
 ].map(extractFunction).join("\n"), context);
+
+context.location = { search: "" };
+assert.equal(context.isEffectiveDateDiagnosticsEnabled_(), false);
+context.location.search = "?debugEffectiveDate=1";
+assert.equal(context.isEffectiveDateDiagnosticsEnabled_(), true);
+const safeDiagnostic = context.diagnosticRuleSummary_({
+  id: "secret-record-id",
+  destinationName: "secret-customer-name",
+  standard: "40cm",
+  quantity: 30,
+  unit: "kg",
+  startDate: "2026-01-01",
+  effectiveFrom: "2026-09-08",
+});
+const safeDiagnosticText = JSON.stringify(safeDiagnostic);
+assert.equal(safeDiagnostic.id, "present");
+assert.equal(safeDiagnostic.series, "missing");
+assert.equal(safeDiagnostic.effectiveFrom, "2026-09-08");
+assert.equal(safeDiagnosticText.includes("secret-record-id"), false);
+assert.equal(safeDiagnosticText.includes("secret-customer-name"), false);
 
 const oldRule = {
   id: "series",

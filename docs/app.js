@@ -51,6 +51,211 @@ function isDebugUiEnabled_() {
   return q.includes("debug=1") || q.includes("debugOverflow=1");
 }
 
+function isEffectiveDateDiagnosticsEnabled_() {
+  const q = typeof location === "undefined" ? "" : String(location.search || "");
+  return new URLSearchParams(q).get("debugEffectiveDate") === "1";
+}
+
+function diagnosticFieldPresence_(value) {
+  return value === undefined || value === null || String(value).trim() === "" ? "missing" : "present";
+}
+
+function diagnosticDateValue_(value) {
+  const normalized = normalizeDateKey(value);
+  return normalized || (String(value || "").trim() ? "OTHER" : "missing");
+}
+
+function diagnosticRecurrenceType_(value) {
+  const type = String(value || "").trim();
+  return ["weekly", "monthlyByDate", "referenceDate", "beforeReferenceNearestWeekday"].includes(type) ? type : (type ? "other" : "missing");
+}
+
+function diagnosticRuleSeriesKey_(rule) {
+  return recurringSeriesId_(normalizeRecurringRule_(rule));
+}
+
+function isEffectiveDateDiagnosticCandidate_(rule) {
+  const value = rule && typeof rule === "object" ? rule : {};
+  return [20, 30].includes(Number(value.quantity || 0))
+    && String(value.standard || "").trim() === "40cm"
+    && String(value.unit || "").trim().toLowerCase() === "kg";
+}
+
+function chooseEffectiveDateDiagnosticSeries_(rawRules) {
+  const groups = new Map();
+  (Array.isArray(rawRules) ? rawRules : []).filter(isEffectiveDateDiagnosticCandidate_).forEach((rule) => {
+    const key = diagnosticRuleSeriesKey_(rule);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(rule);
+  });
+  const list = Array.from(groups.entries()).map(([key, rules]) => ({
+    key,
+    rules,
+    has20: rules.some((rule) => Number(rule.quantity || 0) === 20),
+    has30: rules.some((rule) => Number(rule.quantity || 0) === 30),
+    score: (rules.some((rule) => Number(rule.quantity || 0) === 20) ? 100 : 0)
+      + (rules.some((rule) => Number(rule.quantity || 0) === 30) ? 100 : 0)
+      + rules.filter((rule) => rule.effectiveFrom || rule.effectiveTo || rule.parentRecurringId || String(rule.id || "").includes("__version__")).length,
+  }));
+  const both = list.filter((group) => group.has20 && group.has30);
+  if (both.length === 1) return { status: "FOUND", ...both[0] };
+  if (both.length > 1) return { status: "AMBIGUOUS", key: "", rules: [] };
+  const with30 = list.filter((group) => group.has30).sort((a, b) => b.score - a.score);
+  if (with30.length === 1) return { status: "FOUND", ...with30[0] };
+  if (with30.length > 1 && with30[0].score > with30[1].score) return { status: "FOUND", ...with30[0] };
+  return { status: list.length ? "AMBIGUOUS" : "NOT_FOUND", key: "", rules: [] };
+}
+
+function diagnosticRuleSummary_(rule) {
+  const value = rule && typeof rule === "object" ? rule : {};
+  const historyFieldPresent = Boolean(value.effectiveFrom || value.effectiveTo || value.parentRecurringId
+    || value.version || value.revision || String(value.id || "").includes("__version__"));
+  return {
+    id: diagnosticFieldPresence_(value.id),
+    quantity: Number(value.quantity || 0),
+    startDate: diagnosticDateValue_(value.startDate || value.date),
+    effectiveFrom: diagnosticDateValue_(value.effectiveFrom),
+    effectiveTo: diagnosticDateValue_(value.effectiveTo),
+    series: diagnosticFieldPresence_(value.recurringId || value.seriesId || value.recurrenceId),
+    parent: diagnosticFieldPresence_(value.parentRecurringId || value.parentId),
+    base: diagnosticFieldPresence_(value.baseId || value.originalId || value.originalRecordId),
+    history: historyFieldPresent ? "present" : "missing",
+    recurrenceType: diagnosticRecurrenceType_(value.recurrenceType),
+    active: diagnosticFieldPresence_(value.active),
+    deleted: diagnosticFieldPresence_(value.deleted || value.cancelled),
+    override: diagnosticFieldPresence_(value.override || value.exception),
+    updatedAt: diagnosticFieldPresence_(value.updatedAt),
+  };
+}
+
+function diagnosticUniqueField_(rows, quantity, field) {
+  const values = Array.from(new Set((Array.isArray(rows) ? rows : [])
+    .filter((row) => Number(row.quantity || 0) === quantity)
+    .map((row) => row[field])
+    .filter(Boolean)));
+  return values.length === 1 ? values[0] : values.length ? "different" : "missing";
+}
+
+function diagnosticSeriesRelation_(rows) {
+  const values = Array.from(new Set((Array.isArray(rows) ? rows : [])
+    .map((row) => String(row.recurringId || row.seriesId || row.recurrenceId || "").trim())
+    .filter(Boolean)));
+  if (!values.length) return "MISSING";
+  return values.length === 1 ? "SAME" : "DIFFERENT";
+}
+
+function diagnosticWeightLabel_(entries) {
+  const weights = Array.from(new Set((Array.isArray(entries) ? entries : [])
+    .map((entry) => Number(entry && entry.quantity || 0))
+    .filter((quantity) => Number.isFinite(quantity) && quantity > 0)))
+    .sort((a, b) => a - b);
+  return weights.length ? weights.map((quantity) => `${quantity}KG`).join("+") : "NONE";
+}
+
+function analyzeEffectiveDateDiagnostic_(dateKey, rules) {
+  const date = parseDate(dateKey);
+  const ranges = (Array.isArray(rules) ? rules : []).map((rule) =>
+    `${Number(rule.quantity || 0)}KG=${isWithinRuleRange(date, rule) ? "TRUE" : "FALSE"}`);
+  const generated = date
+    ? generateRecurringShipmentsForMonthBase_(date.getFullYear(), date.getMonth(), rules)
+      .filter((entry) => normalizeDateKey(entry.date) === dateKey)
+    : [];
+  const afterExceptions = applyRecurringExceptions_(generated);
+  const afterDedup = dedupeRecurringOccurrenceVersions_(afterExceptions);
+  return {
+    range: ranges.length ? ranges.join(", ") : "NOT_FOUND",
+    beforeDedup: diagnosticWeightLabel_(generated),
+    afterDedup: diagnosticWeightLabel_(afterDedup),
+    finalDisplay: diagnosticWeightLabel_(afterDedup),
+  };
+}
+
+function buildRecurringEffectiveDateDiagnostics_(rawRules, normalizedRules) {
+  const selected = chooseEffectiveDateDiagnosticSeries_(rawRules);
+  const rawTarget = selected.key
+    ? (Array.isArray(rawRules) ? rawRules : []).filter((rule) => diagnosticRuleSeriesKey_(rule) === selected.key && isEffectiveDateDiagnosticCandidate_(rule))
+    : [];
+  const normalizedTarget = selected.key
+    ? (Array.isArray(normalizedRules) ? normalizedRules : []).filter((rule) => recurringSeriesId_(rule) === selected.key && isEffectiveDateDiagnosticCandidate_(rule))
+    : [];
+  const rawSummary = rawTarget.map(diagnosticRuleSummary_);
+  const normalizedSummary = normalizedTarget.map(diagnosticRuleSummary_);
+  const dates = ["2026-09-01", "2026-09-15"];
+  const byDate = {};
+  dates.forEach((dateKey) => {
+    byDate[dateKey] = analyzeEffectiveDateDiagnostic_(dateKey, normalizedTarget);
+  });
+  return {
+    targetStatus: selected.status,
+    rawRuleCount: rawSummary.length,
+    rawHas20kg: rawSummary.some((row) => row.quantity === 20) ? "YES" : "NO",
+    rawHas30kg: rawSummary.some((row) => row.quantity === 30) ? "YES" : "NO",
+    normalizedRuleCount: normalizedSummary.length,
+    normalizedHas20kg: normalizedSummary.some((row) => row.quantity === 20) ? "YES" : "NO",
+    normalizedHas30kg: normalizedSummary.some((row) => row.quantity === 30) ? "YES" : "NO",
+    raw30EffectiveFrom: diagnosticUniqueField_(rawSummary, 30, "effectiveFrom"),
+    raw30StartDate: diagnosticUniqueField_(rawSummary, 30, "startDate"),
+    normalized30EffectiveFrom: diagnosticUniqueField_(normalizedSummary, 30, "effectiveFrom"),
+    seriesRelation: rawTarget.length && normalizedTarget.length
+      ? (diagnosticSeriesRelation_(rawTarget) === "SAME" && diagnosticSeriesRelation_(normalizedTarget) === "SAME" ? "SAME" : "DIFFERENT")
+      : "UNRESOLVED",
+    rawRules: rawSummary,
+    normalizedRules: normalizedSummary,
+    byDate,
+  };
+}
+
+function formatEffectiveDateDiagnosticRule_(row) {
+  return `${row.quantity}KG startDate=${row.startDate} effectiveFrom=${row.effectiveFrom} effectiveTo=${row.effectiveTo}`
+    + ` series=${row.series} history=${row.history} recurrence=${row.recurrenceType}`
+    + ` id=${row.id} parent=${row.parent} base=${row.base} override=${row.override}`
+    + ` active=${row.active} deleted=${row.deleted} updatedAt=${row.updatedAt}`;
+}
+
+function renderEffectiveDateDiagnostics_() {
+  const existing = document.getElementById("effectiveDateDiagnostics");
+  if (!isEffectiveDateDiagnosticsEnabled_()) {
+    if (existing) existing.remove();
+    return;
+  }
+  const panel = existing || document.createElement("section");
+  panel.id = "effectiveDateDiagnostics";
+  panel.setAttribute("aria-label", "定期出荷有効日診断");
+  if (!existing) {
+    const title = document.createElement("h2");
+    title.textContent = "定期出荷有効日診断（匿名・read-only）";
+    const pre = document.createElement("pre");
+    pre.id = "effectiveDateDiagnosticsText";
+    pre.style.whiteSpace = "pre-wrap";
+    pre.style.fontSize = "12px";
+    panel.append(title, pre);
+    document.body.appendChild(panel);
+  }
+  const report = effectiveDateDiagnostics_;
+  const lines = report ? [
+    `TARGET_SERIES=${report.targetStatus}`,
+    `RAW_RULE_COUNT=${report.rawRuleCount} RAW_HAS_20KG=${report.rawHas20kg} RAW_HAS_30KG=${report.rawHas30kg}`,
+    `NORMALIZED_RULE_COUNT=${report.normalizedRuleCount} NORMALIZED_HAS_20KG=${report.normalizedHas20kg} NORMALIZED_HAS_30KG=${report.normalizedHas30kg}`,
+    `RAW_30_EFFECTIVE_FROM=${report.raw30EffectiveFrom} RAW_30_START_DATE=${report.raw30StartDate}`,
+    `NORMALIZED_30_EFFECTIVE_FROM=${report.normalized30EffectiveFrom}`,
+    `SERIES_RELATION=${report.seriesRelation}`,
+    `RAW_CANDIDATES=${report.rawRules.map(formatEffectiveDateDiagnosticRule_).join(" | ") || "NONE"}`,
+    `NORMALIZED_CANDIDATES=${report.normalizedRules.map(formatEffectiveDateDiagnosticRule_).join(" | ") || "NONE"}`,
+    ...["2026-09-01", "2026-09-15"].flatMap((dateKey) => {
+      const item = report.byDate[dateKey];
+      const label = dateKey === "2026-09-01" ? "SEP1" : "SEP15";
+      return [
+        `${label}_RANGE=${item.range}`,
+        `BEFORE_DEDUP_${label}=${item.beforeDedup}`,
+        `AFTER_DEDUP_${label}=${item.afterDedup}`,
+        `FINAL_${label}=${item.finalDisplay}`,
+      ];
+    }),
+  ] : ["RAW_CAPTURE=WAITING_FOR_API_SYNC"];
+  document.getElementById("effectiveDateDiagnosticsText").textContent = lines.join("\n");
+}
+
 
 
 const state = {
@@ -86,6 +291,8 @@ const state = {
   selectedDate: formatDate(new Date()),
   calendarView: "calendar",
 };
+
+let effectiveDateDiagnostics_ = null;
 
 let scheduleDragState_ = null;
 let schedulePointerState_ = null;
@@ -710,6 +917,7 @@ function renderAll() {
   renderShipmentTerms();
   renderSalesDashboard_();
   renderMonthlySettlement_();
+  renderEffectiveDateDiagnostics_();
 }
 
 function setFormDate(dateKey) {
@@ -1404,6 +1612,9 @@ async function loadAllDataFromApi() {
     } catch {}
 
     state.recurringShipments = normalizeRecurringRules_(recurring);
+    if (isEffectiveDateDiagnosticsEnabled_()) {
+      effectiveDateDiagnostics_ = buildRecurringEffectiveDateDiagnostics_(recurring, state.recurringShipments);
+    }
 
     state.destinations = destinations.map((d) => ({
       id: String(d.id),
