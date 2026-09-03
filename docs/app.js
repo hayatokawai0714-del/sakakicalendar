@@ -2536,6 +2536,39 @@ function applyRecurringExceptions_(entries) {
   return out;
 }
 
+function dedupeRecurringOccurrenceVersions_(entries) {
+  const winners = new Map();
+  const order = [];
+  (Array.isArray(entries) ? entries : []).forEach((entry) => {
+    if (!entry || entry.type !== "shipment" || entry.shipmentType !== "recurring") {
+      order.push({ entry, key: null });
+      return;
+    }
+    const seriesId = recurringSeriesId_(entry);
+    const occurrenceDate = normalizeDateKey(entry.exceptionDate || entry.date);
+    if (!seriesId || !occurrenceDate) {
+      order.push({ entry, key: null });
+      return;
+    }
+    const key = `${seriesId}||${occurrenceDate}`;
+    const current = winners.get(key);
+    if (!current) {
+      winners.set(key, entry);
+      order.push({ entry: null, key });
+      return;
+    }
+    const currentFrom = normalizeDateKey(current.effectiveFrom || current.startDate || "");
+    const nextFrom = normalizeDateKey(entry.effectiveFrom || entry.startDate || "");
+    const currentUpdated = String(current.updatedAt || "");
+    const nextUpdated = String(entry.updatedAt || "");
+    if (nextFrom > currentFrom || (nextFrom === currentFrom && nextUpdated > currentUpdated)
+      || (nextFrom === currentFrom && nextUpdated === currentUpdated && String(entry.id) > String(current.id))) {
+      winners.set(key, entry);
+    }
+  });
+  return order.map((item) => item.key ? winners.get(item.key) : item.entry).filter(Boolean);
+}
+
 function renderToday() {
   // Today card was removed to save vertical space.
   return;
@@ -2599,6 +2632,8 @@ function generateRecurringShipmentsForMonthBase_(year, monthIndex, rules = getRe
         unit2: rule.unit2 || "",
         updatedAt: rule.updatedAt,
         updatedBy: rule.updatedBy || currentUpdatedBy(),
+        effectiveFrom: rule.effectiveFrom,
+        effectiveTo: rule.effectiveTo,
         _ruleId: rule.id,
         sourceType: "recurring",
         recurringId: rule.recurringId || rule.id,
@@ -2639,7 +2674,8 @@ function generateRecurringShipmentsForMonth(year, monthIndex) {
       });
   });
 
-  const out = applyRecurringExceptions_(raw).filter((entry) => normalizeDateKey(entry.date).startsWith(monthKey));
+  const out = dedupeRecurringOccurrenceVersions_(applyRecurringExceptions_(dedupeRecurringOccurrenceVersions_(raw)))
+    .filter((entry) => normalizeDateKey(entry.date).startsWith(monthKey));
   try {
     console.log("recurring rules count", getRecurringShipments().length);
     console.log("recurring exceptions count", getRecurringExceptions().length);
@@ -2723,6 +2759,8 @@ function buildRecurringShipmentEntry_(rule, item, shipDateKey, referenceDate, ne
     memo: String(item.memo || rule.memo || ""),
     updatedAt: rule.updatedAt,
     updatedBy: rule.updatedBy || currentUpdatedBy(),
+    effectiveFrom: rule.effectiveFrom,
+    effectiveTo: rule.effectiveTo,
     _ruleId: rule.id,
     sourceType: "recurring",
     recurringId: rule.recurringId || rule.id,
@@ -2789,6 +2827,8 @@ function generateBeforeReferenceNearestWeekdayShipmentForMonth(year, monthIndex,
       unit2: rule.unit2 || "",
       updatedAt: rule.updatedAt,
       updatedBy: rule.updatedBy || currentUpdatedBy(),
+      effectiveFrom: rule.effectiveFrom,
+      effectiveTo: rule.effectiveTo,
       _ruleId: rule.id,
       sourceType: "recurring",
       recurringId: rule.recurringId || rule.id,
@@ -6364,7 +6404,8 @@ function fillSelect(id, items, placeholder) {
 function entriesByDate(date, opts = {}) {
   const key = normalizeDateKey(date);
   const base = state.entries.filter((x) => normalizeDateKey(x.date) === key);
-  const generated = applyRecurringExceptions_((opts.generatedRecurring || []).filter((x) => normalizeDateKey(x.date) === key));
+  const generated = dedupeRecurringOccurrenceVersions_(applyRecurringExceptions_((opts.generatedRecurring || [])
+    .filter((x) => normalizeDateKey(x.date) === key)));
   // Debug: helps diagnose date-format mismatches where events are "saved but not shown".
   if (key === formatDate(new Date())) {
     try {
