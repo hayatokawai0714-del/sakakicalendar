@@ -1652,11 +1652,39 @@ function syncDiagnosticBodyType_(text, contentType) {
 function syncDiagnosticErrorCode_(json) {
   const source = String(json && (json.code || json.errorCode || json.error || json.message) || "").toLowerCase();
   if (/app[_ -]?secret.*missing|missing.*app[_ -]?secret/.test(source)) return "APP_SECRET_MISSING";
-  if (/unauthorized|forbidden|認証/.test(source)) return "AUTH_FAILED";
+  if (/unauthorized|forbidden|auth[_ -]?failed|認証/.test(source)) return "AUTH_FAILED";
   if (/spreadsheet|sheet|スプレッドシート/.test(source)) return "SPREADSHEET_ERROR";
   if (/unknown action|unsupported request|不明なアクション/.test(source)) return "UNKNOWN_ACTION";
   if (/validation|invalid|不正|必須/.test(source)) return "VALIDATION_ERROR";
   return source ? "API_ERROR" : "NONE";
+}
+
+function syncDiagnosticStage_(value) {
+  const stage = String(value || "");
+  return [
+    "OPEN_SPREADSHEET",
+    "GET_SHEET",
+    "CREATE_SHEET",
+    "READ_HEADERS",
+    "WRITE_HEADERS",
+    "READ_SHEET",
+  ].includes(stage) ? stage : "unknown";
+}
+
+function syncDiagnosticSheet_(value) {
+  const sheet = String(value || "");
+  return [
+    "shipments",
+    "recurring_shipments",
+    "recurring_exceptions",
+    "events",
+    "memos",
+    "destinations",
+    "settings_units",
+    "shipment_terms",
+    "shipment_actuals",
+    "monthly_settlements",
+  ].includes(sheet) ? sheet : "";
 }
 
 function buildSyncDiagnostic_(details = {}) {
@@ -1697,6 +1725,9 @@ function buildSyncDiagnostic_(details = {}) {
     jsonParse,
     responseKind,
     errorCode: syncDiagnosticErrorCode_(details.json),
+    diagnosticCode: String(details.json && details.json.diagnosticCode || ""),
+    diagnosticStage: syncDiagnosticStage_(details.json && details.json.diagnosticStage),
+    diagnosticSheet: syncDiagnosticSheet_(details.json && details.json.diagnosticSheet),
   };
 }
 
@@ -1720,6 +1751,9 @@ function setSyncDiagnostic_(diagnostic) {
     `response-kind: ${diagnostic.responseKind}`,
     `error-code: ${diagnostic.errorCode}`,
   ];
+  if (diagnostic.diagnosticCode) lines.push(`diagnostic-code: ${diagnostic.diagnosticCode}`);
+  if (diagnostic.diagnosticStage !== "unknown") lines.push(`diagnostic-stage: ${diagnostic.diagnosticStage}`);
+  if (diagnostic.diagnosticSheet) lines.push(`diagnostic-sheet: ${diagnostic.diagnosticSheet}`);
   if (diagnostic.errorName) lines.push(`error-name: ${diagnostic.errorName}`);
   text.textContent = lines.join("\n");
   panel.classList.remove("hidden");

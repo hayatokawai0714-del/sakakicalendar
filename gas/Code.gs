@@ -49,6 +49,56 @@ function requireAdminKey_(adminKey) {
   }
 }
 
+function safeApiErrorCode_(error) {
+  const message = String(error && error.message ? error.message : error || "").toLowerCase();
+  if (/unauthorized|forbidden|認証/.test(message)) return "AUTH_FAILED";
+  if (/unknown action|unsupported request|不明なアクション/.test(message)) return "UNKNOWN_ACTION";
+  if (/missing|required|invalid|不正|必須|見つかりません/.test(message)) return "VALIDATION_ERROR";
+  return "API_ERROR";
+}
+
+function isKnownSheetName_(sheetName) {
+  return Object.keys(SHEET_NAMES).some((key) => SHEET_NAMES[key] === sheetName);
+}
+
+function spreadsheetErrorCategory_(error) {
+  const message = String(error && error.message ? error.message : error || "").toLowerCase();
+  if (/permission|access|authorize|認証|権限/.test(message)) return "ACCESS_DENIED";
+  if (/not found|見つかりません/.test(message)) return "NOT_FOUND";
+  if (/range|column|row|範囲|列|行/.test(message)) return "RANGE_ERROR";
+  return "OPERATION_FAILED";
+}
+
+function spreadsheetDiagnosticError_(stage, sheetName, error) {
+  const wrapped = new Error("Spreadsheet operation failed");
+  wrapped.diagnosticStage = String(stage || "SPREADSHEET");
+  wrapped.diagnosticSheet = isKnownSheetName_(sheetName) ? String(sheetName) : "";
+  wrapped.diagnosticCode = `SPREADSHEET_${wrapped.diagnosticStage}_FAILED`;
+  wrapped.diagnosticErrorName = String(error && error.name ? error.name : "Error");
+  wrapped.diagnosticCategory = spreadsheetErrorCategory_(error);
+  console.error(JSON.stringify({
+    diagnosticStage: wrapped.diagnosticStage,
+    diagnosticSheet: wrapped.diagnosticSheet,
+    errorName: wrapped.diagnosticErrorName,
+    errorCategory: wrapped.diagnosticCategory,
+  }));
+  return wrapped;
+}
+
+function apiErrorResponse_(action, error) {
+  const response = { ok: false };
+  if (action) response.action = action;
+  if (error && error.diagnosticStage) {
+    response.error = "SPREADSHEET_ERROR";
+    response.diagnosticCode = String(error.diagnosticCode || "SPREADSHEET_ERROR");
+    response.diagnosticStage = String(error.diagnosticStage);
+    response.diagnosticSheet = isKnownSheetName_(error.diagnosticSheet) ? String(error.diagnosticSheet) : "";
+    return response;
+  }
+  response.error = safeApiErrorCode_(error);
+  return response;
+}
+
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action) : "getAll";
   try {
@@ -184,11 +234,7 @@ function doGet(e) {
     }
     return jsonOutput_({ ok: true, ...wrapGetResult_(action, result) });
   } catch (err) {
-    return jsonOutput_({
-      ok: false,
-      action: action,
-      error: String(err && err.message ? err.message : err),
-    });
+    return jsonOutput_(apiErrorResponse_(action, err));
   }
 }
 
@@ -290,10 +336,7 @@ function doPost(e) {
 
     return jsonOutput_({ ok: true, result: out });
   } catch (err) {
-    return jsonOutput_({
-      ok: false,
-      error: String(err && err.message ? err.message : err),
-    });
+    return jsonOutput_(apiErrorResponse_("", err));
   }
 }
 
@@ -537,7 +580,12 @@ function voidMonthlySettlement_(data) {
 
 function getSheetData_(sheetName) {
   const sheet = getOrCreateSheet_(sheetName);
-  const values = sheet.getDataRange().getValues();
+  let values;
+  try {
+    values = sheet.getDataRange().getValues();
+  } catch (error) {
+    throw spreadsheetDiagnosticError_("READ_SHEET", sheetName, error);
+  }
   if (values.length <= 1) return [];
   const headers = values[0].map(String);
   const out = [];
@@ -954,23 +1002,52 @@ function ensureHeaders_() {
 
 function ensureHeaderRow_(sheetName, headers) {
   const sheet = getOrCreateSheet_(sheetName);
-  const firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues();
+  let firstRow;
+  try {
+    firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues();
+  } catch (error) {
+    throw spreadsheetDiagnosticError_("READ_HEADERS", sheetName, error);
+  }
   const existing = (firstRow[0] || []).map(String).filter((x) => x);
   if (existing.length === 0) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    try {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    } catch (error) {
+      throw spreadsheetDiagnosticError_("WRITE_HEADERS", sheetName, error);
+    }
     return;
   }
   // If headers exist but are missing columns, append them to the end.
   const missing = headers.filter((h) => existing.indexOf(h) === -1);
   if (missing.length > 0) {
-    sheet.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]);
+    try {
+      sheet.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]);
+    } catch (error) {
+      throw spreadsheetDiagnosticError_("WRITE_HEADERS", sheetName, error);
+    }
   }
 }
 
 function getOrCreateSheet_(sheetName) {
-  const ss = SpreadsheetApp.openById(getSpreadsheetId_());
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) sheet = ss.insertSheet(sheetName);
+  let ss;
+  try {
+    ss = SpreadsheetApp.openById(getSpreadsheetId_());
+  } catch (error) {
+    throw spreadsheetDiagnosticError_("OPEN_SPREADSHEET", "", error);
+  }
+  let sheet;
+  try {
+    sheet = ss.getSheetByName(sheetName);
+  } catch (error) {
+    throw spreadsheetDiagnosticError_("GET_SHEET", sheetName, error);
+  }
+  if (!sheet) {
+    try {
+      sheet = ss.insertSheet(sheetName);
+    } catch (error) {
+      throw spreadsheetDiagnosticError_("CREATE_SHEET", sheetName, error);
+    }
+  }
   return sheet;
 }
 

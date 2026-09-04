@@ -38,6 +38,8 @@ const diagnostics = [
   "syncDiagnosticContentType_",
   "syncDiagnosticBodyType_",
   "syncDiagnosticErrorCode_",
+  "syncDiagnosticStage_",
+  "syncDiagnosticSheet_",
   "buildSyncDiagnostic_",
 ];
 const context = { URL, console };
@@ -81,6 +83,25 @@ for (const item of cases) {
   const result = context.buildSyncDiagnostic_({ ...item, url: "https://script.google.com/macros/s/redacted/exec" });
   assert.equal(result.responseKind, item.kind);
 }
+
+const spreadsheet = context.buildSyncDiagnostic_({
+  status: 200,
+  ok: true,
+  url: "https://script.google.com/macros/s/redacted/exec",
+  contentType: "application/json",
+  text: '{"ok":false,"error":"SPREADSHEET_ERROR","diagnosticCode":"SPREADSHEET_READ_HEADERS_FAILED","diagnosticStage":"READ_HEADERS","diagnosticSheet":"monthly_settlements"}',
+  json: {
+    ok: false,
+    error: "SPREADSHEET_ERROR",
+    diagnosticCode: "SPREADSHEET_READ_HEADERS_FAILED",
+    diagnosticStage: "READ_HEADERS",
+    diagnosticSheet: "monthly_settlements",
+  },
+  jsonParse: "success",
+});
+assert.equal(spreadsheet.errorCode, "SPREADSHEET_ERROR");
+assert.equal(spreadsheet.diagnosticStage, "READ_HEADERS");
+assert.equal(spreadsheet.diagnosticSheet, "monthly_settlements");
 
 const network = context.buildSyncDiagnostic_({ networkError: true, errorName: "TypeError" });
 assert.equal(network.status, "network-error");
