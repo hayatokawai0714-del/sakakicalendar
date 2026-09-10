@@ -4389,7 +4389,7 @@ function switchRecurrenceTypeFields() {
   document.getElementById("weekdayPicker").classList.toggle("hidden", monthly);
   document.getElementById("monthDayPicker").classList.toggle("hidden", !monthly);
   document.getElementById("referenceRuleFields").classList.toggle("hidden", !reference);
-  if (referenceItemsSection) referenceItemsSection.classList.toggle("hidden", value === "weekly_1" || value === "weekly_2");
+  if (referenceItemsSection) referenceItemsSection.classList.toggle("hidden", !reference);
   const weekdayLabel = document.getElementById("weekdayPickerLabel");
   if (weekdayLabel) {
     weekdayLabel.textContent =
