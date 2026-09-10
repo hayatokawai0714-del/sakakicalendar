@@ -355,8 +355,10 @@
       </div>
 
       <div id="monthDayPicker" class="hidden">
-        <label>日にち<input type="text" id="monthDays" inputmode="numeric" placeholder="例: 5, 20, 28" /></label>
-        <div class="muted small-note">複数の日はカンマで区切ります。</div>
+        <div class="recurring-monthly-head"><span class="segment-field-label">毎月の出荷日</span><button type="button" class="btn secondary small" id="addMonthDayItemBtn">＋ 出荷日を追加</button></div>
+        <div id="monthDayItemsList" class="month-day-items-list"></div>
+        <input type="hidden" id="monthDays" />
+        <div class="muted small-note">日ごとに数量・単位を設定できます。</div>
       </div>
 
       <div class="recurrence-preview" aria-live="polite">

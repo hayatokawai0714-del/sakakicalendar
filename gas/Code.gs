@@ -951,6 +951,7 @@ function ensureHeaders_() {
     "weekdays",
     "intervalWeeks",
     "monthDays",
+    "monthDayItems",
     "referenceDay",
     "referenceWeekdays",
     "candidateWeekdays",

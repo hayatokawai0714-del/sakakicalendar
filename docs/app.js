@@ -850,6 +850,7 @@ function bindEvents() {
   document.getElementById("shipmentKind").addEventListener("change", switchShipmentKindFields);
   document.getElementById("shipmentDestination").addEventListener("change", handleDestinationChange);
   document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
+  document.getElementById("addMonthDayItemBtn")?.addEventListener("click", () => { addMonthDayItemRow(); updateRecurrencePreview_(); });
 
   document.getElementById("entryForm").addEventListener("submit", (e) => void submitEntryForm(e));
   document.getElementById("roadsideShipmentForm").addEventListener("submit", (e) => void submitRoadsideShipmentForm(e));
@@ -2857,6 +2858,12 @@ function saveRecurringShipment(rule) {
   return normalized;
 }
 
+function parseMonthDayItems(value) {
+  if (Array.isArray(value)) return value.map((item) => ({ day: Number(item.day), quantity: Number(item.quantity || 0), unit: String(item.unit || "") })).filter((item) => Number.isInteger(item.day) && item.day >= 1 && item.day <= 31);
+  if (!value) return [];
+  try { return parseMonthDayItems(JSON.parse(String(value))); } catch { return []; }
+}
+
 function normalizeRecurringRule_(raw) {
   const rule = raw && typeof raw === "object" ? raw : {};
   const id = String(rule.id || createId()).trim();
@@ -2897,6 +2904,7 @@ function normalizeRecurringRule_(raw) {
     weekdays: parseJsonArray(rule.weekdays),
     intervalWeeks: Number(rule.intervalWeeks || 1),
     monthDays: parseJsonArray(rule.monthDays),
+    monthDayItems: (() => { const value = rule.monthDayItems; if (Array.isArray(value)) return value; if (!value) return []; try { const parsed = JSON.parse(String(value)); return Array.isArray(parsed) ? parsed : []; } catch { return []; } })(),
     referenceDay: Number(rule.referenceDay || 0),
     referenceWeekdays: parseJsonArray(rule.referenceWeekdays),
     candidateWeekdays: parseJsonArray(rule.candidateWeekdays),
@@ -2959,6 +2967,7 @@ function recurringRuleApiPayload_(rule) {
     weekdays: JSON.stringify(normalized.weekdays),
     intervalWeeks: normalized.intervalWeeks,
     monthDays: JSON.stringify(normalized.monthDays),
+    monthDayItems: JSON.stringify(normalized.monthDayItems || []),
     referenceDay: normalized.referenceDay,
     referenceWeekdays: JSON.stringify(normalized.referenceWeekdays || []),
     candidateWeekdays: JSON.stringify(normalized.candidateWeekdays || []),
@@ -3201,8 +3210,8 @@ function generateRecurringShipmentsForMonthBase_(year, monthIndex, rules = getRe
         destinationName: rule.destinationName || rule.destination || "",
         destination: rule.destinationName || rule.destination || "",
         standard: rule.standard,
-        quantity: rule.quantity,
-        unit: rule.unit,
+        quantity: rule.recurrenceType === "monthlyByDate" ? monthlyDayItemFor_(rule, date.getDate()).quantity : rule.quantity,
+        unit: rule.recurrenceType === "monthlyByDate" ? monthlyDayItemFor_(rule, date.getDate()).unit : rule.unit,
         memo: rule.memo,
         standard2: rule.standard2 || "",
         quantity2: rule.quantity2 || 0,
@@ -3653,6 +3662,12 @@ function renderMonthlyScheduleView() {
     bindScheduleDropRow_(row);
     view.appendChild(row);
   }
+}
+
+function monthlyDayItemFor_(rule, day) {
+  const item = (Array.isArray(rule.monthDayItems) ? rule.monthDayItems : [])
+    .find((candidate) => Number(candidate.day) === Number(day));
+  return item ? { quantity: Number(item.quantity || 0), unit: String(item.unit || rule.unit || "") } : rule;
 }
 
 function createMonthlyScheduleItem_(entry) {
@@ -4383,6 +4398,7 @@ function switchRecurrenceTypeFields() {
   if (referenceItemsSection && !referenceItemsSection.classList.contains("hidden") && getReferenceItemRows().length === 0) {
     addReferenceItemRow();
   }
+  if (monthly && getMonthDayItemsFromForm().length === 0) addMonthDayItemRow();
   syncRecurrenceControls_();
   updateRecurrencePreview_();
 }
@@ -4459,7 +4475,8 @@ function buildRecurringPreviewRule_() {
     endDate: normalizeDateKey(document.getElementById("endDate")?.value || ""),
     weekdays: recurrenceType === "weekly" ? weekdays : [],
     intervalWeeks: raw === "weekly_2" ? 2 : 1,
-    monthDays: recurrenceType === "monthlyByDate" ? parseMonthDays(document.getElementById("monthDays")?.value || "") : [],
+    monthDays: recurrenceType === "monthlyByDate" ? getMonthDayItemsFromForm().map((item) => item.day) : [],
+    monthDayItems: recurrenceType === "monthlyByDate" ? getMonthDayItemsFromForm() : [],
     referenceDay: Number(document.getElementById("referenceDay")?.value || 0),
     referenceWeekdays: recurrenceType === "referenceDate" ? weekdays : [],
     candidateWeekdays: recurrenceType === "beforeReferenceNearestWeekday" ? weekdays : [],
@@ -4491,8 +4508,10 @@ function recurrenceSentence_(rule) {
     return `${Number(rule.intervalWeeks || 1) === 2 ? "隔週" : "毎週"} ${weekdayText}に予定を作成します`;
   }
   if (rule.recurrenceType === "monthlyByDate") {
-    const days = parseNumberList(rule.monthDays).map((day) => `${day}日`);
-    return days.length ? `毎月${days.join("・")}に予定を作成します` : "日にちを入力すると、毎月予定を作成します";
+    const items = Array.isArray(rule.monthDayItems) && rule.monthDayItems.length
+      ? rule.monthDayItems.map((item) => `${item.day}日に ${item.quantity}${item.unit}`)
+      : parseNumberList(rule.monthDays).map((day) => `${day}日`);
+    return items.length ? `毎月\n・${items.join("\n・")}` : "日にちを入力すると、毎月予定を作成します";
   }
   const referenceDay = Number(rule.referenceDay || 0);
   const referenceText = referenceDay ? `毎月${referenceDay}日より前の` : "基準日より前の";
@@ -4530,7 +4549,7 @@ function updateRecurrencePreview_() {
   const rule = buildRecurringPreviewRule_();
   text.textContent = recurrenceSentence_(rule);
   const next = nextRecurringPreviewDates_(rule);
-  dates.textContent = next.length ? `次回予定：${next.map((date) => formatDateJa_(date, true)).join("、")}` : "曜日や日にちを選ぶと、次回予定を表示します。";
+  dates.textContent = next.length ? `次回予定：${next.map((date) => { const item = monthlyDayItemFor_(rule, parseDate(date).getDate()); return `${formatDateJa_(date, true)} ${item.quantity || rule.quantity}${item.unit || rule.unit}`; }).join("、")}` : "曜日や日にちを選ぶと、次回予定を表示します。";
 }
 
 function toggleShipmentSpec2(show) {
@@ -4736,6 +4755,28 @@ function syncEntryControlSegments_() {
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+}
+
+function createMonthDayItemRow(item = {}) {
+  const row = document.createElement("div");
+  row.className = "month-day-item-row";
+  row.innerHTML = '<label>日<input type="number" class="month-day" min="1" max="31" inputmode="numeric"></label><label>数量<input type="number" class="month-qty" min="0" step="0.01" inputmode="decimal"></label><label>単位<input type="text" class="month-unit" placeholder="kg"></label><button type="button" class="text-btn month-day-remove">削除</button>';
+  row.querySelector('.month-day').value = item.day || '';
+  row.querySelector('.month-qty').value = item.quantity ?? '';
+  row.querySelector('.month-unit').value = item.unit || '';
+  row.querySelector('.month-day-remove').addEventListener('click', () => { if (document.querySelectorAll('#monthDayItemsList .month-day-item-row').length > 1) row.remove(); updateRecurrencePreview_(); });
+  return row;
+}
+function addMonthDayItemRow(item = {}) { const list = document.getElementById('monthDayItemsList'); if (list) list.appendChild(createMonthDayItemRow(item)); }
+function setMonthDayItemsToForm(items, fallbackRule = {}) {
+  const list = document.getElementById('monthDayItemsList'); if (!list) return;
+  list.innerHTML = '';
+  const normalized = Array.isArray(items) && items.length ? items : (fallbackRule.monthDays || []).map((day) => ({ day, quantity: fallbackRule.quantity, unit: fallbackRule.unit }));
+  normalized.forEach((item) => addMonthDayItemRow(item));
+  if (!normalized.length) addMonthDayItemRow();
+}
+function getMonthDayItemsFromForm() {
+  return Array.from(document.querySelectorAll('#monthDayItemsList .month-day-item-row')).map((row) => ({ day: Number(row.querySelector('.month-day').value || 0), quantity: Number(row.querySelector('.month-qty').value || 0), unit: String(row.querySelector('.month-unit').value || '').trim() })).filter((item) => Number.isInteger(item.day) && item.day >= 1 && item.day <= 31);
 }
 
 function bindEntryControlSegments_() {
@@ -5408,7 +5449,8 @@ async function submitEntryForm(e) {
         endDate: document.getElementById("endDate").value,
         weekdays: recurrenceType === "weekly" ? selectedRecurringWeekdays : [],
         intervalWeeks,
-        monthDays: recurrenceType === "monthlyByDate" ? parseMonthDays(document.getElementById("monthDays").value) : [],
+        monthDays: recurrenceType === "monthlyByDate" ? getMonthDayItemsFromForm().map((item) => item.day) : [],
+        monthDayItems: recurrenceType === "monthlyByDate" ? getMonthDayItemsFromForm() : [],
         referenceDay,
         referenceWeekdays: recurrenceType === "referenceDate" ? selectedRecurringWeekdays : [],
         candidateWeekdays: recurrenceType === "beforeReferenceNearestWeekday" ? selectedRecurringWeekdays : [],
@@ -5427,6 +5469,7 @@ async function submitEntryForm(e) {
 
       if (recurrenceType === "weekly" && rule.weekdays.length === 0) throw new Error("曜日を1つ以上選択してください");
       if (recurrenceType === "monthlyByDate" && rule.monthDays.length === 0) throw new Error("日付を1つ以上指定してください");
+      if (recurrenceType === "monthlyByDate" && rule.monthDayItems.length === 0) throw new Error("出荷日を1つ以上指定してください");
       if ((recurrenceType === "referenceDate" || recurrenceType === "beforeReferenceNearestWeekday") && !Number.isInteger(referenceDay)) {
         throw new Error("基準日を入力してください");
       }
@@ -5731,6 +5774,7 @@ async function setEntryToForm(entry) {
     if (rule.recurrenceType === "monthlyByDate") {
       document.getElementById("recurrenceType").value = "monthlyByDate";
       document.getElementById("monthDays").value = (rule.monthDays || []).join(",");
+      setMonthDayItemsToForm(rule.monthDayItems, rule);
     } else if (rule.recurrenceType === "referenceDate") {
       document.getElementById("recurrenceType").value = "referenceDate";
       document.getElementById("referenceDay").value = String(rule.referenceDay || "");
@@ -7104,6 +7148,12 @@ function normalizeDateKey(value) {
 
   const parsed = new Date(s);
   return Number.isFinite(parsed.getTime()) ? formatDate(parsed) : "";
+}
+
+function parseMonthDayItems(value) {
+  if (Array.isArray(value)) return value.map((item) => ({ day: Number(item.day), quantity: Number(item.quantity || 0), unit: String(item.unit || "") })).filter((item) => Number.isInteger(item.day) && item.day >= 1 && item.day <= 31);
+  if (!value) return [];
+  try { return parseMonthDayItems(JSON.parse(String(value))); } catch { return []; }
 }
 
 function normalizeTimeText(value) {
