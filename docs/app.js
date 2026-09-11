@@ -4769,17 +4769,22 @@ function syncEntryControlSegments_() {
 function createMonthDayItemRow(item = {}) {
   const row = document.createElement("div");
   row.className = "month-day-item-row";
-  row.innerHTML = '<label>日<input type="number" class="month-day" min="1" max="31" inputmode="numeric"></label><label>数量<input type="number" class="month-qty" min="0" step="0.01" inputmode="decimal"></label><label>単位<input type="text" class="month-unit" placeholder="kg"></label><button type="button" class="text-btn month-day-remove">削除</button>';
+  row.innerHTML = '<label>日<input type="number" class="month-day" min="1" max="31" inputmode="numeric"></label><label>数量<input type="number" class="month-qty" min="0" step="0.01" inputmode="decimal"></label><label>単位<input type="text" class="month-unit"></label><button type="button" class="text-btn month-day-remove">削除</button>';
   row.querySelector('.month-day').value = item.day || '';
   row.querySelector('.month-qty').value = item.quantity ?? '';
-  row.querySelector('.month-unit').value = item.unit || '';
+  row.querySelector('.month-unit').value = item.unit || getMonthDayUnitDefault_();
   row.querySelector('.month-day-remove').addEventListener('click', () => { if (document.querySelectorAll('#monthDayItemsList .month-day-item-row').length > 1) row.remove(); updateRecurrencePreview_(); });
   return row;
+}
+function getMonthDayUnitDefault_() {
+  const existing = Array.from(document.querySelectorAll('#monthDayItemsList .month-unit')).map((input) => String(input.value || '').trim()).find(Boolean);
+  return existing || String(document.getElementById('shipmentUnit')?.value || '').trim() || String(document.getElementById('monthDayItemsList')?.dataset.defaultUnit || '').trim();
 }
 function addMonthDayItemRow(item = {}) { const list = document.getElementById('monthDayItemsList'); if (list) list.appendChild(createMonthDayItemRow(item)); }
 function setMonthDayItemsToForm(items, fallbackRule = {}) {
   const list = document.getElementById('monthDayItemsList'); if (!list) return;
   list.innerHTML = '';
+  list.dataset.defaultUnit = String(fallbackRule.unit || '').trim();
   const normalized = Array.isArray(items) && items.length ? items : (fallbackRule.monthDays || []).map((day) => ({ day, quantity: fallbackRule.quantity, unit: fallbackRule.unit }));
   normalized.forEach((item) => addMonthDayItemRow(item));
   if (!normalized.length) addMonthDayItemRow();
