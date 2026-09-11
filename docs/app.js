@@ -851,6 +851,7 @@ function bindEvents() {
   document.getElementById("shipmentDestination").addEventListener("change", handleDestinationChange);
   document.getElementById("recurrenceType").addEventListener("change", switchRecurrenceTypeFields);
   document.getElementById("addMonthDayItemBtn")?.addEventListener("click", () => { addMonthDayItemRow(); updateRecurrencePreview_(); });
+  document.getElementById("monthDayItemsList")?.addEventListener("input", updateMonthlyQuantityVisibility_);
 
   document.getElementById("entryForm").addEventListener("submit", (e) => void submitEntryForm(e));
   document.getElementById("roadsideShipmentForm").addEventListener("submit", (e) => void submitRoadsideShipmentForm(e));
@@ -4399,8 +4400,16 @@ function switchRecurrenceTypeFields() {
     addReferenceItemRow();
   }
   if (monthly && getMonthDayItemsFromForm().length === 0) addMonthDayItemRow();
+  updateMonthlyQuantityVisibility_();
   syncRecurrenceControls_();
   updateRecurrencePreview_();
+}
+
+function updateMonthlyQuantityVisibility_() {
+  const monthly = document.getElementById("recurrenceType")?.value === "monthlyByDate";
+  const usingDaily = monthly && getMonthDayItemsFromForm().length > 0;
+  ["shipmentQuantity", "shipmentUnit"].forEach((id) => document.getElementById(id)?.closest("label")?.classList.toggle("hidden", usingDaily));
+  document.getElementById("monthlyQuantityNotice")?.classList.toggle("hidden", !usingDaily);
 }
 
 function recurrenceFamilyFromValue_(value) {
@@ -4549,7 +4558,7 @@ function updateRecurrencePreview_() {
   const rule = buildRecurringPreviewRule_();
   text.textContent = recurrenceSentence_(rule);
   const next = nextRecurringPreviewDates_(rule);
-  dates.textContent = next.length ? `次回予定：${next.map((date) => { const item = monthlyDayItemFor_(rule, parseDate(date).getDate()); return `${formatDateJa_(date, true)} ${item.quantity || rule.quantity}${item.unit || rule.unit}`; }).join("、")}` : "曜日や日にちを選ぶと、次回予定を表示します。";
+  dates.textContent = next.length ? `次回予定：\n${next.map((date) => { const parsed = parseDate(date); const item = monthlyDayItemFor_(rule, parsed.getDate()); const weekday = ["日", "月", "火", "水", "木", "金", "土"][parsed.getDay()]; return `${parsed.getMonth() + 1}/${parsed.getDate()}（${weekday}） ${item.quantity || rule.quantity}${item.unit || rule.unit}`; }).join("\n")}` : "曜日や日にちを選ぶと、次回予定を表示します。";
 }
 
 function toggleShipmentSpec2(show) {
@@ -4774,6 +4783,7 @@ function setMonthDayItemsToForm(items, fallbackRule = {}) {
   const normalized = Array.isArray(items) && items.length ? items : (fallbackRule.monthDays || []).map((day) => ({ day, quantity: fallbackRule.quantity, unit: fallbackRule.unit }));
   normalized.forEach((item) => addMonthDayItemRow(item));
   if (!normalized.length) addMonthDayItemRow();
+  updateMonthlyQuantityVisibility_();
 }
 function getMonthDayItemsFromForm() {
   return Array.from(document.querySelectorAll('#monthDayItemsList .month-day-item-row')).map((row) => ({ day: Number(row.querySelector('.month-day').value || 0), quantity: Number(row.querySelector('.month-qty').value || 0), unit: String(row.querySelector('.month-unit').value || '').trim() })).filter((item) => Number.isInteger(item.day) && item.day >= 1 && item.day <= 31);
@@ -5439,7 +5449,7 @@ async function submitEntryForm(e) {
         destination: destName,
         standard: requiredValue("shipmentStandard", "規格"),
         quantity: Number(document.getElementById("shipmentQuantity").value || 0),
-        unit: requiredValue("shipmentUnit", "単位"),
+        unit: recurrenceType === "monthlyByDate" ? String(document.getElementById("shipmentUnit").value || "").trim() : requiredValue("shipmentUnit", "単位"),
           standard2: String(document.getElementById("shipmentStandard2").value || "").trim(),
           quantity2: Number(document.getElementById("shipmentQuantity2").value || 0),
           unit2: String(document.getElementById("shipmentUnit2").value || "").trim(),
